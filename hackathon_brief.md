@@ -1,142 +1,340 @@
-# Defense Tech Hackathon: Project Brief
+# AdaptSim Hackathon Brief
 
 ## Motivation
 
-Modern military and industrial training relies on two broken paradigms. The first is physical simulation — wet trainers, live-fire ranges, and physical mockups that are expensive to build, geographically fixed, and limited to a small number of scripted scenarios. The second is digital simulation — pre-authored training modules that take months to develop per scenario, require deterministic specification of every threat vector, and can never cover the long tail of real-world situations a trainee will actually face.
+Military and industrial training is still constrained by two brittle modes.
 
-The result is a training gap that is well-documented in the Navy and broader defense community. Current VR damage control training, for instance, certifies sailors for peacetime operations using isolated, evenly-distributed casualties where equipment always works and scenarios are predictable. Historical combat damage is nothing like this. The same dynamic applies to nuclear reactor operators, special forces teams, and shipyard workers — the most important training scenarios are often the ones that haven't been authored yet.
+Physical simulation is expensive, fixed in place, and hard to reset. Live-fire ranges, wet trainers, mockups, and rehearsals can be valuable, but they usually produce limited repetitions against a small number of preplanned situations.
 
-The core insight driving this project: **world reconstruction technology has matured to the point where any real physical environment can be digitized in minutes, and generative world models can now simulate physically plausible changes to that environment without deterministic authoring.** This makes it possible, for the first time, to generate novel training scenarios on demand for any location and any task.
+Digital simulation has the opposite problem. It is easier to repeat, but useful scenarios still require teams of designers, engineers, and subject matter experts to author specific environments, assets, decision trees, and failure modes in advance. The long tail of real-world situations is rarely represented.
 
----
+The result is a gap between the schoolhouse and the field. Training often certifies that a team can pass a known standard, but it does not always expose how individuals and teams adapt under ambiguous, changing, high-pressure conditions.
 
-## Problem Statement
+AdaptSim is aimed at that gap: quickly turn a real environment into a reusable training space, then generate doctrine-informed adversarial scenarios that vary across repetitions while remaining physically grounded in the scanned space.
 
-Training scenario development is a bottleneck. For every high-priority training use case, there is a long tail of important but under-resourced scenarios that never get built — because deterministic module development is too expensive and slow to scale across the full diversity of real-world environments and tasks.
+## Current Product Thesis
 
-Concretely:
+AdaptSim is not trying to make a fully neural game engine. The near-term product should use generative models where they are strongest and Unreal Engine where it is strongest.
 
-- A special forces team cannot train on the specific building they will enter tomorrow without someone authoring that scenario in advance.
-- A nuclear reactor engineer cannot simulate an unexpected mid-procedure failure without a developer having anticipated and scripted that exact failure mode.
-- A damage control team cannot train for simultaneous fire and flooding with equipment casualties unless someone built that specific multi-casualty scenario.
+Generative models should help interpret messy inputs:
 
-The status quo answer is to build fewer, higher-priority scenarios and accept that most real-world situations are undertrained. This project proposes a different answer.
+- What does this scanned environment afford tactically?
+- What assets, intents, and behaviors are implied by training documents and intelligence-style inputs?
+- What plausible adversary courses of action should a trainee rehearse?
+- What happened during the run, and how should the trainee be debriefed?
 
----
+Unreal Engine should remain the authoritative simulation runtime:
 
-## Proposed Demo
+- Stable geometry, collision, navigation, and rendering.
+- Repeatable scenario execution.
+- AI perception, movement, animation, effects, and telemetry.
+- Inspectable state for after-action review.
 
-**AdaptSim: Non-Deterministic World Simulation for Military and Industrial Training**
+The project is strongest as a hybrid system: model-driven scenario generation compiled into a real-time Unreal training simulation.
 
-A system that takes a real-world environment — captured in minutes with a phone or drone — and converts it into an interactive training simulation where an AI director introduces physically plausible, non-deterministic challenges that a human trainer did not have to author in advance.
+## Demo Goal
 
-### Demo Flow
+Show that a team can:
 
-**Scene Capture (pre-demo):** A real physical space (office corridor, machinery room, or similar available location) is photographed from multiple angles. fvdb-Reality-Capture reconstructs it into a navigable 3D Gaussian splat with an underlying collision mesh in under an hour on the demo hardware.
+1. Capture a real environment with a phone.
+2. Import that environment into Unreal.
+3. Generate or select adversarial assets from a doctrine-informed asset database.
+4. Run a planner that converts adversary assets and intent into scenario events.
+5. Spawn and execute those events dynamically inside the scanned environment.
+6. Let a trainee repeat the environment under different plausible conditions.
+7. Produce an after-action review from trainee telemetry.
 
-**Scenario Initialization:** The reconstructed environment is loaded. Cosmos Reason2 analyzes the scene and enumerates physically plausible threat categories given the environment geometry — pipe locations, exit routes, sight lines, structural features.
+The demo should feel like: "this hallway was scanned this morning, and now I can rehearse multiple adversary behaviors in it."
 
-**Live Scenario Direction:** GPT-5.5 acts as a non-deterministic scenario director, selecting and sequencing threat events from Cosmos Reason2's scene analysis. It generates a natural language scene modification prompt: *"Smoke is beginning to fill from the eastern ventilation duct. Visibility drops to 4 meters. A secondary pipe failure opens at frame junction 7B."*
+## Proposed Pipeline
 
-**Threat Injection:** Cosmos Transfer2.5 (Distilled Edge variant) takes a rendered view from the reconstructed scene and produces a photorealistic video clip showing the threat as it would appear in that specific environment — conditioned on the actual geometry, not a generic template.
+```text
+RealityScan mobile capture
+-> USDZ / OBJ / GLB scene export
+-> Unreal level import
+-> semantic tagging of rooms, doors, chokepoints, cover, exits, and spawn zones
+-> asset and intent database
+-> optional generated 3D assets
+-> adversary planner
+-> scenario manifest JSON
+-> Unreal ScenarioDirector
+-> interactive training run
+-> telemetry and after-action review
+```
 
-**Trainee Response:** The trainee navigates the scenario and makes decisions.
+## Core System Components
 
-**After-Action Review:** GPT-5.5 reviews the trainee's decision sequence against doctrine and produces a structured debrief — identifying delays, sequencing errors, and missed threat indicators — without requiring an instructor to be present.
+### 1. Reality Capture
 
-### Two Use Cases Demonstrated
+Use the RealityScan mobile app for the short-term demo.
 
-**Use Case 1 — Special Forces Training:** A reconstructed building interior. Cosmos Reason2 identifies threat positions based on room geometry. GPT-5.5 introduces non-deterministic adversary placement and environmental changes. The trainee cannot pattern-match to a known scenario because the scenario has never been run before.
+The output is a real-world scene mesh imported into Unreal. This replaces the previous fVDB/COLMAP/Gaussian-splat reconstruction path for now.
 
-**Use Case 2 — Nuclear/Industrial Workflow Training:** A reconstructed machinery space. A reactor engineer is walked through a procedure. Mid-workflow, GPT-5.5 introduces an unexpected system failure — coolant pressure anomaly, valve unresponsive — that was not scripted in advance. The trainee must adapt. GPT-5.5 reviews whether they followed correct casualty procedure.
+Expected scene import work:
 
----
+- Clean up scale, origin, orientation, materials, and collision.
+- Add or generate a NavMesh.
+- Add semantic anchors and volumes for tactical reasoning.
+- Keep the scan as the recognizable environment the trainee cares about.
+
+### 2. Semantic Environment Layer
+
+The scene mesh alone is not enough for reasoning. AdaptSim needs a lightweight semantic layer over the imported environment.
+
+Examples:
+
+- `room`
+- `hallway`
+- `door`
+- `window`
+- `entry_point`
+- `exit`
+- `cover`
+- `concealment`
+- `chokepoint`
+- `line_of_sight`
+- `fallback_route`
+- `no_spawn_zone`
+- `objective_area`
+
+For the hackathon, this can be manually annotated in Unreal with tagged actors, volumes, and splines. Later, VLMs or editor tools can propose these labels automatically.
+
+### 3. Asset And Intent Database
+
+This is the middle layer that matters most.
+
+Instead of hand-authoring complete scenarios, the system stores reusable adversarial assets, capabilities, constraints, intents, and likelihood modifiers.
+
+Example asset card:
+
+```json
+{
+  "asset_id": "adversary_rifleman_irregular",
+  "category": "adversary_role",
+  "render_asset": "/Game/Actors/BP_Adversary_Rifleman",
+  "capabilities": ["move", "observe", "hide", "suppress", "withdraw"],
+  "equipment": ["rifle"],
+  "preferred_affordances": ["cover", "concealment", "line_of_sight_to_entry"],
+  "constraints": ["requires_navmesh", "spawn_out_of_initial_view"],
+  "behavior_profiles": ["ambush", "delay", "reposition_after_contact"],
+  "likelihood_modifiers": {
+    "near_chokepoint": 1.4,
+    "exposed_open_area": 0.5,
+    "has_fallback_route": 1.2
+  }
+}
+```
+
+The database can be seeded from military training documents, doctrine, SME input, and controlled scenario templates. Models can help extract and normalize this material, but the resulting database should be explicit and inspectable.
+
+### 4. Generated 3D Assets
+
+Use Trellis/Trellis.2 or a comparable text/image-to-3D model as an offline asset factory, not as the live simulator.
+
+Good generation targets:
+
+- Obstacles.
+- Barricades.
+- Debris.
+- Props.
+- Equipment.
+- Training markers.
+- Static threat objects.
+- Concealment and cover objects.
+
+Be cautious with:
+
+- Fully rigged humans.
+- Weapons that need exact animation handling.
+- Anything that requires precise collision or safety-critical geometry.
+
+Generated assets should pass through an Unreal ingestion step:
+
+- Import as GLB/FBX/OBJ where practical.
+- Normalize scale and pivot.
+- Generate collision.
+- Set materials.
+- Add Gameplay Tags.
+- Mark whether the asset is spawnable, interactable, cover, concealment, obstacle, or decorative.
+
+### 5. Adversary Planner
+
+The planner converts the environment, asset cards, and adversary intent into a scenario manifest.
+
+It should generate hypotheses like:
+
+- "Use occluded side room to delay detection."
+- "Place one observer with line of sight to the primary entrance."
+- "Use a fallback route after contact."
+- "Create uncertainty at the first chokepoint."
+- "Place a tripwire only where the trainee path is likely but not unavoidable."
+
+The planner should not directly spawn assets or control actors frame by frame. It should output structured scenario intent.
+
+Example output:
+
+```json
+{
+  "scenario_id": "scan_hallway_delay_001",
+  "training_objective": "Detect and respond to delayed contact from an occluded side room.",
+  "events": [
+    {
+      "event_type": "adversary_contact",
+      "likelihood": 0.36,
+      "severity": 0.78,
+      "intent": "delay_and_disrupt",
+      "asset_id": "adversary_rifleman_irregular",
+      "count": 2,
+      "spawn_constraints": {
+        "required_tags": ["concealment", "near_chokepoint"],
+        "avoid_tags": ["trainee_visible", "no_spawn_zone"],
+        "max_distance_to_trainee_m": 20
+      },
+      "behavior_profile": "ambush_then_reposition",
+      "trigger": "trainee_enters_hallway",
+      "rationale": "The side room provides concealment, short engagement distance, and a fallback route."
+    }
+  ]
+}
+```
+
+Likelihoods should be described as scenario likelihoods under assumptions, not as calibrated intelligence predictions.
+
+### 6. Unreal ScenarioDirector
+
+Unreal receives the scenario manifest and compiles it into gameplay.
+
+Responsibilities:
+
+- Validate event JSON.
+- Map `asset_id` to whitelisted Blueprint classes or imported meshes.
+- Query tagged anchors, Smart Objects, NavMesh, and EQS.
+- Reject invalid spawn requests.
+- Spawn actors, props, and effects.
+- Assign StateTree, Behavior Tree, or Gameplay Ability profiles.
+- Bind triggers.
+- Log trainee and adversary telemetry.
+
+This is where the abstract plan becomes a playable sim.
+
+Runtime systems to use:
+
+- NavMesh for movement feasibility.
+- Gameplay Tags for semantic asset and environment lookup.
+- EQS for choosing context-aware positions.
+- Smart Objects for reusable tactical affordances.
+- StateTree or Behavior Trees for behavior execution.
+- AI Perception for sight, hearing, and contact.
+- Niagara for smoke, sparks, dust, fire, and atmosphere.
+- Gameplay Ability System for reusable actions like suppress, breach, plant, withdraw, or signal.
+
+## Model Strategy
+
+Use models for interpretation, generation, and review. Do not use them as the authoritative runtime.
+
+Useful model roles:
+
+- Extract asset and behavior candidates from documents.
+- Summarize scanned scene screenshots into environment affordances.
+- Generate scenario hypotheses and rationale.
+- Normalize outputs into strict JSON schemas.
+- Generate static 3D asset candidates from descriptions.
+- Produce after-action review from telemetry.
+
+Avoid using models for:
+
+- Collision.
+- Navigation.
+- Line-of-sight truth.
+- Hit detection.
+- Frame-by-frame adversary control.
+- Runtime physics.
+- Unvalidated probability claims.
 
 ## Tech Stack
 
-### Hardware
-- NVIDIA A100 40GB GPU (single node)
-- Internet connectivity for GPT-5.5 API calls
-- Phone or 360 camera for environment capture
+### Capture And Scene
 
-### Environment Reconstruction
-**fvdb-Reality-Capture** (NVIDIA, Apache 2.0)
-- Converts multi-image captures into 3D Gaussian splats and high-quality meshes
-- 50% better throughput than gsplat baseline, 30% lower runtime
-- Fully local, no cloud dependency
-- Requires COLMAP for structure-from-motion camera pose estimation
-- Runs inside a Docker container with CUDA 12.8 base image (host is CUDA 12.2)
+- RealityScan mobile app.
+- USDZ, OBJ, GLB, or FBX export depending on the cleanest Unreal path.
+- Unreal Engine as the interactive runtime.
 
-**COLMAP**
-- Open-source structure-from-motion pipeline
-- Provides camera poses to fvdb from raw image captures
-- GPU-accelerated SIFT on Ampere architecture
+### Unreal Runtime
 
-### Scene Understanding
-**Cosmos Reason2** (NVIDIA, NVIDIA Open Model License)
-- Physical AI reasoning vision-language model
-- 2B parameter variant (~6GB VRAM), served via vllm on port 8001
-- Analyzes reconstructed environment to enumerate physically plausible threat categories
-- Chain-of-thought reasoning over spatial and physical scene properties
-- Pulled from `nvidia/Cosmos-Reason2-2B` on Hugging Face
+- Static Mesh import and cleanup.
+- Nanite where appropriate for scanned geometry.
+- Collision and NavMesh.
+- Gameplay Tags.
+- Smart Objects.
+- EQS.
+- StateTree or Behavior Trees.
+- AI Perception.
+- Niagara.
+- Gameplay Ability System where reusable actions justify it.
+- Telemetry logging for after-action review.
 
-### Threat Injection / World Modification
-**Cosmos Transfer2.5 — Distilled Edge** (NVIDIA, Apache 2.0)
-- Multi-controlnet world-to-world translation model
-- Conditions on depth, segmentation, and edge maps extracted from the reconstructed scene
-- Single-step distilled inference — fast enough for interactive demo pacing
-- Produces photorealistic video clips of threat conditions in the specific reconstructed environment
-- Pulled from `nvidia/Cosmos-Transfer2.5-2B` on Hugging Face, runs inside Docker
+### Planning And Data
 
-**Cosmos Predict2.5 2B** (NVIDIA, Apache 2.0)
-- Video2World model for scene continuation
-- Extends generated threat clips forward in time
-- Pulled from `nvidia/Cosmos-Predict2.5-2B` on Hugging Face, runs inside Docker
+- JSON Schema or Pydantic contracts for asset cards and scenario manifests.
+- A small planning service or Unreal subsystem that can score affordances and sample scenario variants.
+- Optional Python service for Monte Carlo sampling, graph analysis, and document-processing utilities.
+- Graph representation of rooms, doors, corridors, chokepoints, sightlines, and fallback routes.
 
-### Scenario Direction and After-Action Review
-**GPT-5.5 API** (OpenAI)
-- Model string: `gpt-5.5`
-- Used for non-deterministic scenario direction and structured after-action review
-- API available as of April 24, 2026 at $5/1M input tokens, $30/1M output tokens
-- Stateless API calls — no local VRAM consumed
-- Architected as a swappable interface so a local model (e.g. Gemma 4 27B) can replace it in an airgapped deployment
+### Models
 
-### VRAM Allocation (40GB A100)
+- LLM/VLM with structured JSON output for scenario reasoning, document extraction, and AAR.
+- Trellis/Trellis.2 or comparable 3D generation for offline static asset creation.
+- Optional local model path later for airgapped deployments.
 
-| Component | VRAM | Notes |
-|---|---|---|
-| Cosmos Reason2 2B (vllm) | ~6GB | Persistent scene analysis server |
-| Cosmos Transfer2.5 2B | ~24GB | Loaded for threat injection, then unloaded |
-| Cosmos Predict2.5 2B | ~24GB | Loaded for scene continuation, then unloaded |
-| fvdb reconstruction | ~8–20GB | Spikes during capture processing only |
-| GPT-5.5 | 0GB | API call, no local VRAM |
+### Removed From Short-Term Demo Stack
 
-Transfer2.5 and Predict2.5 are run sequentially, not simultaneously. Reason2 stays resident as a lightweight server. Total peak: ~30GB.
+These are no longer part of the current demo plan:
 
-### Key Dependencies and Licenses
+- fVDB Reality Capture.
+- COLMAP.
+- Cosmos Reason2.
+- Cosmos Transfer2.5.
+- Cosmos Predict2.5.
+- Gaussian splat rendering as the main runtime representation.
 
-| Tool | License | Source |
-|---|---|---|
-| fvdb-Reality-Capture | Apache 2.0 | GitHub + pip (CUDA 12.8 container) |
-| COLMAP | BSD | GitHub |
-| Cosmos Reason2 | NVIDIA Open Model License | Hugging Face: `nvidia/Cosmos-Reason2-2B` |
-| Cosmos Transfer2.5 | Apache 2.0 + NVIDIA OML | Hugging Face: `nvidia/Cosmos-Transfer2.5-2B` |
-| Cosmos Predict2.5 | Apache 2.0 + NVIDIA OML | Hugging Face: `nvidia/Cosmos-Predict2.5-2B` |
-| GPT-5.5 | OpenAI API ToS | `api.openai.com` |
-| uv | Apache 2.0 | `astral.sh/uv` |
+They may be revisited later, but they are not needed for the current RealityScan + Unreal path.
 
-### Intentional Architecture Decision: Airgap Path
+## MVP Scope
 
-The demo uses GPT-5.5 via API for speed and quality. The scenario direction and after-action review interfaces are designed as clean abstractions so that in a forward-deployed, airgapped context, the API call can be replaced with a locally-hosted model — Gemma 4 27B (Q4, ~20GB VRAM) being the natural choice given its benchmark performance and fit on 40GB hardware. Cosmos and fvdb are both fully offline. The only internet dependency in the demo stack is the GPT-5.5 API call.
+The hackathon MVP should not try to solve every part of autonomous scenario generation.
 
----
+Build this:
+
+- One scanned indoor environment.
+- One imported Unreal level.
+- A small set of tagged tactical affordances.
+- A small adversary asset database.
+- A small set of generated or marketplace/imported props.
+- One generic adversary character class.
+- Three to five reusable behavior profiles.
+- A scenario manifest schema.
+- A ScenarioDirector that spawns and executes at least two scenario variants.
+- Telemetry capture and AAR output.
+
+Defer this:
+
+- Fully automatic semantic scene parsing.
+- Fully automatic rigged character generation.
+- Runtime text-to-3D generation inside Unreal.
+- Full doctrine-scale asset database.
+- Calibrated real-world threat prediction.
+- Full multi-agent learned behavior.
 
 ## Why This Wins
 
-**The problem is real and documented.** Current damage control and industrial training is certified, not realistic. The gap between scripted training scenarios and combat conditions is acknowledged in Naval Institute Proceedings and active NATO damage control conferences. The judge audience for a defense hackathon will recognize the problem immediately.
+AdaptSim is compelling because it makes training local, repeatable, and variable.
 
-**The tech is novel but not speculative.** Every component in the stack is available today and open-weight. Cosmos Transfer2.5, fvdb, and Cosmos Reason2 are all production-grade NVIDIA tools, which plays well in an NVIDIA-focused hackathon context.
+The environment is real. The trainee recognizes the actual hallway, room, facility, or building.
 
-**The demo is visually compelling.** Taking a photo of a real room and watching it flood with smoke 20 minutes later is a more powerful demo than any slide deck.
+The scenario is not a fixed authored level. The system can vary adversary placement, intent, timing, and behavior across repetitions.
 
-**The architecture is honest.** The airgap story is real — this could genuinely run on a ruggedized DGX workstation aboard a ship. That matters to defense evaluators more than it would to a consumer tech judge.
+The simulation is inspectable. Unreal owns the physics and telemetry, so the after-action review can point to what happened rather than narrating a generated video.
+
+The model usage is practical. Models reduce authoring burden by extracting assets, proposing plausible adversary courses of action, generating props, and reviewing performance. They do not replace the game engine.
+
+The product story is clear: scan the world, generate the threat space, rehearse repeatedly, and close the loop from field lessons into training faster.

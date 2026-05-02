@@ -3,19 +3,29 @@
 ## Identity
 
 ```text
-Project root on VM: ~/adaptsim
 GCP project: gecko-dev-fde
-Zone: us-east1-b
-Instance: a100-instance-02
+Default VM: linux-pixel-streaming
+Default zone: us-east1-d
+Default purpose: Unreal Engine / pixel streaming / interactive graphics
+Compute VM: a100-instance-02
+Compute zone: us-east1-b
+Compute purpose: optional heavy model experiments, offline asset generation, or batch processing
+Project root on compute VM: ~/adaptsim
 ```
 
-## Agent SSH Command
+## Default Agent SSH Command
+
+```bash
+gcloud compute ssh --zone "us-east1-d" "linux-pixel-streaming" --project "gecko-dev-fde" --tunnel-through-iap
+```
+
+## A100 Compute SSH Command
 
 ```bash
 gcloud compute ssh --zone "us-east1-b" "a100-instance-02" --tunnel-through-iap --project "gecko-dev-fde"
 ```
 
-## Confirmed Shape
+## Confirmed Compute Shape
 
 ```text
 GPU: NVIDIA A100-SXM4-40GB
@@ -28,13 +38,16 @@ CUDA 12.8.1 container: working
 ## Layout
 
 ```text
+Default Unreal VM:
+  Use for Unreal Engine, pixel streaming, interactive graphics, and L4 workstation-style work.
+
+Compute VM:
 ~/adaptsim/
   repos/        cloned runtime repos
   models/       Hugging Face model downloads
   data/
-    captures/   input images / captured frames
-    outputs/    generated analysis and videos
-    transfer_test/
+    captures/   scan exports, reference images, or captured frames
+    outputs/    generated assets, manifests, logs, and run artifacts
   scripts/      local helper scripts
 ```
 
@@ -73,6 +86,5 @@ watch -n 1 nvidia-smi
 df -h
 du -sh ~/adaptsim/models/*
 du -sh ~/.cache/huggingface/hub
-tail -f ~/adaptsim/repos/cosmos-transfer2.5/outputs/distilled/edge/console.log
-tail -f ~/adaptsim/data/outputs/corridor_transfer/console.log
+tail -f ~/adaptsim/data/outputs/*.log
 ```

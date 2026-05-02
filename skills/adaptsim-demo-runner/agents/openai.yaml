@@ -1,4 +1,0 @@
-interface:
-  display_name: "AdaptSim Demo Runner"
-  short_description: "Run the AdaptSim hackathon demo chain"
-  default_prompt: "Use $adaptsim-demo-runner to run the current AdaptSim demo chain for this repo."

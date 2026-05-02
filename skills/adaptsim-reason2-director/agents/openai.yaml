@@ -1,4 +1,0 @@
-interface:
-  display_name: "AdaptSim Reason2 Director"
-  short_description: "Analyze scenes and direct scenarios"
-  default_prompt: "Use $adaptsim-reason2-director to analyze a scene and produce a scenario director JSON."

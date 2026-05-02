@@ -1,4 +1,4 @@
 interface:
   display_name: "AdaptSim VM Operator"
-  short_description: "Operate the AdaptSim A100 VM"
-  default_prompt: "Use $adaptsim-vm-operator to connect to and verify the AdaptSim A100 VM."
+  short_description: "Operate the AdaptSim Unreal and compute VMs"
+  default_prompt: "Use $adaptsim-vm-operator to connect to and verify the AdaptSim Unreal VM."
