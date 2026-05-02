@@ -1,0 +1,4 @@
+interface:
+  display_name: "AdaptSim Transfer2.5"
+  short_description: "Generate threat videos with Transfer2.5"
+  default_prompt: "Use $adaptsim-transfer25 to prepare and run a Cosmos Transfer2.5 edge-control threat video."
