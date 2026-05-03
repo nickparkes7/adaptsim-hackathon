@@ -20,6 +20,14 @@ UNREAL_LOG_FILE="${ADAPTSIM_PS_UNREAL_LOG_FILE:-${STATE_DIR}/unreal-pixelstreami
 LAST_LAUNCH_FILE="${ADAPTSIM_PS_LAST_LAUNCH_FILE:-${STATE_DIR}/last-launch.json}"
 STATUS_FILE="${ADAPTSIM_PS_STATUS_FILE:-${STATE_DIR}/status.json}"
 PEER_OPTIONS_FILE="${ADAPTSIM_PS_PEER_OPTIONS_FILE:-${STATE_DIR}/peer_options.json}"
+TURN_CREDENTIALS_FILE="${ADAPTSIM_PS_TURN_CREDENTIALS_FILE:-${STATE_DIR}/turn_credentials.env}"
+
+if [[ -f "${TURN_CREDENTIALS_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${TURN_CREDENTIALS_FILE}"
+  set +a
+fi
 
 STREAMER_PORT="${ADAPTSIM_PS_STREAMER_PORT:-8888}"
 PLAYER_PORT="${ADAPTSIM_PS_PLAYER_PORT:-80}"
@@ -32,6 +40,14 @@ WEBRTC_MAX_PORT="${ADAPTSIM_PS_WEBRTC_MAX_PORT:-19303}"
 DISABLE_TRANSMIT_AUDIO="${ADAPTSIM_PS_DISABLE_TRANSMIT_AUDIO:-true}"
 DISABLE_RECEIVE_AUDIO="${ADAPTSIM_PS_DISABLE_RECEIVE_AUDIO:-true}"
 ENCODER_CODEC="${ADAPTSIM_PS_ENCODER_CODEC:-H264}"
+STUN_URLS="${ADAPTSIM_PS_STUN_URLS-stun:stun.l.google.com:19302}"
+TURN_URLS="${ADAPTSIM_PS_TURN_URLS:-}"
+TURN_USERNAME="${ADAPTSIM_PS_TURN_USERNAME:-}"
+TURN_CREDENTIAL="${ADAPTSIM_PS_TURN_CREDENTIAL:-}"
+ICE_TRANSPORT_POLICY="${ADAPTSIM_PS_ICE_TRANSPORT_POLICY:-}"
+AUTO_PEER_OPTIONS="${ADAPTSIM_PS_AUTO_PEER_OPTIONS:-1}"
+CONSOLE_MESSAGES="${ADAPTSIM_PS_CONSOLE_MESSAGES:-auto}"
+LOG_CONFIG="${ADAPTSIM_PS_LOG_CONFIG:-auto}"
 RES_X="${ADAPTSIM_PS_RES_X:-1280}"
 RES_Y="${ADAPTSIM_PS_RES_Y:-720}"
 DEMO_HOLD_SECONDS="${ADAPTSIM_DEMO_HOLD_SECONDS:-25}"
@@ -74,6 +90,11 @@ Environment overrides:
   ADAPTSIM_PIXEL_STREAMING_STATE_DIR
   ADAPTSIM_PS_PUBLIC_URL
   ADAPTSIM_PS_WEBRTC_MIN_PORT / ADAPTSIM_PS_WEBRTC_MAX_PORT
+  ADAPTSIM_PS_TURN_URLS / ADAPTSIM_PS_TURN_USERNAME / ADAPTSIM_PS_TURN_CREDENTIAL
+  ADAPTSIM_PS_ICE_TRANSPORT_POLICY
+  ADAPTSIM_PS_TURN_CREDENTIALS_FILE
+  ADAPTSIM_PS_CONSOLE_MESSAGES (auto, off, basic, verbose, formatted)
+  ADAPTSIM_PS_LOG_CONFIG (auto, true, false)
 
 Status is emitted as JSON on stdout and also written to:
   $ADAPTSIM_PIXEL_STREAMING_STATE_DIR/status.json
@@ -274,8 +295,10 @@ emit_status() {
   export GENERATED_AT
   GENERATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   export STATE_DIR SIGNALLING_PID_FILE SIGNALLING_LOG_FILE UNREAL_PID_FILE UNREAL_LOG_FILE LAST_LAUNCH_FILE
+  export PEER_OPTIONS_FILE TURN_CREDENTIALS_FILE
   export STREAMER_PORT PLAYER_PORT SFU_PORT LOCAL_PLAYER_URL PUBLIC_PLAYER_URL
   export WEBRTC_MIN_PORT WEBRTC_MAX_PORT DISABLE_TRANSMIT_AUDIO DISABLE_RECEIVE_AUDIO ENCODER_CODEC
+  export STUN_URLS TURN_URLS ICE_TRANSPORT_POLICY
   export UE PROJECT UPROJECT PS_WEB
   export SIGNALLING_PID="${signalling_pid}"
   export SIGNALLING_PID_SOURCE="${signalling_pid_source}"
@@ -310,6 +333,9 @@ def as_int(name):
     except ValueError:
         return value
 
+def csv_list(name):
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+
 
 last_launch = None
 last_launch_path = os.environ["LAST_LAUNCH_FILE"]
@@ -341,6 +367,8 @@ data = {
         "state_dir": os.environ["STATE_DIR"],
         "status_file": os.environ["STATUS_FILE"],
         "last_launch_file": os.environ["LAST_LAUNCH_FILE"],
+        "peer_options_file": os.environ["PEER_OPTIONS_FILE"],
+        "turn_credentials_file": os.environ["TURN_CREDENTIALS_FILE"],
         "ue": os.environ["UE"],
         "project": os.environ["PROJECT"],
         "uproject": os.environ["UPROJECT"],
@@ -374,6 +402,13 @@ data = {
         "disable_transmit_audio": as_bool("DISABLE_TRANSMIT_AUDIO"),
         "disable_receive_audio": as_bool("DISABLE_RECEIVE_AUDIO"),
         "encoder_codec": os.environ["ENCODER_CODEC"],
+    },
+    "ice": {
+        "transport_policy": os.environ["ICE_TRANSPORT_POLICY"] or ("relay" if os.environ["TURN_URLS"] else "all"),
+        "turn_configured": bool(os.environ["TURN_URLS"]),
+        "turn_urls": csv_list("TURN_URLS"),
+        "stun_urls": csv_list("STUN_URLS"),
+        "peer_options_file": os.environ["PEER_OPTIONS_FILE"],
     },
     "stream": {
         "status": "ready" if as_bool("READY") else (
@@ -415,6 +450,66 @@ validate_launch_inputs() {
   if [[ -n "${LAUNCH_SEMANTIC_ENVIRONMENT}" && ! -f "${LAUNCH_SEMANTIC_ENVIRONMENT}" ]]; then
     die "semantic environment does not exist at ${LAUNCH_SEMANTIC_ENVIRONMENT}"
   fi
+}
+
+ensure_peer_options_file() {
+  ensure_state_dir
+  if [[ "${AUTO_PEER_OPTIONS}" == "0" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${TURN_URLS}" && -f "${PEER_OPTIONS_FILE}" ]]; then
+    return 0
+  fi
+
+  export PEER_OPTIONS_FILE TURN_URLS TURN_USERNAME TURN_CREDENTIAL STUN_URLS ICE_TRANSPORT_POLICY
+  python3 - <<'PY'
+import json
+import os
+
+
+def csv_list(name):
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+
+
+turn_urls = csv_list("TURN_URLS")
+stun_urls = csv_list("STUN_URLS")
+username = os.environ.get("TURN_USERNAME", "")
+credential = os.environ.get("TURN_CREDENTIAL", "")
+policy = os.environ.get("ICE_TRANSPORT_POLICY", "") or ("relay" if turn_urls else "all")
+
+if policy not in {"all", "relay"}:
+    raise SystemExit(f"ADAPTSIM_PS_ICE_TRANSPORT_POLICY must be 'all' or 'relay', got {policy!r}")
+
+ice_servers = []
+if turn_urls:
+    if not username or not credential:
+        raise SystemExit("TURN URLs are configured, but ADAPTSIM_PS_TURN_USERNAME or ADAPTSIM_PS_TURN_CREDENTIAL is missing.")
+    ice_servers.append({
+        "urls": turn_urls,
+        "username": username,
+        "credential": credential,
+    })
+
+if stun_urls and policy != "relay":
+    ice_servers.append({"urls": stun_urls})
+
+if not ice_servers:
+    raise SystemExit("No ICE servers are configured for Pixel Streaming peer options.")
+
+peer_options = {
+    "iceServers": ice_servers,
+    "iceTransportPolicy": policy,
+}
+
+path = os.environ["PEER_OPTIONS_FILE"]
+tmp_path = f"{path}.tmp"
+with open(tmp_path, "w", encoding="utf-8") as handle:
+    json.dump(peer_options, handle, indent=2)
+    handle.write("\n")
+os.replace(tmp_path, path)
+os.chmod(path, 0o600)
+PY
 }
 
 terminate_pid() {
@@ -499,6 +594,7 @@ adopt_existing_process_if_present() {
 start_signalling_impl() {
   ensure_state_dir
   require_signalling_paths
+  ensure_peer_options_file
 
   if adopt_existing_process_if_present "signalling" "${SIGNALLING_PID_FILE}" "${SIGNALLING_PATTERN}"; then
     return 0
@@ -509,6 +605,46 @@ start_signalling_impl() {
     peer_options_args=(--peer_options_file "${PEER_OPTIONS_FILE}")
   else
     info "No peer options file found at ${PEER_OPTIONS_FILE}; starting signalling without --peer_options_file"
+  fi
+
+  local log_config_args=()
+  case "${LOG_CONFIG}" in
+    true|1|yes)
+      log_config_args=(--log_config)
+      ;;
+    false|0|no)
+      ;;
+    auto)
+      if [[ -z "${TURN_URLS}" ]]; then
+        log_config_args=(--log_config)
+      fi
+      ;;
+    *)
+      die "ADAPTSIM_PS_LOG_CONFIG must be auto, true, or false; got ${LOG_CONFIG}"
+      ;;
+  esac
+
+  local console_messages="${CONSOLE_MESSAGES}"
+  local console_messages_args=()
+  case "${console_messages}" in
+    auto)
+      if [[ -n "${TURN_URLS}" ]]; then
+        console_messages="off"
+      else
+        console_messages="verbose"
+      fi
+      ;;
+    off|false|0|no)
+      console_messages="off"
+      ;;
+    basic|verbose|formatted)
+      ;;
+    *)
+      die "ADAPTSIM_PS_CONSOLE_MESSAGES must be auto, off, basic, verbose, or formatted; got ${CONSOLE_MESSAGES}"
+      ;;
+  esac
+  if [[ "${console_messages}" != "off" ]]; then
+    console_messages_args=(--console_messages "${console_messages}")
   fi
 
   local launcher=(env "PATH=${PATH}")
@@ -527,8 +663,8 @@ start_signalling_impl() {
       --sfu_port "${SFU_PORT}" \
       --serve \
       --https_redirect \
-      --console_messages verbose \
-      --log_config \
+      "${console_messages_args[@]}" \
+      "${log_config_args[@]}" \
       --http_root www \
       --homepage player.html \
       "${peer_options_args[@]}" \
@@ -549,6 +685,7 @@ write_last_launch() {
   export LAUNCH_MAP LAUNCH_SCENARIO_MANIFEST LAUNCH_SEMANTIC_ENVIRONMENT LAUNCH_DEMO_INPUT_START LAUNCH_DEMO_AUTO_PRESS_1
   export DEMO_HOLD_SECONDS RES_X RES_Y
   export WEBRTC_MIN_PORT WEBRTC_MAX_PORT DISABLE_TRANSMIT_AUDIO DISABLE_RECEIVE_AUDIO ENCODER_CODEC
+  export TURN_URLS STUN_URLS ICE_TRANSPORT_POLICY PEER_OPTIONS_FILE
   export STREAMER_PORT PUBLIC_PLAYER_URL LOCAL_PLAYER_URL
   export UPDATED_AT
   UPDATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -560,6 +697,10 @@ import os
 
 def as_bool(name):
     return os.environ.get(name) == "true"
+
+
+def csv_list(name):
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
 
 
 data = {
@@ -583,6 +724,11 @@ data = {
         "encoder_codec": os.environ["ENCODER_CODEC"],
         "public_player_url": os.environ["PUBLIC_PLAYER_URL"],
         "local_player_url": os.environ["LOCAL_PLAYER_URL"],
+        "ice_transport_policy": os.environ["ICE_TRANSPORT_POLICY"] or ("relay" if os.environ["TURN_URLS"] else "all"),
+        "turn_configured": bool(os.environ["TURN_URLS"]),
+        "turn_urls": csv_list("TURN_URLS"),
+        "stun_urls": csv_list("STUN_URLS"),
+        "peer_options_file": os.environ["PEER_OPTIONS_FILE"],
     },
 }
 

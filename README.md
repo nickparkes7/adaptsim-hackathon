@@ -28,6 +28,20 @@ npm run dev:api
 
 Open `http://127.0.0.1:5173`. Vite proxies `/api/*` to `http://127.0.0.1:8787`.
 
+For the Safety Park Pixel Streaming demo, start the full local stack with:
+
+```bash
+npm run demo:start
+```
+
+This runs the API and frontend in `tmux` sessions, checks the L4 Pixel Streaming path, and points the app at `http://34.139.126.187/player.html`. Useful follow-ups:
+
+```bash
+npm run demo:status
+npm run demo:logs
+npm run demo:stop
+```
+
 Build the React app and serve it through the Node bridge:
 
 ```bash

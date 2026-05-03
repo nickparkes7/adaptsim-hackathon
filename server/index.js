@@ -15,10 +15,31 @@ try {
   sharp = require("sharp");
 } catch {}
 
-const port = Number(process.env.PORT || 8787);
-const host = process.env.HOST || "127.0.0.1";
 const serverDir = __dirname;
 const projectRoot = path.resolve(serverDir, "..");
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const contents = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (Object.prototype.hasOwnProperty.call(process.env, key)) continue;
+    let value = rawValue.trim();
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.join(projectRoot, ".env"));
+
+const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || "127.0.0.1";
 const contractsExamplesDir = path.join(projectRoot, "contracts", "examples");
 const webDistDir = path.join(projectRoot, "apps/web/dist");
 const webPublicDir = path.join(projectRoot, "apps/web/public");

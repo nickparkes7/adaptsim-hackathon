@@ -35,7 +35,7 @@ narrative.
 | AAR from real telemetry | Pass | `contracts/examples/aar/horror_corridor_ambush_delay_001_live_aar.md` generated from fresh VM JSONL. |
 | Input key `1` | Pass, with trigger caveat | `AAdaptSimDemoPlayerController` logged `demo_input_received key=1` and `scenario_started` with `-AdaptSimDemoInputStart`; adversary spawn still depends on the manifest's chokepoint trigger or automation fire-all. |
 | Game-mode visual | Pass | Screenshot `contracts/examples/telemetry/horror_corridor_ambush_delay_001_visual.png` shows the bright adversary marker in the corridor; the text label is mirrored from that camera angle. |
-| Pixel Streaming | Pass in clean browser, script-managed | `PixelStreaming2` is enabled and signalling serves port `80`. `scripts/pixel-streaming/*` now provides launch, restart, stop, and JSON status commands for Control API shell-out. On 2026-05-03, a clean browser session reached live H.264 video at `1280x720` with `Controls stream input: true` after restarting Unreal with audio transmit/receive disabled. Old tabs can remain stuck at `WEBRTC CONNECTION NEGOTIATED`; close the tab or use a cache-busting URL before retesting. |
+| Pixel Streaming | Pass in clean browser, script-managed | `PixelStreaming2` is enabled and signalling serves port `80`. `scripts/pixel-streaming/*` now provides launch, restart, stop, TURN relay setup, and JSON status commands for Control API shell-out. On 2026-05-03, the repeated `WEBRTC CONNECTION NEGOTIATED` stall was traced to blocked direct ICE candidates on `49152+`; the durable no-admin fix is coturn on public `443` plus `iceTransportPolicy=relay`. Old tabs can remain stale; close the tab or use a cache-busting URL before retesting. |
 | Frontend app | Pass for MVP lane | `apps/web` is a React/Vite app. `CaptureSimulationFlow.jsx` covers capture upload, generated threat asset database status, Trellis threat visual status, threat injection plan, scenario launch, stream embed/link, telemetry, artifacts, and AAR. |
 
 ## Local Setup
@@ -220,14 +220,36 @@ cd /Users/nicholas.parkes/Repos/adaptsim-hackathon
 scripts/check_pixelstreaming_webrtc_firewall.sh
 ```
 
-`OK_WORKAROUND` means the VM has the legacy no-admin `pixel-streaming-hc` rule for UDP `19302,19303`. Keep using the direct public URL and the command below, but still verify live ICE candidates in `wilbur.log`: UE 5.7 PixelStreaming2 logs the `19302-19303` override yet has still been observed allocating `49152+` candidates.
+`OK_RELAY` is the expected healthy result for this shared VPC setup. It means coturn can receive browser media on public `443` and the Pixel Streaming launcher should force `iceTransportPolicy=relay`, so the browser does not depend on direct Unreal candidates on blocked `49152+` ports.
+
+`OK_WORKAROUND` means the VM has the legacy no-admin `pixel-streaming-hc` rule for UDP `19302,19303`. That rule is not enough by itself if UE 5.7 PixelStreaming2 advertises `49152+` direct ICE candidates.
 
 ```bash
 -PixelStreamingWebRTCMinPort=19302
 -PixelStreamingWebRTCMaxPort=19303
 ```
 
-`OK_PERMANENT` means the wider preferred `49152-49200` rule exists. If the script reports `NO_WORKING_WEBRTC_FIREWALL_PATH`, do not spend time debugging Unreal rendering first. The browser can load the page and still stall at `WEBRTC CONNECTION NEGOTIATED` when the WebRTC media ports are not reachable.
+`OK_DIRECT_WIDE_PORT` means the wider direct-media `49152-49200` rule exists. That rule requires host-project network admin access in shared VPC project `gecko-enterprise-dev-host` and is optional while relay-only TURN is working. If the script reports `NO_WORKING_WEBRTC_FIREWALL_PATH`, do not spend time debugging Unreal rendering first. The browser can load the page and still stall at `WEBRTC CONNECTION NEGOTIATED` when the WebRTC media path is not reachable.
+
+Preferred no-admin relay setup:
+
+```bash
+scripts/pixel-streaming/vm_configure_turn_relay.sh
+scripts/pixel-streaming/vm_pixel_streaming.sh restart
+```
+
+Expected status fields after the restart:
+
+```json
+{
+  "ice": {
+    "transport_policy": "relay",
+    "turn_configured": true,
+    "turn_urls": ["turn:34.139.126.187:443?transport=udp", "turn:34.139.126.187:443?transport=tcp"],
+    "stun_urls": []
+  }
+}
+```
 
 If a browser tab is already stuck at `WEBRTC CONNECTION NEGOTIATED`, close that tab and open a fresh URL such as:
 
@@ -308,7 +330,7 @@ last-launch.json
 status.json
 ```
 
-The current launch defaults intentionally use the existing no-admin firewall workaround and do not require the permanent wide-port rule:
+The current launch defaults keep the Unreal-side WebRTC allocation range inside the existing no-admin firewall workaround:
 
 ```text
 -PixelStreamingWebRTCMinPort=19302
@@ -316,6 +338,8 @@ The current launch defaults intentionally use the existing no-admin firewall wor
 -PixelStreamingWebRTCDisableTransmitAudio=true
 -PixelStreamingWebRTCDisableReceiveAudio=true
 ```
+
+When `/home/nicholas.parkes/adaptsim-pixelstreaming/turn_credentials.env` exists, the launcher also writes `peer_options.json` for the Pixel Streaming signalling server and forces browser candidates through TURN relay instead of blocked direct `49152+` candidates.
 
 Status JSON shape for Control API shell-out:
 
@@ -352,6 +376,13 @@ Status JSON shape for Control API shell-out:
   "ports": {
     "webrtc_min": 19302,
     "webrtc_max": 19303
+  },
+  "ice": {
+    "transport_policy": "relay",
+    "turn_configured": true,
+    "turn_urls": ["turn:34.139.126.187:443?transport=udp", "turn:34.139.126.187:443?transport=tcp"],
+    "stun_urls": [],
+    "peer_options_file": "/home/nicholas.parkes/adaptsim-pixelstreaming/peer_options.json"
   }
 }
 ```
@@ -369,13 +400,13 @@ tail -f "$HOME/adaptsim-pixelstreaming/wilbur.log"
 Current observed running shapes produced by the scripts. Include the manifest and semantic environment flags when this stream is intended to accept keyboard `1` as the scenario start:
 
 ```text
-node ./dist/index.js --streamer_port 8888 --player_port 80 --sfu_port 8889 --serve --https_redirect --console_messages verbose --log_config --http_root www --homepage player.html --peer_options_file /home/nicholas.parkes/adaptsim-pixelstreaming/peer_options.json
+node ./dist/index.js --streamer_port 8888 --player_port 80 --sfu_port 8889 --serve --https_redirect --console_messages basic --http_root www --homepage player.html --peer_options_file /home/nicholas.parkes/adaptsim-pixelstreaming/peer_options.json
 UnrealEditor AdaptSim.uproject /Game/AdaptSim/Maps/L_HorrorCorridor_Imported -game -RenderOffscreen -PixelStreamingConnectionURL=ws://127.0.0.1:8888 -PixelStreamingWebRTCMinPort=19302 -PixelStreamingWebRTCMaxPort=19303 -PixelStreamingWebRTCDisableTransmitAudio=true -PixelStreamingWebRTCDisableReceiveAudio=true -PixelStreamingEncoderCodec=H264 -AdaptSimScenarioManifest=.../horror_corridor_ambush_delay_001.json -AdaptSimSemanticEnvironment=.../horror_corridor_imported.json -AdaptSimDemoInputStart -AdaptSimDemoHoldSeconds=25
 ```
 
-Latest Integration Marshal note: one public-browser run stalled at `WEBRTC CONNECTION NEGOTIATED` when Wilbur showed public ICE candidates on `34.139.126.187:49152-49154`. Restarting Unreal with `-PixelStreamingWebRTCDisableTransmitAudio=true -PixelStreamingWebRTCDisableReceiveAudio=true` produced a clean browser pass with live H.264 video, `1280x720`, decoded frames, and `Controls stream input: true`. The successful no-audio offer still advertised `49152-49153`, so treat the `19302-19303` firewall rule as useful preflight context, not a complete proof of the actual ICE path. If a tab stays stuck after the restart, close it and open a fresh cache-busted player URL.
+Latest Integration Marshal note: one public-browser run stalled at `WEBRTC CONNECTION NEGOTIATED` when Wilbur showed public ICE candidates on `34.139.126.187:49152-49154`. Restarting Unreal with `-PixelStreamingWebRTCDisableTransmitAudio=true -PixelStreamingWebRTCDisableReceiveAudio=true` produced a clean browser pass with live H.264 video, `1280x720`, decoded frames, and `Controls stream input: true`. The successful no-audio offer still advertised `49152-49153`, so treat the `19302-19303` firewall rule as useful preflight context, not a complete proof of the actual ICE path. The durable no-admin mitigation is the TURN relay setup above; if a tab stays stuck after the restart, close it and open a fresh cache-busted player URL.
 
-Optional permanent cleanup: ask a GCP network admin to run this from a local/admin shell, not from the VM. The current user account hit `Required 'compute.firewalls.create' permission` for this host project.
+Optional admin cleanup: ask a GCP network admin to run this from a local/admin shell, not from the VM. The current user account hit `Required 'compute.firewalls.create' permission` for this host project.
 
 ```bash
 gcloud compute firewall-rules create adaptsim-pixelstreaming-webrtc \
@@ -592,7 +623,7 @@ npm run dev:web
 
 ## Final Fallback Path
 
-Use this if Pixel Streaming video remains stuck at `WEBRTC CONNECTION NEGOTIATED` after confirming the preflight and restarting on the `19302-19303` workaround:
+Use this if Pixel Streaming video remains stuck at `WEBRTC CONNECTION NEGOTIATED` after confirming `OK_RELAY` and opening a fresh player tab:
 
 1. Open the Unreal editor on the VM:
 
@@ -641,5 +672,5 @@ python3 contracts/aar_generator.py contracts/examples/telemetry/mock_hallway_del
 - Observer scenario uses accepted fallback placement instead of strict `observation_point` placement.
 - Semantic anchors in the saved map are TargetPoint placeholders, not native `ASemanticAnchor` actors, because native placement crashed under Linux `-nullrhi`.
 - Pixel Streaming is repo script-managed with pid/log/status files, not yet a systemd unit.
-- Pixel Streaming media needs a routable UDP path. Future agents should run `scripts/check_pixelstreaming_webrtc_firewall.sh` before Pixel Streaming work. `OK_WORKAROUND` is acceptable for the current no-admin path, but UE 5.7 PixelStreaming2 can still advertise `49152+`; use the no-audio launch flags, close stale browser tabs, and verify live ICE candidates in `wilbur.log`. The preferred `49152-49200` firewall rule in shared VPC host project `gecko-enterprise-dev-host` is optional permanent cleanup.
+- Pixel Streaming media needs a routable path. Future agents should run `scripts/check_pixelstreaming_webrtc_firewall.sh` before Pixel Streaming work. `OK_WORKAROUND` only proves UDP `19302,19303` are open; UE 5.7 PixelStreaming2 can still advertise blocked `49152+` direct candidates. The durable no-admin fix is `scripts/pixel-streaming/vm_configure_turn_relay.sh` plus relay-only peer options. The `49152-49200` firewall rule in shared VPC host project `gecko-enterprise-dev-host` is optional admin cleanup.
 - `gcloud compute ssh` often prints `Updating project ssh metadata... failed.` even when SSH and SCP succeed.

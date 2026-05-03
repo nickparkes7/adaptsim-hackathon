@@ -43,6 +43,7 @@ function BrandLockup() {
 function WorkflowStepper() {
   return (
     <nav className="workflow-stepper" aria-label="Simulation steps">
+      <SourceSimulationPanel />
       {workflowSteps.map((step) => (
         <Button
           key={step.id}
@@ -84,9 +85,7 @@ export default function App() {
             <WorkflowStepper />
           </header>
           <main id="main-workspace" className="workspace workflow-pages" data-active-step="01">
-            <SourceIntake>
-              <SourceSimulationPanel />
-            </SourceIntake>
+            <SourceIntake />
             <MapStage />
             <section
               id="workflow-page-03"

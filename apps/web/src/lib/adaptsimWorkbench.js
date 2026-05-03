@@ -344,6 +344,7 @@ const state = {
   sourceNote: "",
   sourceFiles: [],
   sourceFileBlobs: new Map(),
+  stagedLocationFix: null,
   generatedAssetSession: null,
   generatedAssetPollTimer: 0,
   snapshots: [],
@@ -829,6 +830,14 @@ function isValidLatLon(lat, lon) {
   return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }
 
+function isNullIslandCoordinate(lat, lon) {
+  return Math.abs(Number(lat)) < 0.000001 && Math.abs(Number(lon)) < 0.000001;
+}
+
+function isUsableSceneCoordinate(lat, lon) {
+  return isValidLatLon(lat, lon) && !isNullIslandCoordinate(lat, lon);
+}
+
 function normalizeCoordinate(value) {
   const number = toFiniteNumber(value);
   return Number.isFinite(number) ? Number(number.toFixed(coordinateStorageDecimals)) : number;
@@ -1038,7 +1047,7 @@ function buildGeneratedModelText(snapshot, domain, sources) {
 function normalizeLocation(location) {
   const lat = toFiniteNumber(location?.lat);
   const lon = toFiniteNumber(location?.lon);
-  if (!isValidLatLon(lat, lon)) return null;
+  if (!isUsableSceneCoordinate(lat, lon)) return null;
   return {
     label: clampText(location?.label, 90, formatCoordinates(lat, lon)),
     lat: normalizeCoordinate(lat),
@@ -1118,7 +1127,7 @@ function normalizeProfile(profile) {
 function normalizeSnapshot(snapshot) {
   const lat = toFiniteNumber(snapshot?.lat);
   const lon = toFiniteNumber(snapshot?.lon);
-  if (!isValidLatLon(lat, lon)) return null;
+  if (!isUsableSceneCoordinate(lat, lon)) return null;
 
   const timestamp = new Date(snapshot?.timestamp);
   return {
@@ -1392,7 +1401,7 @@ function getImageMimeType(file) {
 function normalizeGps(gps) {
   const lat = gps?.lat == null ? null : toFiniteNumber(gps.lat);
   const lon = gps?.lon == null ? null : toFiniteNumber(gps.lon);
-  if (!isValidLatLon(lat, lon)) return null;
+  if (!isUsableSceneCoordinate(lat, lon)) return null;
   return {
     lat: normalizeCoordinate(lat),
     lon: normalizeCoordinate(normalizeLongitude(lon)),
@@ -1468,6 +1477,9 @@ function sanitizeState() {
   }
   state.sourceFiles = state.sourceFiles.map(normalizeSourceFile).filter(Boolean).slice(0, 24);
   state.generatedAssetSession = normalizeGeneratedAssetSession(state.generatedAssetSession);
+  if (isMissingApiKeyAssetSession(state.generatedAssetSession)) {
+    state.generatedAssetSession = null;
+  }
   state.workflow = {
     mapConfirmed: Boolean(state.workflow?.mapConfirmed),
     step3SnapshotGenerated: Boolean(state.workflow?.step3SnapshotGenerated && state.snapshots.length),
@@ -1478,6 +1490,11 @@ function sanitizeState() {
     state.workflow.step3SnapshotGenerated = false;
     state.workflow.step4Acknowledged = false;
   }
+}
+
+function isMissingApiKeyAssetSession(session) {
+  return normalize(session?.generation?.status || session?.status) === "failed"
+    && /OPENAI_API_KEY is not configured/i.test(session?.generation?.error || "");
 }
 
 function saveState() {
@@ -1512,6 +1529,7 @@ function loadState() {
     state.snapshots = [];
     state.selectedSnapshotId = "";
     state.sourceFiles = [];
+    state.stagedLocationFix = null;
     state.generatedAssetSession = null;
     state.workflow = { mapConfirmed: false, step3SnapshotGenerated: false, step4Acknowledged: false };
   }
@@ -2022,6 +2040,9 @@ async function populateCoordinateLocationPreview(gps, options = {}) {
     ? formatResolvedLocationLabel(resolvedLocation, preview.coordinateLabel)
     : preview.coordinateLabel;
   setLocationSearchValue(label);
+  if (state.stagedLocationFix && coordinateDistanceMeters(state.stagedLocationFix.lat, state.stagedLocationFix.lon, preview.gps.lat, preview.gps.lon) <= coordinatePinPrecisionMeters) {
+    state.stagedLocationFix.label = label;
+  }
   syncControls(getSelectedSnapshot());
   return label;
 }
@@ -2422,7 +2443,7 @@ async function selectGeocodedLocation(location) {
 function createSnapshot(profile, location, resolution, options = {}) {
   const lat = toFiniteNumber(location?.lat);
   const lon = toFiniteNumber(location?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !isValidLatLon(lat, normalizeLongitude(lon))) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !isUsableSceneCoordinate(lat, normalizeLongitude(lon))) {
     updateResolution("Snapshot location is outside valid latitude/longitude bounds.", "restricted");
     return;
   }
@@ -3035,9 +3056,22 @@ function renderAssetGenerationStatus(session) {
       <div class="reason-card">
         <strong>Asset database generation needs review</strong>
         <p>${escapeHtml(session.generation?.error || "The GPT-5.5 asset database session failed.")}</p>
+        <div class="button-row">
+          <button class="primary-button" type="button" data-retry-asset-session>Retry generation</button>
+          <button class="quiet-button" type="button" data-dismiss-asset-session>Dismiss</button>
+        </div>
       </div>
     `;
   }
+}
+
+function clearGeneratedAssetSession({ message = "Generated asset session cleared." } = {}) {
+  state.generatedAssetSession = null;
+  window.clearTimeout(state.generatedAssetPollTimer);
+  setIntakeAgentTask("asset-db", "waiting", "Waiting for Step 04 final check before starting GPT-5.5 generation.");
+  saveState();
+  renderApp();
+  $(selectors.reasoningOutput).innerHTML = `<div class="reason-card">${escapeHtml(message)}</div>`;
 }
 
 function gpsMatchesSnapshot(gps, snapshot) {
@@ -3078,6 +3112,19 @@ function syncLocationInputsFromSnapshot(snapshot = getSelectedSnapshot()) {
   if (dirtyForCurrentSnapshot) return;
 
   if (!snapshot) {
+    const stagedFix = getStagedLocationFix();
+    if (stagedFix) {
+      locationInput.value = locationInput.value.trim() || stagedFix.label;
+      latInput.value = formatCoordinate(stagedFix.lat);
+      lonInput.value = formatCoordinate(stagedFix.lon);
+      locationInput.dataset.snapshotId = "";
+      locationInput.dataset.locationDirty = "false";
+      if (searchResults) searchResults.innerHTML = "";
+      locationInput.setAttribute("aria-expanded", "false");
+      locationInput.removeAttribute("aria-busy");
+      return;
+    }
+
     locationInput.value = "";
     latInput.value = "";
     lonInput.value = "";
@@ -3103,9 +3150,10 @@ function readCoordinateInputs() {
   const latInput = document.querySelector(selectors.latInput);
   const lonInput = document.querySelector(selectors.lonInput);
   if (!latInput || !lonInput) return null;
+  if (!latInput.value.trim() || !lonInput.value.trim()) return null;
   const lat = toFiniteNumber(latInput.value);
   const lon = toFiniteNumber(lonInput.value);
-  if (!isValidLatLon(lat, normalizeLongitude(lon))) return null;
+  if (!isUsableSceneCoordinate(lat, normalizeLongitude(lon))) return null;
   return {
     lat: normalizeCoordinate(lat),
     lon: normalizeCoordinate(normalizeLongitude(lon))
@@ -3121,6 +3169,8 @@ function hasSourceGpsAtCoordinates(lat, lon) {
 
 function hasSolidLocationAnchor(snapshot = getSelectedSnapshot()) {
   if (snapshot) return true;
+  if (normalizeGps(state.stagedLocationFix)) return true;
+  if (state.sourceFiles.some((file) => normalizeGps(file.gps))) return true;
   const coordinates = readCoordinateInputs();
   if (!coordinates) return false;
   return Boolean(state.globe?.pin) || hasSourceGpsAtCoordinates(coordinates.lat, coordinates.lon);
@@ -3159,6 +3209,12 @@ function getMapConfirmReadiness(snapshot = getSelectedSnapshot()) {
       ready: false,
       waitingForIntake: true,
       reason: "Step 01 is still resolving location evidence. Confirm unlocks when intake finishes or a GPS/location fix is ready."
+    };
+  }
+  if (!hasSolidLocationAnchor(snapshot)) {
+    return {
+      ready: false,
+      reason: "Step 02 needs a GPS or resolved location fix before it can be confirmed."
     };
   }
   return {
@@ -3323,6 +3379,45 @@ function getMappedSourcePhotos() {
     .filter((entry) => entry.gps);
 }
 
+function setStagedLocationFix(gps, { label = "Photo GPS fix", source = "" } = {}) {
+  const normalizedGps = normalizeGps(gps);
+  if (!normalizedGps) {
+    state.stagedLocationFix = null;
+    return null;
+  }
+  state.stagedLocationFix = {
+    lat: normalizedGps.lat,
+    lon: normalizedGps.lon,
+    label: clampText(label, 140, "Photo GPS fix"),
+    source: clampText(source || normalizedGps.source, 90, normalizedGps.source || "GPS")
+  };
+  return state.stagedLocationFix;
+}
+
+function getStagedLocationFix() {
+  const normalized = normalizeGps(state.stagedLocationFix);
+  if (normalized) {
+    return {
+      lat: normalized.lat,
+      lon: normalized.lon,
+      label: clampText(state.stagedLocationFix.label, 140, "Photo GPS fix"),
+      source: clampText(state.stagedLocationFix.source || normalized.source, 90, normalized.source || "GPS")
+    };
+  }
+
+  const firstMappedPhoto = getMappedSourcePhotos()[0];
+  if (firstMappedPhoto?.gps) {
+    return {
+      lat: firstMappedPhoto.gps.lat,
+      lon: firstMappedPhoto.gps.lon,
+      label: firstMappedPhoto.file.name,
+      source: firstMappedPhoto.gps.source || "Photo GPS"
+    };
+  }
+
+  return null;
+}
+
 function getSourceAggregationAnchor() {
   const snapshot = getSelectedSnapshot();
   if (snapshot) {
@@ -3333,23 +3428,34 @@ function getSourceAggregationAnchor() {
     };
   }
 
-  const coordinates = readCoordinateInputs();
-  if (coordinates && hasSolidLocationAnchor()) {
+  const stagedFix = getStagedLocationFix();
+  if (stagedFix && hasSolidLocationAnchor()) {
     return {
-      lat: coordinates.lat,
-      lon: coordinates.lon,
-      label: "current map fix"
+      lat: stagedFix.lat,
+      lon: stagedFix.lon,
+      label: stagedFix.label
     };
   }
 
-  const firstMappedPhoto = getMappedSourcePhotos()[0];
-  return firstMappedPhoto
-    ? {
-        lat: firstMappedPhoto.gps.lat,
-        lon: firstMappedPhoto.gps.lon,
-        label: firstMappedPhoto.file.name
-      }
-    : null;
+  return null;
+}
+
+function focusCurrentSceneLocationSoon() {
+  window.requestAnimationFrame(() => {
+    const snapshot = getSelectedSnapshot();
+    if (snapshot) {
+      focusSnapshotOnMap(snapshot, { centerMap: true, snap: false, revealMap: false });
+      return;
+    }
+
+    const stagedFix = getStagedLocationFix();
+    if (!stagedFix) return;
+    setCoordinateInputs(stagedFix.lat, stagedFix.lon);
+    placePin(stagedFix.lat, stagedFix.lon);
+    orientGlobeToLocation(stagedFix.lat, normalizeLongitude(stagedFix.lon), pointToExtent(stagedFix.lat, normalizeLongitude(stagedFix.lon)), {
+        heightMeters: searchCameraHeightMeters
+      });
+  });
 }
 
 function isGpsNearAggregationAnchor(gps, anchor) {
@@ -3503,13 +3609,18 @@ function setSourceFileGps(file) {
   if (!file?.gps) return null;
   setCoordinateInputs(file.gps.lat, file.gps.lon);
   updateResolution(`GPS metadata loaded from ${file.name}.`, "ready");
-  syncControls(getSelectedSnapshot());
+  const snapshot = getSelectedSnapshot();
+  if (snapshot) syncControls(snapshot);
   return file.gps;
 }
 
 function stageSourceFileGps(file, { revealMap = true } = {}) {
   if (!file?.gps) return null;
   const gps = setSourceFileGps(file);
+  setStagedLocationFix(gps, {
+    label: file.name,
+    source: gps.source || "Photo GPS"
+  });
   const locationPreview = beginCoordinateLocationPreview(gps, { label: `GPS from ${file.name}` });
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
@@ -3518,6 +3629,7 @@ function stageSourceFileGps(file, { revealMap = true } = {}) {
   renderPublicSitesForSnapshot(null);
   renderSourcePhotoMarkers();
   placePin(gps.lat, gps.lon);
+  renderSnapshotSummary(null);
   if (state.globe?.viewer) {
     if (revealMap) triggerMapSnapFeedback({ revealMap });
     orientGlobeToLocation(gps.lat, normalizeLongitude(gps.lon), pointToExtent(gps.lat, normalizeLongitude(gps.lon)), {
@@ -4453,6 +4565,7 @@ function setActiveWorkflowPage(stepNumber, { scroll = false, focusSelector = "",
 
   if (step === "02") {
     resizeVisibleGlobeSoon();
+    focusCurrentSceneLocationSoon();
   }
 
   const scrollToPage = () => {
@@ -4525,14 +4638,28 @@ function renderWorkflowPages(steps) {
   }
 }
 
-function navigateWorkflowStep(direction) {
+async function navigateWorkflowStep(direction) {
   const steps = state.workflowStepProgress;
   if (!steps) return;
   const targetStep = getAdjacentWorkflowStep(state.activeWorkflowStep, direction);
   if (!targetStep) return;
   if (direction > 0 && !isWorkflowStepAccessible(steps, targetStep)) return;
+
+  if (direction > 0 && normalizeWorkflowStep(state.activeWorkflowStep) === "02" && targetStep === "03") {
+    const snapshot = await ensureSnapshotFromStagedLocation({
+      markMapConfirmed: true,
+      markStep3Complete: true
+    });
+    if (!snapshot) {
+      updateResolution("Confirm a GPS or resolved location before continuing to Threats.", "caution");
+      renderApp();
+      return;
+    }
+    saveState();
+  }
+
   setActiveWorkflowPage(targetStep);
-  renderWorkflowPages(steps);
+  renderApp();
 }
 
 function getSimulationWorkflowBridgeState() {
@@ -4772,14 +4899,51 @@ function focusWorkflowStep(stepNumber, { focusSelector = "" } = {}) {
   }, reducedMotionQuery.matches ? 0 : 220);
 }
 
-function confirmMapStep() {
+async function ensureSnapshotFromStagedLocation({
+  markMapConfirmed = false,
+  markStep3Complete = false,
+  centerMap = false,
+  revealMap = false
+} = {}) {
+  const snapshot = getSelectedSnapshot();
+  if (snapshot) return snapshot;
+
+  const stagedFix = getStagedLocationFix();
+  if (!stagedFix) return null;
+  setCoordinateInputs(stagedFix.lat, stagedFix.lon);
+
+  if (markMapConfirmed) {
+    state.workflow.mapConfirmed = true;
+  }
+
+  return activateCoordinates(stagedFix, {
+    label: stagedFix.label || "confirmed Step 02 location",
+    source: stagedFix.source || "operator confirmed coordinates",
+    centerMap,
+    revealMap,
+    forceNew: false,
+    markStep3Complete
+  });
+}
+
+async function confirmMapStep() {
   const readiness = getMapConfirmReadiness(getSelectedSnapshot());
   if (!readiness.ready) {
     updateResolution(readiness.reason, readiness.waitingForIntake ? "caution" : "neutral");
     return;
   }
 
-  state.workflow.mapConfirmed = true;
+  const snapshot = await ensureSnapshotFromStagedLocation({
+    markMapConfirmed: true,
+    markStep3Complete: true
+  });
+  if (!snapshot) {
+    state.workflow.mapConfirmed = false;
+    updateResolution("Step 02 location could not be converted into a snapshot.", "restricted");
+    saveState();
+    renderApp();
+    return;
+  }
   saveState();
   renderApp();
   updateResolution("Step 02 confirmed. Continue to Step 03.", "ready");
@@ -4788,6 +4952,21 @@ function confirmMapStep() {
 
 function renderSnapshotSummary(snapshot) {
   if (!snapshot) {
+    const stagedFix = getStagedLocationFix();
+    if (stagedFix) {
+      $(selectors.selectedLocationTitle).textContent = "Location Fix";
+      $(selectors.selectedPlace).textContent = stagedFix.label || "Photo GPS fix";
+      $(selectors.selectedCoordinates).textContent = [stagedFix.source || "GPS", formatCoordinates(stagedFix.lat, stagedFix.lon)]
+        .filter(Boolean)
+        .join(" | ");
+      $(selectors.snapshotTitle).textContent = "Confirm Location";
+      $(selectors.summaryCountry).textContent = "--";
+      $(selectors.summaryForces).textContent = "--";
+      $(selectors.summaryHardware).textContent = "--";
+      updateResolution("Location fix ready. Confirm Step 02 to populate the scene context.", "ready");
+      return;
+    }
+
     $(selectors.selectedLocationTitle).textContent = "Location";
     $(selectors.selectedPlace).textContent = "No location selected";
     $(selectors.selectedCoordinates).textContent = "Awaiting geospatial input.";
@@ -5674,6 +5853,7 @@ function resetAppToStartingPoint({ statusMessage = "Reset to starting point." } 
   state.pendingCoordinateSnaps.clear();
   clearWorkflowInputFields();
   state.sourceFiles = [];
+  state.stagedLocationFix = null;
   state.sourceFileBlobs.clear();
   state.generatedAssetSession = null;
   window.clearTimeout(state.generatedAssetPollTimer);
@@ -5705,6 +5885,7 @@ function clearSnapshots() {
   $(selectors.lonInput).value = "";
   state.snapshots = [];
   state.selectedSnapshotId = "";
+  state.stagedLocationFix = null;
   state.generatedAssetSession = null;
   window.clearTimeout(state.generatedAssetPollTimer);
   state.workflow.mapConfirmed = false;
@@ -7933,8 +8114,12 @@ function attachEvents() {
       renderWorkflowPages(state.workflowStepProgress);
     }
   });
-  document.querySelector(selectors.workflowPrevStep)?.addEventListener("click", () => navigateWorkflowStep(-1));
-  document.querySelector(selectors.workflowNextStep)?.addEventListener("click", () => navigateWorkflowStep(1));
+  document.querySelector(selectors.workflowPrevStep)?.addEventListener("click", () => {
+    void navigateWorkflowStep(-1);
+  });
+  document.querySelector(selectors.workflowNextStep)?.addEventListener("click", () => {
+    void navigateWorkflowStep(1);
+  });
   window.addEventListener("popstate", () => {
     state.activeWorkflowStep = getWorkflowStepFromUrl();
     renderApp();
@@ -7970,6 +8155,18 @@ function attachEvents() {
   document.querySelector("#clear-snapshots")?.addEventListener("click", clearSnapshots);
   $("#reason-note").addEventListener("click", () => {
     void reasonFromAnalystNote();
+  });
+  $(selectors.reasoningOutput).addEventListener("click", (event) => {
+    if (event.target.closest("[data-dismiss-asset-session]")) {
+      clearGeneratedAssetSession();
+      return;
+    }
+    if (event.target.closest("[data-retry-asset-session]")) {
+      state.generatedAssetSession = null;
+      window.clearTimeout(state.generatedAssetPollTimer);
+      saveState();
+      void reasonFromAnalystNote();
+    }
   });
   $(selectors.publicSiteHover).addEventListener("click", (event) => {
     if (!event.target.closest("[data-site-hover-close]")) return;

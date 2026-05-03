@@ -27,7 +27,7 @@ export function SourceIntake({ children }) {
         </div>
       </div>
 
-      <div className="source-dropzone-shell">
+      <div className={`source-dropzone-shell${children ? "" : " source-dropzone-shell-wide"}`}>
         <label id="source-dropzone" className="source-dropzone" htmlFor="source-file-input">
           <input
             id="source-file-input"

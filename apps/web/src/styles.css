@@ -239,6 +239,10 @@ iframe {
   min-width: 0;
 }
 
+.workflow-stepper .source-demo-toggle {
+  align-self: stretch;
+}
+
 .workflow-step-tab {
   position: relative;
   display: inline-flex;
@@ -634,6 +638,10 @@ details[open] > summary::after {
   gap: 14px;
 }
 
+.source-dropzone-shell-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .source-dropzone {
   grid-column: 1;
 }
@@ -717,19 +725,28 @@ details[open] > summary::after {
 
 .source-demo-toggle {
   justify-self: start;
-  display: inline-grid;
-  gap: 7px;
-  max-width: 280px;
-  border: 1px solid var(--factory-hairline);
-  border-radius: var(--radius);
-  background: rgba(5, 5, 5, 0.78);
-  padding: 12px 13px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 68px;
+  color: var(--factory-muted);
+  text-transform: none;
 }
 
-.source-demo-toggle small {
-  color: var(--factory-muted);
-  font-size: 12px;
-  line-height: 1.35;
+.source-demo-toggle .switch-field {
+  min-height: 68px;
+  color: inherit;
+}
+
+.source-demo-toggle .switch-field span {
+  font-weight: 500;
+}
+
+.source-demo-toggle:has(input:checked) {
+  color: var(--foreground);
+}
+
+.source-dropzone-shell-wide:not(.has-source-files):not(.has-pending-source-files) .source-dropzone {
+  min-height: clamp(360px, 54vh, 660px);
 }
 
 .scene-readiness-grid,
@@ -1258,7 +1275,7 @@ details[open] > summary::after {
 
 .threats-workflow-page {
   display: grid;
-  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 432px) minmax(0, 1fr);
   align-items: start;
   gap: 18px;
 }
@@ -1273,13 +1290,13 @@ details[open] > summary::after {
 }
 
 .threats-workflow-page .final-check-panel {
-  grid-column: 1;
-  grid-row: 2;
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .threats-workflow-page .threats-panel {
-  grid-column: 2;
-  grid-row: 1 / span 4;
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .threats-workflow-page .workspace-output-disclosure {
@@ -1933,6 +1950,11 @@ details[open] > summary::after {
     min-height: 44px;
   }
 
+  .source-demo-toggle,
+  .source-demo-toggle .switch-field {
+    min-height: 44px;
+  }
+
   .workspace,
   .workflow-pages {
     padding: 18px;
@@ -1957,15 +1979,15 @@ details[open] > summary::after {
   }
 
   .threats-workflow-page .threats-panel {
-    order: 1;
+    order: 3;
   }
 
   .threats-workflow-page .compact-location-panel {
-    order: 2;
+    order: 1;
   }
 
   .threats-workflow-page .final-check-panel {
-    order: 3;
+    order: 2;
   }
 
   .threats-workflow-page .workspace-output-disclosure {

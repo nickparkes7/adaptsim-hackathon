@@ -915,14 +915,8 @@ export function SourceSimulationPanel() {
           checked={workflow.demoCheckpointEnabled}
           onChange={(event) => workflow.setDemoCheckpointEnabled(event.target.checked)}
         />
-        <span>Demo path</span>
+        <span>Demo</span>
       </label>
-      <small>
-        {workflow.demoCheckpointEnabled
-          ? "Uses the cached Safety Park mesh after frontend intake."
-          : "Runs the live reconstruction path."}
-      </small>
-      {workflow.checkpointError && <p className="capture-error" role="alert">{workflow.checkpointError}</p>}
     </div>
   );
 }
