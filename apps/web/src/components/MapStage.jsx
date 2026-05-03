@@ -13,6 +13,25 @@ export function MapStage() {
         </div>
       </div>
 
+      <div id="map-readiness-status" className="map-readiness-status" role="status" aria-live="polite">
+        <div className="map-readiness-head">
+          <span id="map-readiness-label">Location readiness</span>
+          <strong id="map-readiness-percent">0%</strong>
+        </div>
+        <div
+          id="map-readiness-progress"
+          className="map-readiness-progress"
+          role="progressbar"
+          aria-label="Step 02 location readiness"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        >
+          <span id="map-readiness-bar"></span>
+        </div>
+        <p id="map-readiness-detail">Waiting for Step 01 source intake.</p>
+      </div>
+
       <details className="map-source-inline" aria-label="Map source controls">
         <summary className="map-source-inline-head">
           <div>
@@ -27,7 +46,7 @@ export function MapStage() {
           <label className="field">
             <span>Provider</span>
             <div className="provider-row">
-              <select id="map-provider" name="map-provider"></select>
+              <select id="map-provider" name="map-provider" aria-label="Map imagery provider"></select>
               <button id="add-map-provider" className="quiet-button add-provider-button" type="button" aria-expanded="false">
                 Add Source
               </button>
@@ -46,7 +65,7 @@ export function MapStage() {
               type="text"
               maxLength="80"
               autoComplete="off"
-              placeholder="Team imagery service"
+              placeholder="Team imagery service…"
             />
           </label>
           <label className="field">
@@ -65,7 +84,7 @@ export function MapStage() {
               type="url"
               autoComplete="off"
               spellCheck="false"
-              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
+              placeholder="https://tiles.example.com/{z}/{x}/{y}.png…"
             />
           </label>
           <div className="button-row">

@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const http = require("node:http");
 const os = require("node:os");
+const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 
 let createTesseractWorker = null;
@@ -24,14 +25,20 @@ const dataDir = process.env.DATA_DIR || path.join(webPublicDir, "data");
 const staticRoot = process.env.STATIC_ROOT || webDistDir;
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 32 * 1024);
 const maxVisionBodyBytes = Number(process.env.MAX_VISION_BODY_BYTES || 8 * 1024 * 1024);
+const maxAssetSessionBodyBytes = Number(process.env.MAX_ASSET_SESSION_BODY_BYTES || 36 * 1024 * 1024);
 const maxCsvBytes = Number(process.env.MAX_CSV_BYTES || 2 * 1024 * 1024);
 const maxRows = Number(process.env.MAX_SYNC_ROWS || 2000);
 const upstreamTimeoutMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
+const assetGenerationTimeoutMs = Number(process.env.OPENAI_ASSET_TIMEOUT_MS || 180000);
 const openGeoLookupTimeoutMs = Number(process.env.OPEN_GEO_LOOKUP_TIMEOUT_MS || 6500);
 const openGeoImageLookupEnabled = process.env.OPEN_GEO_IMAGE_LOOKUP !== "0";
 const commonsApiUrl = process.env.WIKIMEDIA_COMMONS_API_URL || "https://commons.wikimedia.org/w/api.php";
 const commonsUserAgent = process.env.COMMONS_USER_AGENT || "AdaptSim/0.1 local open-geolocation evidence prototype";
 const openPlaceEvidencePath = process.env.OPEN_PLACE_EVIDENCE_PATH || path.join(dataDir, "open-place-evidence.json");
+const generatedSessionRoot = process.env.ADAPTSIM_SESSION_DIR || path.join(projectRoot, ".adaptsim", "generated-sessions");
+const openAiAssetModel = process.env.OPENAI_ASSET_MODEL || "gpt-5.5";
+const trellisVmEndpoint = String(process.env.TRELLIS_VM_ENDPOINT || "").trim().replace(/\/+$/, "");
+const trellisVmApiKey = String(process.env.TRELLIS_VM_API_KEY || "").trim();
 const defaultAllowedOrigins = [
   "http://127.0.0.1:5173",
   "http://localhost:5173",
@@ -44,6 +51,7 @@ const allowedOrigins = new Set(
     .map((origin) => origin.trim())
     .filter(Boolean)
 );
+const assetSessionJobs = new Map();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -67,23 +75,34 @@ class HttpError extends Error {
 function setSecurityHeaders(response) {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  response.setHeader("Origin-Agent-Cluster", "?1");
+  response.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()"
+  );
 }
 
-function isAllowedOrigin(request) {
+function getAllowedCorsOrigin(request) {
   const origin = request.headers.origin;
-  if (!origin) return true;
+  if (!origin) return "";
 
   try {
     const originUrl = new URL(origin);
-    if (originUrl.host === request.headers.host) return true;
+    if (request.headers.host && originUrl.host === request.headers.host) return origin;
   } catch {}
 
-  return allowedOrigins.has(origin);
+  return allowedOrigins.has(origin) ? origin : "";
+}
+
+function isAllowedOrigin(request) {
+  return !request.headers.origin || Boolean(getAllowedCorsOrigin(request));
 }
 
 function setCorsHeaders(request, response) {
-  const origin = request.headers.origin;
-  if (!origin || !allowedOrigins.has(origin)) return;
+  const origin = getAllowedCorsOrigin(request);
+  if (!origin) return;
   response.setHeader("Access-Control-Allow-Origin", origin);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -269,6 +288,21 @@ async function fetchWithTimeout(url, options = {}, timeoutMessage = "Upstream re
   }
 }
 
+async function fetchWithCustomTimeout(url, options = {}, timeoutMs = upstreamTimeoutMs, timeoutMessage = "Upstream request timed out.") {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new HttpError(504, timeoutMessage);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function handleCalendarSync(request, response) {
   if (!String(request.headers["content-type"] || "").includes("application/json")) {
     sendJson(request, response, 415, { error: "Content-Type must be application/json." });
@@ -366,6 +400,735 @@ function parseVisionJson(text) {
       return null;
     }
   }
+}
+
+function clampApiText(value, maxLength, fallback = "") {
+  const text = String(value ?? "").trim();
+  if (!text) return fallback;
+  return text.length > maxLength ? text.slice(0, maxLength).trim() : text;
+}
+
+function toSlug(value, fallback = "session") {
+  const slug = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 52);
+  return slug || fallback;
+}
+
+function hashPayload(value) {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("hex");
+}
+
+function ensureDirectory(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeJsonAtomic(filePath, payload) {
+  ensureDirectory(path.dirname(filePath));
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`);
+  fs.renameSync(tempPath, filePath);
+}
+
+function generatedSessionPath(sessionId, fileName = "session.json") {
+  const safeSessionId = toSlug(sessionId, "session");
+  return path.join(generatedSessionRoot, safeSessionId, fileName);
+}
+
+function readGeneratedSession(sessionId) {
+  const filePath = generatedSessionPath(sessionId);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveGeneratedSession(record) {
+  const now = new Date().toISOString();
+  const nextRecord = {
+    ...record,
+    updated_at: now
+  };
+  writeJsonAtomic(generatedSessionPath(nextRecord.session_id), nextRecord);
+  return nextRecord;
+}
+
+function listGeneratedSessions() {
+  if (!fs.existsSync(generatedSessionRoot)) return [];
+  return fs.readdirSync(generatedSessionRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => readGeneratedSession(entry.name))
+    .filter(Boolean)
+    .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)))
+    .slice(0, 30);
+}
+
+function normalizeSessionGps(gps) {
+  const lat = Number(gps?.lat);
+  const lon = Number(gps?.lon);
+  if (!isValidCoordinatePair(lat, lon)) return null;
+  return {
+    lat,
+    lon,
+    source: clampApiText(gps?.source, 120, "source coordinate")
+  };
+}
+
+function sanitizeImageDataUrl(value) {
+  const text = String(value || "");
+  if (!/^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i.test(text)) return "";
+  if (text.length > 20_971_520) return "";
+  return text;
+}
+
+function sanitizeSourceForAssetSession(source) {
+  const imageDataUrl = sanitizeImageDataUrl(source?.imageDataUrl);
+  const mimeType = clampApiText(source?.type || source?.mimeType, 120, "");
+  return {
+    id: clampApiText(source?.id, 120, ""),
+    name: clampApiText(source?.name, 180, "source"),
+    type: mimeType,
+    kind: clampApiText(source?.kind, 40, "Source"),
+    size: Math.max(0, Number(source?.size || 0)),
+    lastModified: Math.max(0, Number(source?.lastModified || 0)),
+    addedAt: clampApiText(source?.addedAt, 40, ""),
+    gps: normalizeSessionGps(source?.gps),
+    vision: source?.vision && typeof source.vision === "object"
+      ? {
+          summary: clampApiText(source.vision.summary, 600, ""),
+          what: clampApiText(source.vision.what, 180, ""),
+          facilityType: clampApiText(source.vision.facilityType, 140, ""),
+          visualClues: Array.isArray(source.vision.visualClues)
+            ? source.vision.visualClues.map((item) => clampApiText(item, 220, "")).filter(Boolean).slice(0, 10)
+            : [],
+          possibleLocations: Array.isArray(source.vision.possibleLocations)
+            ? source.vision.possibleLocations.map((location) => ({
+                name: clampApiText(location?.name, 140, ""),
+                country: clampApiText(location?.country, 90, ""),
+                lat: location?.lat == null ? null : Number(location.lat),
+                lon: location?.lon == null ? null : Number(location.lon),
+                confidence: clampApiText(location?.confidence, 30, "low"),
+                reason: clampApiText(location?.reason, 320, "")
+              })).slice(0, 8)
+            : [],
+          cautions: Array.isArray(source.vision.cautions)
+            ? source.vision.cautions.map((item) => clampApiText(item, 220, "")).filter(Boolean).slice(0, 6)
+            : []
+        }
+      : null,
+    textExtract: clampApiText(source?.textExtract, 2400, ""),
+    imageDataUrl
+  };
+}
+
+function buildSessionInputManifest(body) {
+  const sourceFiles = Array.isArray(body?.sourceFiles)
+    ? body.sourceFiles.map(sanitizeSourceForAssetSession).filter((source) => source.name).slice(0, 24)
+    : [];
+  if (!sourceFiles.length) {
+    throw new HttpError(400, "At least one source file is required to create a generated asset session.");
+  }
+
+  const manifestSources = sourceFiles.map(({ imageDataUrl: _imageDataUrl, ...source }) => source);
+  const context = body?.context && typeof body.context === "object" ? body.context : {};
+  const manifest = {
+    requested_at: new Date().toISOString(),
+    operator_id: clampApiText(body?.operatorId || context.operatorId, 120, "local_user"),
+    display_name: clampApiText(body?.displayName || context.displayName, 140, "AdaptSim input session"),
+    notes: clampApiText(body?.notes || context.notes, 1800, ""),
+    location: context.location && typeof context.location === "object"
+      ? {
+          label: clampApiText(context.location.label, 180, ""),
+          country: clampApiText(context.location.country, 90, ""),
+          lat: context.location.lat == null ? null : Number(context.location.lat),
+          lon: context.location.lon == null ? null : Number(context.location.lon)
+        }
+      : null,
+    sourceFiles: manifestSources
+  };
+  return {
+    manifest,
+    sourceFiles
+  };
+}
+
+function createGeneratedSessionRecord(body) {
+  const { manifest, sourceFiles } = buildSessionInputManifest(body);
+  const inputFingerprint = hashPayload(manifest);
+  const timestamp = new Date().toISOString();
+  const sessionId = `asset_${timestamp.replace(/[-:.TZ]/g, "").slice(0, 14)}_${inputFingerprint.slice(0, 10)}`;
+  const sessionDir = path.dirname(generatedSessionPath(sessionId));
+  ensureDirectory(sessionDir);
+  writeJsonAtomic(path.join(sessionDir, "input_manifest.json"), manifest);
+
+  const record = {
+    session_id: sessionId,
+    status: "generating_asset_database",
+    created_at: timestamp,
+    updated_at: timestamp,
+    input_fingerprint: inputFingerprint,
+    storage_path: sessionDir,
+    status_url: `/api/generative-assets/sessions/${sessionId}`,
+    input_manifest_url: `/api/generative-assets/sessions/${sessionId}`,
+    generation: {
+      provider: "openai",
+      model: openAiAssetModel,
+      status: "queued",
+      started_at: "",
+      completed_at: "",
+      error: ""
+    },
+    asset_database: null,
+    trellis: {
+      model: "microsoft/TRELLIS.2-4B",
+      status: "not_started",
+      endpoint_configured: Boolean(trellisVmEndpoint),
+      job_id: "",
+      request_path: "",
+      response: null,
+      error: ""
+    }
+  };
+  saveGeneratedSession(record);
+  return { record, sourceFiles, manifest };
+}
+
+function assetDatabaseResponseSchema() {
+  const textArray = { type: "array", items: { type: "string" }, maxItems: 24 };
+  const modifierWeights = {
+    type: "array",
+    maxItems: 12,
+    items: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        tag: { type: "string" },
+        weight: { type: "number" }
+      },
+      required: ["tag", "weight"]
+    }
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      contract_type: { type: "string", enum: ["generated_asset_database"] },
+      schema_version: { type: "string", enum: ["1.0"] },
+      session_summary: { type: "string" },
+      input_evidence: textArray,
+      asset_cards: {
+        type: "array",
+        maxItems: 16,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            contract_type: { type: "string", enum: ["asset_card"] },
+            schema_version: { type: "string", enum: ["1.0"] },
+            asset_id: { type: "string", pattern: "^[a-z][a-z0-9_]{2,63}$" },
+            category: { type: "string", enum: ["adversary_role", "static_prop", "equipment", "effect", "objective_marker", "training_marker"] },
+            display_name: { type: "string" },
+            description: { type: "string" },
+            unreal_asset_path: { type: ["string", "null"] },
+            spawn_policy: { type: "string", enum: ["never_spawn", "scenario_director_whitelist"] },
+            gameplay_tags: textArray,
+            capabilities: textArray,
+            equipment: textArray,
+            preferred_affordances: textArray,
+            constraints: textArray,
+            behavior_profiles: textArray,
+            likelihood_modifiers: modifierWeights,
+            collision_profile: { type: "string", enum: ["none", "block_all", "overlap_only", "pawn"] },
+            bounds_m: {
+              type: ["object", "null"],
+              additionalProperties: false,
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+                z: { type: "number" }
+              },
+              required: ["x", "y", "z"]
+            },
+            ingestion_status: { type: "string", enum: ["ready", "prototype", "placeholder"] },
+            source_rationale: { type: "string" }
+          },
+          required: [
+            "contract_type",
+            "schema_version",
+            "asset_id",
+            "category",
+            "display_name",
+            "description",
+            "unreal_asset_path",
+            "spawn_policy",
+            "gameplay_tags",
+            "capabilities",
+            "equipment",
+            "preferred_affordances",
+            "constraints",
+            "behavior_profiles",
+            "likelihood_modifiers",
+            "collision_profile",
+            "bounds_m",
+            "ingestion_status",
+            "source_rationale"
+          ]
+        }
+      },
+      trellis_candidates: {
+        type: "array",
+        maxItems: 12,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            asset_id: { type: "string", pattern: "^[a-z][a-z0-9_]{2,63}$" },
+            display_name: { type: "string" },
+            generation_prompt: { type: "string" },
+            visual_descriptor: { type: "string" },
+            geometry_descriptor: { type: "string" },
+            material_descriptor: { type: "string" },
+            texture_descriptor: { type: "string" },
+            scale_descriptor: { type: "string" },
+            scene_context: { type: "string" },
+            detail_checklist: textArray,
+            negative_prompt: { type: "string" },
+            source_asset_id: { type: "string" },
+            target_format: { type: "string", enum: ["glb"] },
+            resolution: { type: "string", enum: ["512", "1024", "1536"] },
+            texture_size: { type: "integer", enum: [1024, 2048, 4096] },
+            safety_notes: textArray
+          },
+          required: [
+            "asset_id",
+            "display_name",
+            "generation_prompt",
+            "visual_descriptor",
+            "geometry_descriptor",
+            "material_descriptor",
+            "texture_descriptor",
+            "scale_descriptor",
+            "scene_context",
+            "detail_checklist",
+            "negative_prompt",
+            "source_asset_id",
+            "target_format",
+            "resolution",
+            "texture_size",
+            "safety_notes"
+          ]
+        }
+      },
+      behavior_profiles: textArray,
+      scenario_seed_notes: textArray,
+      cautions: textArray
+    },
+    required: [
+      "contract_type",
+      "schema_version",
+      "session_summary",
+      "input_evidence",
+      "asset_cards",
+      "trellis_candidates",
+      "behavior_profiles",
+      "scenario_seed_notes",
+      "cautions"
+    ]
+  };
+}
+
+function buildAssetGenerationPrompt(manifest) {
+  return [
+    "You are AdaptSim's asset-database generator. Produce a strict JSON generated_asset_database for a training simulation authoring pipeline.",
+    "Use the uploaded photos, video/file metadata, extracted coordinates, and analyst notes only as source cues. Generate explicit, inspectable training assets, not live intelligence.",
+    "The output must be suitable for later validation against AdaptSim asset-card contracts and for offline Trellis/TRELLIS.2 static asset generation.",
+    "Prefer static props, obstacles, debris, barricades, equipment, objective markers, concealment/cover objects, and training markers for Trellis candidates.",
+    "For every trellis_candidate, write descriptors detailed enough for high-quality 3D generation: silhouette, component breakdown, proportions, dimensions in meters, materials, surface texture, color palette, wear/weathering, seams, handles, fasteners, labels or markings if visible, and scene placement context.",
+    "Each trellis_candidate.generation_prompt should be a consolidated text-to-3D prompt of roughly 80-140 words. Include the object type, its key geometry, scale, material stack, texture style, age/wear, and what should be emphasized from the source cue.",
+    "Use detail_checklist to enumerate the concrete geometry/texture details Trellis should preserve. Keep descriptors static and visual; do not include instructions for functionality, damage effects, targeting, real-world unit markings, or weapon operation.",
+    "Do not generate live force disposition, targeting guidance, vulnerabilities, real-world attack plans, or operational readiness claims.",
+    "Do not mark generated assets as scenario_director_whitelist unless a reviewed Unreal /Game path is already known. Use never_spawn and placeholder/prototype status for generated candidates.",
+    "Avoid fully rigged humans, exact weapon mechanics, or safety-critical geometry as Trellis outputs. Represent human/adversary roles as asset-card metadata only.",
+    `Input manifest JSON:\n${JSON.stringify(manifest, null, 2)}`
+  ].join("\n\n");
+}
+
+function buildOpenAiAssetInput(manifest, sourceFiles) {
+  const content = [
+    {
+      type: "input_text",
+      text: buildAssetGenerationPrompt(manifest)
+    }
+  ];
+
+  sourceFiles
+    .filter((source) => source.imageDataUrl)
+    .slice(0, 4)
+    .forEach((source) => {
+      content.push({
+        type: "input_image",
+        image_url: source.imageDataUrl,
+        detail: "low"
+      });
+    });
+
+  return [{ role: "user", content }];
+}
+
+function normalizeGeneratedAssetDatabase(database) {
+  const fallback = {
+    contract_type: "generated_asset_database",
+    schema_version: "1.0",
+    session_summary: "No generated database returned.",
+    input_evidence: [],
+    asset_cards: [],
+    trellis_candidates: [],
+    behavior_profiles: [],
+    scenario_seed_notes: [],
+    cautions: ["Generation did not return a usable asset database."]
+  };
+  const merged = { ...fallback, ...(database && typeof database === "object" ? database : {}) };
+  merged.asset_cards = Array.isArray(merged.asset_cards)
+    ? merged.asset_cards.map((card) => {
+        if (!card || typeof card !== "object") return card;
+        if (Array.isArray(card.likelihood_modifiers)) {
+          return {
+            ...card,
+            likelihood_modifiers: Object.fromEntries(
+              card.likelihood_modifiers
+                .filter((entry) => entry && typeof entry === "object" && typeof entry.tag === "string")
+                .map((entry) => [entry.tag, Number(entry.weight) || 0])
+            )
+          };
+        }
+        if (!card.likelihood_modifiers || typeof card.likelihood_modifiers !== "object") {
+          return { ...card, likelihood_modifiers: {} };
+        }
+        return card;
+      })
+    : [];
+  merged.trellis_candidates = Array.isArray(merged.trellis_candidates)
+    ? merged.trellis_candidates.map((candidate) => {
+        if (!candidate || typeof candidate !== "object") return candidate;
+        const detailChecklist = Array.isArray(candidate.detail_checklist)
+          ? candidate.detail_checklist.map((item) => clampApiText(item, 160)).filter(Boolean).slice(0, 24)
+          : [];
+        return {
+          ...candidate,
+          generation_prompt: clampApiText(candidate.generation_prompt, 1600),
+          visual_descriptor: clampApiText(candidate.visual_descriptor, 800),
+          geometry_descriptor: clampApiText(candidate.geometry_descriptor, 800),
+          material_descriptor: clampApiText(candidate.material_descriptor, 800),
+          texture_descriptor: clampApiText(candidate.texture_descriptor, 800),
+          scale_descriptor: clampApiText(candidate.scale_descriptor, 500),
+          scene_context: clampApiText(candidate.scene_context, 500),
+          detail_checklist: detailChecklist,
+          negative_prompt: clampApiText(candidate.negative_prompt, 800)
+        };
+      })
+    : [];
+  merged.input_evidence = Array.isArray(merged.input_evidence) ? merged.input_evidence : [];
+  merged.behavior_profiles = Array.isArray(merged.behavior_profiles) ? merged.behavior_profiles : [];
+  merged.scenario_seed_notes = Array.isArray(merged.scenario_seed_notes) ? merged.scenario_seed_notes : [];
+  merged.cautions = Array.isArray(merged.cautions) ? merged.cautions : [];
+  return merged;
+}
+
+async function callOpenAiAssetGenerator(manifest, sourceFiles) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new HttpError(503, "OPENAI_API_KEY is not configured; generated asset database is queued but cannot run.");
+  }
+
+  const upstream = await fetchWithCustomTimeout(
+    "https://api.openai.com/v1/responses",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: openAiAssetModel,
+        store: false,
+        reasoning: {
+          effort: process.env.OPENAI_ASSET_REASONING_EFFORT || "low"
+        },
+        text: {
+          format: {
+            type: "json_schema",
+            name: "adaptsim_generated_asset_database",
+            strict: true,
+            schema: assetDatabaseResponseSchema()
+          }
+        },
+        input: buildOpenAiAssetInput(manifest, sourceFiles)
+      })
+    },
+    assetGenerationTimeoutMs,
+    "OpenAI asset database generation timed out."
+  );
+
+  const payload = await upstream.json().catch(() => ({}));
+  if (!upstream.ok) {
+    throw new HttpError(upstream.status, payload?.error?.message || `OpenAI asset generation returned ${upstream.status}.`);
+  }
+
+  const outputText = extractOutputText(payload);
+  const parsed = parseVisionJson(outputText);
+  if (!parsed) {
+    throw new HttpError(502, "OpenAI asset generation did not return parseable JSON.");
+  }
+  return normalizeGeneratedAssetDatabase(parsed);
+}
+
+function buildDetailedTrellisPrompt(candidate) {
+  const detailChecklist = Array.isArray(candidate.detail_checklist) ? candidate.detail_checklist.filter(Boolean) : [];
+  return [
+    candidate.generation_prompt,
+    candidate.visual_descriptor ? `Visual descriptor: ${candidate.visual_descriptor}` : "",
+    candidate.geometry_descriptor ? `Geometry and proportions: ${candidate.geometry_descriptor}` : "",
+    candidate.material_descriptor ? `Materials: ${candidate.material_descriptor}` : "",
+    candidate.texture_descriptor ? `Texture, color, and wear: ${candidate.texture_descriptor}` : "",
+    candidate.scale_descriptor ? `Scale: ${candidate.scale_descriptor}` : "",
+    candidate.scene_context ? `Scene context: ${candidate.scene_context}` : "",
+    detailChecklist.length ? `Required preserved details: ${detailChecklist.join("; ")}.` : "",
+    "Generate a static, watertight, simulation-ready GLB prop with clear silhouette, believable bevels, usable UVs, and no animated or functional behavior."
+  ].filter(Boolean).join("\n");
+}
+
+function buildDetailedTrellisNegativePrompt(candidate) {
+  return [
+    candidate.negative_prompt,
+    "people, faces, bodies, readable real-world insignia, national or organizational markings, functional weapons, firing mechanisms, targeting aids, live maps, operational labels, excessive text, low-detail geometry, melted surfaces, floating parts, distorted proportions, unsafe sharp artifacts, glossy plastic look unless specified"
+  ].filter(Boolean).join(", ");
+}
+
+function buildTrellisRelayPayload(record) {
+  const database = record.asset_database || {};
+  const candidates = Array.isArray(database.trellis_candidates) ? database.trellis_candidates : [];
+  return {
+    contract_type: "trellis_asset_generation_request",
+    schema_version: "1.0",
+    session_id: record.session_id,
+    input_fingerprint: record.input_fingerprint,
+    source_database_path: path.join(record.storage_path, "asset_database.json"),
+    model: "microsoft/TRELLIS.2-4B",
+    model_capabilities: {
+      modality: "image_to_3d_or_text_conditioned_static_asset",
+      target_formats: ["glb"],
+      preferred_gpu: "A100",
+      notes: [
+        "TRELLIS.2-4B should run on the VM or worker, not in the browser.",
+        "Generated outputs require Unreal ingestion review before scenario spawning."
+      ]
+    },
+    assets: candidates.map((candidate) => ({
+      asset_id: candidate.asset_id,
+      display_name: candidate.display_name,
+      source_asset_id: candidate.source_asset_id,
+      prompt: buildDetailedTrellisPrompt(candidate),
+      visual_descriptor: candidate.visual_descriptor,
+      geometry_descriptor: candidate.geometry_descriptor,
+      material_descriptor: candidate.material_descriptor,
+      texture_descriptor: candidate.texture_descriptor,
+      scale_descriptor: candidate.scale_descriptor,
+      scene_context: candidate.scene_context,
+      detail_checklist: candidate.detail_checklist || [],
+      negative_prompt: buildDetailedTrellisNegativePrompt(candidate),
+      target_format: candidate.target_format || "glb",
+      resolution: candidate.resolution || "1024",
+      texture_size: candidate.texture_size || 4096,
+      output_prefix: `generated-assets/${record.session_id}/${candidate.asset_id}/`,
+      safety_notes: candidate.safety_notes || []
+    }))
+  };
+}
+
+async function queueTrellisRelay(record) {
+  const payload = buildTrellisRelayPayload(record);
+  const requestPath = path.join(record.storage_path, "trellis_request.json");
+  writeJsonAtomic(requestPath, payload);
+
+  let nextRecord = saveGeneratedSession({
+    ...record,
+    trellis: {
+      ...record.trellis,
+      status: payload.assets.length ? "queued" : "skipped",
+      endpoint_configured: Boolean(trellisVmEndpoint),
+      job_id: payload.assets.length ? `trellis_${record.session_id}` : "",
+      request_path: requestPath,
+      error: payload.assets.length ? "" : "No Trellis-suitable static asset candidates were generated."
+    }
+  });
+
+  if (!payload.assets.length || !trellisVmEndpoint) {
+    nextRecord = saveGeneratedSession({
+      ...nextRecord,
+      trellis: {
+        ...nextRecord.trellis,
+        status: payload.assets.length ? "awaiting_vm_endpoint" : "skipped",
+        error: payload.assets.length ? "TRELLIS_VM_ENDPOINT is not configured; request is stored locally for VM relay." : nextRecord.trellis.error
+      }
+    });
+    return nextRecord;
+  }
+
+  try {
+    const upstream = await fetchWithCustomTimeout(
+      `${trellisVmEndpoint}/generate-assets`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(trellisVmApiKey ? { Authorization: `Bearer ${trellisVmApiKey}` } : {})
+        },
+        body: JSON.stringify(payload)
+      },
+      Number(process.env.TRELLIS_VM_TIMEOUT_MS || 20000),
+      "Trellis VM relay timed out."
+    );
+    const responsePayload = await upstream.json().catch(() => ({}));
+    nextRecord = saveGeneratedSession({
+      ...nextRecord,
+      trellis: {
+        ...nextRecord.trellis,
+        status: upstream.ok ? "submitted" : "failed",
+        response: responsePayload,
+        error: upstream.ok ? "" : responsePayload?.error || `Trellis VM returned ${upstream.status}.`
+      }
+    });
+  } catch (error) {
+    nextRecord = saveGeneratedSession({
+      ...nextRecord,
+      trellis: {
+        ...nextRecord.trellis,
+        status: "failed",
+        error: error.message || "Trellis VM relay failed."
+      }
+    });
+  }
+
+  return nextRecord;
+}
+
+async function runGeneratedAssetSession(sessionId, manifest, sourceFiles) {
+  let record = readGeneratedSession(sessionId);
+  if (!record) return;
+
+  record = saveGeneratedSession({
+    ...record,
+    generation: {
+      ...record.generation,
+      status: "running",
+      started_at: new Date().toISOString(),
+      error: ""
+    }
+  });
+
+  try {
+    const database = await callOpenAiAssetGenerator(manifest, sourceFiles);
+    writeJsonAtomic(path.join(record.storage_path, "asset_database.json"), database);
+    record = saveGeneratedSession({
+      ...record,
+      status: "asset_database_ready",
+      asset_database: database,
+      generation: {
+        ...record.generation,
+        status: "complete",
+        completed_at: new Date().toISOString(),
+        error: ""
+      }
+    });
+    await queueTrellisRelay(record);
+  } catch (error) {
+    saveGeneratedSession({
+      ...record,
+      status: "asset_database_failed",
+      generation: {
+        ...record.generation,
+        status: "failed",
+        completed_at: new Date().toISOString(),
+        error: error.message || "Generated asset database failed."
+      }
+    });
+  } finally {
+    assetSessionJobs.delete(sessionId);
+  }
+}
+
+function startGeneratedAssetSessionJob(sessionId, manifest, sourceFiles) {
+  if (assetSessionJobs.has(sessionId)) return;
+  const job = runGeneratedAssetSession(sessionId, manifest, sourceFiles).catch((error) => {
+    const record = readGeneratedSession(sessionId);
+    if (record) {
+      saveGeneratedSession({
+        ...record,
+        status: "asset_database_failed",
+        generation: {
+          ...record.generation,
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error: error.message || "Generated asset database failed."
+        }
+      });
+    }
+    assetSessionJobs.delete(sessionId);
+  });
+  assetSessionJobs.set(sessionId, job);
+}
+
+async function handleCreateGeneratedAssetSession(request, response) {
+  if (!String(request.headers["content-type"] || "").includes("application/json")) {
+    sendJson(request, response, 415, { error: "Content-Type must be application/json." });
+    return;
+  }
+
+  const body = await readJsonBody(request, maxAssetSessionBodyBytes);
+  const { record, sourceFiles, manifest } = createGeneratedSessionRecord(body);
+  startGeneratedAssetSessionJob(record.session_id, manifest, sourceFiles);
+  sendJson(request, response, 202, {
+    session_id: record.session_id,
+    status: record.status,
+    status_url: record.status_url,
+    storage_path: record.storage_path,
+    generation: record.generation,
+    trellis: record.trellis
+  });
+}
+
+async function handleGeneratedAssetSession(request, response, sessionId) {
+  const record = readGeneratedSession(sessionId);
+  if (!record) {
+    sendJson(request, response, 404, { error: "Generated asset session was not found." });
+    return;
+  }
+  sendJson(request, response, 200, record);
+}
+
+async function handleListGeneratedAssetSessions(request, response) {
+  sendJson(request, response, 200, { sessions: listGeneratedSessions() });
+}
+
+async function handleRelayTrellisSession(request, response, sessionId) {
+  const record = readGeneratedSession(sessionId);
+  if (!record) {
+    sendJson(request, response, 404, { error: "Generated asset session was not found." });
+    return;
+  }
+  if (!record.asset_database) {
+    sendJson(request, response, 409, { error: "Asset database is not ready for Trellis relay." });
+    return;
+  }
+  const nextRecord = await queueTrellisRelay(record);
+  sendJson(request, response, trellisVmEndpoint ? 202 : 200, nextRecord.trellis);
 }
 
 function imageBufferFromDataUrl(imageDataUrl) {
@@ -492,6 +1255,17 @@ function clampServerText(value, maxLength, fallback = "") {
   const text = String(value ?? "").trim();
   if (!text) return fallback;
   return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...` : text;
+}
+
+function sanitizeHttpUrl(value, fallback = "") {
+  const text = clampServerText(value, 1200, "");
+  if (!text) return fallback;
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function stripHtml(value) {
@@ -702,11 +1476,25 @@ function placeEvidenceFromRecord(place, match) {
   if (!isValidCoordinatePair(place?.lat, place?.lon)) return null;
   const confidence = match.score >= 0.82 ? "high" : match.score >= 0.58 ? "medium" : "low";
   const primarySource = Array.isArray(place.sources) ? place.sources[0] : null;
+  const sourceLinks = Array.isArray(place.sources)
+    ? place.sources
+        .slice(0, 4)
+        .map((source) => (source && typeof source === "object"
+          ? {
+              ...source,
+              url: sanitizeHttpUrl(source.url)
+            }
+          : {
+              title: clampServerText(source, 160),
+              url: sanitizeHttpUrl(source)
+            }))
+        .filter((source) => source.url || source.title)
+    : [];
   return {
     source: "Open place evidence",
     database: "AdaptSim open place evidence",
     title: clampServerText(place.name, 160, "Known place"),
-    url: primarySource?.url || "",
+    url: sanitizeHttpUrl(primarySource?.url),
     thumbnailUrl: "",
     lat: Number(place.lat),
     lon: Number(place.lon),
@@ -715,7 +1503,7 @@ function placeEvidenceFromRecord(place, match) {
     reason: `Matched readable/interpretable image clue "${match.alias || place.name}" to a sourced place record${place.address ? ` at ${place.address}` : ""}.`,
     matchedQuery: clampServerText(match.alias || place.name, 140),
     license: "",
-    sourceLinks: Array.isArray(place.sources) ? place.sources.slice(0, 4) : []
+    sourceLinks
   };
 }
 
@@ -920,8 +1708,11 @@ function commonsEvidenceFromPage(page, context = {}) {
     source: "Wikimedia Commons",
     database: "Wikimedia Commons geotagged media",
     title: clampServerText(title, 160, "Commons geotagged media"),
-    url: imageInfo.descriptionurl || imageInfo.descriptionshorturl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title)}`,
-    thumbnailUrl: imageInfo.thumburl || "",
+    url: sanitizeHttpUrl(
+      imageInfo.descriptionurl || imageInfo.descriptionshorturl,
+      `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title)}`
+    ),
+    thumbnailUrl: sanitizeHttpUrl(imageInfo.thumburl),
     lat: coordinate.lat,
     lon: coordinate.lon,
     confidence,
@@ -1492,6 +2283,28 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && pathname === "/api/vision/photo") {
       await handlePhotoVision(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && (pathname === "/api/generative-assets/sessions" || pathname === "/api/v1/generative-assets/sessions")) {
+      await handleListGeneratedAssetSessions(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && (pathname === "/api/generative-assets/sessions" || pathname === "/api/v1/generative-assets/sessions")) {
+      await handleCreateGeneratedAssetSession(request, response);
+      return;
+    }
+
+    const generatedSessionMatch = pathname?.match(/^\/api(?:\/v1)?\/generative-assets\/sessions\/([a-z0-9_]+)$/i);
+    if (request.method === "GET" && generatedSessionMatch) {
+      await handleGeneratedAssetSession(request, response, generatedSessionMatch[1]);
+      return;
+    }
+
+    const trellisRelayMatch = pathname?.match(/^\/api(?:\/v1)?\/generative-assets\/sessions\/([a-z0-9_]+)\/trellis$/i);
+    if (request.method === "POST" && trellisRelayMatch) {
+      await handleRelayTrellisSession(request, response, trellisRelayMatch[1]);
       return;
     }
 
