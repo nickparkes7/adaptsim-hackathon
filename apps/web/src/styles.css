@@ -3818,6 +3818,102 @@ textarea:hover {
   text-transform: uppercase;
 }
 
+.compact-step-heading {
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.62rem;
+}
+
+.compact-step-heading > div:first-child {
+  min-width: 0;
+}
+
+.step-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.step-heading-actions .primary-button,
+.step-heading-actions .quiet-button {
+  min-height: 2.55rem;
+  padding: 0.56rem 0.82rem;
+  white-space: nowrap;
+}
+
+.map-stage-shell.minimized-workflow-step {
+  padding: 0.78rem 0.85rem 0.85rem;
+}
+
+.map-stage-shell.minimized-workflow-step .stage-heading {
+  padding-left: 3.1rem;
+}
+
+.map-stage-shell.minimized-workflow-step .map-source-inline {
+  display: block;
+  margin-bottom: 0.62rem;
+  padding: 0.62rem;
+}
+
+.map-stage-shell.minimized-workflow-step .map-source-inline-head {
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.map-stage-shell.minimized-workflow-step .map-source-inline-head::-webkit-details-marker {
+  display: none;
+}
+
+.map-stage-shell.minimized-workflow-step .map-source-inline-head .eyebrow {
+  margin-bottom: 0.16rem;
+}
+
+.map-stage-shell.minimized-workflow-step .map-source-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.52rem;
+  margin-top: 0.62rem;
+}
+
+.map-stage-shell.minimized-workflow-step .globe-stage {
+  height: clamp(8.5rem, 18svh, 11rem);
+}
+
+.compact-location-panel {
+  display: grid;
+  gap: 0.62rem;
+  padding-bottom: 0.82rem;
+}
+
+.compact-location-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.compact-location-panel > .field,
+.compact-location-panel .coord-grid,
+.compact-location-panel .search-results {
+  margin-top: 0;
+}
+
+.compact-location-panel .field {
+  gap: 0.34rem;
+}
+
+.compact-location-panel .coord-grid {
+  gap: 0.5rem;
+}
+
+.compact-location-panel input {
+  min-height: 2.55rem;
+  padding-block: 0.54rem;
+}
+
+.compact-location-panel .search-results {
+  max-height: 10rem;
+}
+
 @media (max-width: 680px) {
   .stage-heading {
     flex-wrap: wrap;
@@ -3838,6 +3934,20 @@ textarea:hover {
 
   .stage-heading .workflow-state-pill {
     margin-left: auto;
+  }
+
+  .step-heading-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .map-stage-shell.minimized-workflow-step .map-source-controls,
+  .compact-location-panel .coord-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-stage-shell.minimized-workflow-step .globe-stage {
+    height: 9.5rem;
   }
 }
 

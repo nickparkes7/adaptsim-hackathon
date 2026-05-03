@@ -1,15 +1,20 @@
 export function MapStage() {
   return (
-    <section className="workflow-stage map-stage-shell" data-step="02" aria-labelledby="global-map-title">
-      <div className="stage-heading">
+    <section className="workflow-stage map-stage-shell minimized-workflow-step" data-step="02" aria-labelledby="global-map-title">
+      <div className="stage-heading compact-step-heading">
         <div>
           <p className="eyebrow">Global Map</p>
           <h2 id="global-map-title">Geospatial View</h2>
         </div>
+        <div className="step-heading-actions">
+          <button id="confirm-map-step" className="primary-button confirm-button map-confirm-button" type="button">
+            Confirm
+          </button>
+        </div>
       </div>
 
-      <div className="map-source-inline" aria-label="Map source controls">
-        <div className="map-source-inline-head">
+      <details className="map-source-inline" aria-label="Map source controls">
+        <summary className="map-source-inline-head">
           <div>
             <p className="eyebrow">Map Source</p>
             <strong>High-Fidelity Globe</strong>
@@ -17,7 +22,7 @@ export function MapStage() {
           <span id="map-source-pill" className="count-pill">
             Cesium
           </span>
-        </div>
+        </summary>
         <div className="map-source-controls">
           <label className="field">
             <span>Provider</span>
@@ -30,9 +35,6 @@ export function MapStage() {
           </label>
           <button id="apply-map-source" className="primary-button" type="button">
             Apply Source
-          </button>
-          <button id="confirm-map-step" className="primary-button confirm-button map-confirm-button" type="button">
-            Confirm
           </button>
         </div>
         <div id="custom-map-source" className="custom-map-source" hidden>
@@ -76,7 +78,7 @@ export function MapStage() {
           </div>
         </div>
         <p id="map-source-status" className="map-source-status" aria-live="polite"></p>
-      </div>
+      </details>
 
       <section className="globe-stage" aria-label="Interactive globe">
         <div id="earth-canvas" aria-label="Interactive geospatial globe for selecting a location"></div>

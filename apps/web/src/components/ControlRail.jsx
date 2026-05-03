@@ -8,11 +8,19 @@ export function ControlRail() {
         </div>
       </div>
 
-      <section className="panel workflow-panel" data-step="03">
-        <div className="panel-heading">
+      <section className="panel workflow-panel minimized-workflow-step compact-location-panel" data-step="03">
+        <div className="panel-heading compact-step-heading">
           <div>
             <p className="eyebrow">Location</p>
             <h2>Generate Snapshot</h2>
+          </div>
+          <div className="step-heading-actions">
+            <button id="use-coordinates" className="primary-button confirm-button" type="button">
+              Confirm
+            </button>
+            <button id="clear-snapshots" className="quiet-button" type="button" disabled>
+              Clear
+            </button>
           </div>
         </div>
 
@@ -61,14 +69,6 @@ export function ControlRail() {
               placeholder="139.650300"
             />
           </label>
-        </div>
-        <div className="button-row">
-          <button id="use-coordinates" className="primary-button confirm-button" type="button">
-            Confirm
-          </button>
-          <button id="clear-snapshots" className="quiet-button" type="button" disabled>
-            Clear All
-          </button>
         </div>
       </section>
 

@@ -324,7 +324,9 @@ const state = {
   resetSerial: 0,
   workflow: {
     mapConfirmed: false,
-    step3SnapshotGenerated: false
+    step3SnapshotGenerated: false,
+    step4Acknowledged: false,
+    step5Acknowledged: false
   },
   intakeAgent: {
     status: "idle",
@@ -1357,11 +1359,15 @@ function sanitizeState() {
   state.sourceFiles = state.sourceFiles.map(normalizeSourceFile).filter(Boolean).slice(0, 24);
   state.workflow = {
     mapConfirmed: Boolean(state.workflow?.mapConfirmed),
-    step3SnapshotGenerated: Boolean(state.workflow?.step3SnapshotGenerated && state.snapshots.length)
+    step3SnapshotGenerated: Boolean(state.workflow?.step3SnapshotGenerated && state.snapshots.length),
+    step4Acknowledged: Boolean(state.workflow?.step4Acknowledged && state.snapshots.length),
+    step5Acknowledged: Boolean(state.workflow?.step5Acknowledged && state.snapshots.length)
   };
   if (!state.sourceFiles.length && !state.snapshots.length) {
     state.workflow.mapConfirmed = false;
     state.workflow.step3SnapshotGenerated = false;
+    state.workflow.step4Acknowledged = false;
+    state.workflow.step5Acknowledged = false;
   }
 }
 
@@ -1389,7 +1395,9 @@ function loadState() {
     state.sourceFiles = Array.isArray(saved.sourceFiles) ? saved.sourceFiles : [];
     state.workflow = {
       mapConfirmed: Boolean(saved.workflow?.mapConfirmed),
-      step3SnapshotGenerated: Boolean(saved.workflow?.step3SnapshotGenerated)
+      step3SnapshotGenerated: Boolean(saved.workflow?.step3SnapshotGenerated),
+      step4Acknowledged: Boolean(saved.workflow?.step4Acknowledged),
+      step5Acknowledged: Boolean(saved.workflow?.step5Acknowledged)
     };
     sanitizeState();
   } catch {
@@ -1397,7 +1405,7 @@ function loadState() {
     state.selectedSnapshotId = "";
     state.actionLog = [];
     state.sourceFiles = [];
-    state.workflow = { mapConfirmed: false, step3SnapshotGenerated: false };
+    state.workflow = { mapConfirmed: false, step3SnapshotGenerated: false, step4Acknowledged: false, step5Acknowledged: false };
   }
 }
 
@@ -2253,6 +2261,8 @@ function createSnapshot(profile, location, resolution, options = {}) {
   state.snapshots = [snapshot, ...state.snapshots].slice(0, maxSnapshots);
   state.selectedSnapshotId = snapshot.id;
   state.workflow.step3SnapshotGenerated = Boolean(options.markStep3Complete && state.workflow.mapConfirmed);
+  state.workflow.step4Acknowledged = false;
+  state.workflow.step5Acknowledged = false;
   setCoordinateInputs(snapshot.lat, snapshot.lon);
   saveState();
   setIntakeAgentTask("locate", "complete", `Step 02 centered on ${snapshot.selectedLocation}.`, "Location resolved; filling the model.");
@@ -2590,6 +2600,8 @@ async function activateCoordinates(gps, {
     state.selectedSnapshotId = existingSnapshot.id;
     if (markStep3Complete && state.workflow.mapConfirmed) {
       state.workflow.step3SnapshotGenerated = true;
+      state.workflow.step4Acknowledged = Boolean(existingSnapshot.reasonedAdjustments?.length);
+      state.workflow.step5Acknowledged = false;
     }
     $(selectors.locationSearch).value = existingSnapshot.selectedLocation;
     $(selectors.locationSearch).setAttribute("aria-expanded", "false");
@@ -2717,6 +2729,8 @@ function stageSourceFileGps(file, { revealMap = true } = {}) {
   const gps = setSourceFileGps(file);
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
+  state.workflow.step4Acknowledged = false;
+  state.workflow.step5Acknowledged = false;
   clearSelectedOutlines();
   renderPublicSitesForSnapshot(null);
   placePin(gps.lat, gps.lon);
@@ -2784,6 +2798,8 @@ async function addSourceFiles(files) {
   if (added.length) {
     state.workflow.mapConfirmed = false;
     state.workflow.step3SnapshotGenerated = false;
+    state.workflow.step4Acknowledged = false;
+    state.workflow.step5Acknowledged = false;
     startIntakeAgent(added);
   }
   const firstGpsFile = added.find((file) => file.gps);
@@ -3238,10 +3254,12 @@ function renderWorkflowProgress(snapshot) {
   const hasMapConfirmed = Boolean(state.workflow.mapConfirmed);
   const hasStep3Generated = Boolean(hasSnapshot && state.workflow.step3SnapshotGenerated);
   const hasReasonedInput = Boolean(snapshot?.reasonedAdjustments?.length);
-  const hasAction = state.actionLog.length > 0;
+  const hasStep4Acknowledged = Boolean(hasReasonedInput || state.workflow.step4Acknowledged);
+  const hasActionInput = state.actionLog.length > 0;
+  const hasStep5Acknowledged = Boolean(hasActionInput || state.workflow.step5Acknowledged);
   const canLocate = hasWorkflowStart && hasMapReady && hasMapConfirmed;
   const canReason = hasStep3Generated && hasMapSource;
-  const canInject = hasReasonedInput;
+  const canInject = hasStep4Acknowledged;
   const steps = {
     "01": hasWorkflowStart
       ? { state: "complete", label: "Complete" }
@@ -3253,10 +3271,10 @@ function renderWorkflowProgress(snapshot) {
       ? { state: hasStep3Generated ? "complete" : "active", label: hasStep3Generated ? "Complete" : "Next" }
       : { state: "locked", label: "Locked" },
     "04": canReason
-      ? { state: hasReasonedInput ? "complete" : "active", label: hasReasonedInput ? "Complete" : "Next" }
+      ? { state: hasStep4Acknowledged ? "complete" : "active", label: hasStep4Acknowledged ? "Complete" : "Next" }
       : { state: "locked", label: "Locked" },
     "05": canInject
-      ? { state: hasAction ? "complete" : "active", label: hasAction ? "Complete" : "Next" }
+      ? { state: hasStep5Acknowledged ? "complete" : "active", label: hasStep5Acknowledged ? "Complete" : "Next" }
       : { state: "locked", label: "Locked" }
   };
 
@@ -4186,7 +4204,16 @@ function reasonFromAnalystNote() {
   }
 
   if (!note) {
-    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Add an analyst note first.</div>';
+    state.workflow.step4Acknowledged = true;
+    saveState();
+    $(selectors.reasoningOutput).innerHTML = `
+      <div class="reason-card">
+        <strong>No analyst note added</strong>
+        <p>Continuing with the generated snapshot baseline.</p>
+      </div>
+    `;
+    renderApp();
+    focusWorkflowStep("05", { focusSelector: selectors.actionType });
     return;
   }
 
@@ -4216,6 +4243,7 @@ function reasonFromAnalystNote() {
   snapshot.humanInputs = [note, ...(snapshot.humanInputs ?? [])].slice(0, 10);
   snapshot.reasonedAdjustments = [...record.adjustments, ...(snapshot.reasonedAdjustments ?? [])].slice(0, 10);
   state.selectedSnapshotId = snapshot.id;
+  state.workflow.step4Acknowledged = true;
   saveState();
 
   $(selectors.reasoningOutput).innerHTML = `
@@ -4226,6 +4254,7 @@ function reasonFromAnalystNote() {
   `;
   $(selectors.analystNote).value = "";
   renderApp();
+  focusWorkflowStep("05", { focusSelector: selectors.actionType });
 }
 
 function formatDispositionPrecondition(value) {
@@ -4348,8 +4377,18 @@ function getActionTemplate(type) {
 
 function injectAction() {
   const snapshot = getSelectedSnapshot();
-  const action = clampText($(selectors.actionType).value, 120, "Custom scenario action");
-  const objective = clampText($(selectors.actionObjective).value, 180, "No objective entered");
+  const actionInput = clampText($(selectors.actionType).value, 120, "");
+  const objectiveInput = clampText($(selectors.actionObjective).value, 180, "");
+
+  if (!actionInput && !objectiveInput) {
+    state.workflow.step5Acknowledged = true;
+    saveState();
+    renderApp();
+    return;
+  }
+
+  const action = actionInput || "Custom scenario action";
+  const objective = objectiveInput || "No objective entered";
   const template = getActionTemplate(action);
   const entry = {
     id: `action-${Date.now()}`,
@@ -4365,6 +4404,7 @@ function injectAction() {
   };
 
   state.actionLog = [normalizeActionEntry(entry), ...state.actionLog].slice(0, maxActionLogEntries);
+  state.workflow.step5Acknowledged = true;
   $(selectors.actionType).value = "";
   $(selectors.actionObjective).value = "";
   saveState();
@@ -4373,7 +4413,9 @@ function injectAction() {
 
 function renderActionLog() {
   if (!state.actionLog.length) {
-    $(selectors.actionLog).innerHTML = '<p class="empty-state compact">No scenario actions logged yet.</p>';
+    $(selectors.actionLog).innerHTML = state.workflow.step5Acknowledged
+      ? '<p class="empty-state compact">No action narrowing added. The simulation can consider the full potential action field.</p>'
+      : '<p class="empty-state compact">No scenario actions logged yet.</p>';
     return;
   }
 
@@ -4442,6 +4484,8 @@ function resetAppToStartingPoint({ statusMessage = "Workflow reset to starting p
   state.selectedModelParameterGroups = {};
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
+  state.workflow.step4Acknowledged = false;
+  state.workflow.step5Acknowledged = false;
   resetIntakeAgentState();
   saveState();
   removePin();
@@ -4463,6 +4507,8 @@ function clearSnapshots() {
   state.selectedSnapshotId = "";
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
+  state.workflow.step4Acknowledged = false;
+  state.workflow.step5Acknowledged = false;
   state.intakeAgent = {
     status: "idle",
     current: "Waiting for source input.",
