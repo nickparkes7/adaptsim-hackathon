@@ -85,6 +85,13 @@ const l4ContractExamplesRoot = process.env.ADAPTSIM_L4_CONTRACT_EXAMPLES_ROOT ||
 const l4CaptureDataRoot = process.env.ADAPTSIM_L4_CAPTURE_DATA_ROOT || "/home/nicholas.parkes/adaptsim/data/captures";
 const defaultPixelStreamingMapPath = process.env.ADAPTSIM_DEFAULT_MAP_PATH || "/Game/AdaptSim/Maps/L_HorrorCorridor_Imported";
 const defaultPixelStreamingSemanticEnvironmentPath = process.env.ADAPTSIM_DEFAULT_SEMANTIC_ENVIRONMENT_PATH || path.posix.join(l4ContractExamplesRoot, "semantic_environments", "horror_corridor_imported.json");
+const pixelStreamingResX = process.env.ADAPTSIM_PS_RES_X || "1280";
+const pixelStreamingResY = process.env.ADAPTSIM_PS_RES_Y || "720";
+const pixelStreamingEncoderCodec = process.env.ADAPTSIM_PS_ENCODER_CODEC || "H264";
+const pixelStreamingWebrtcMinBitrate = process.env.ADAPTSIM_PS_WEBRTC_MIN_BITRATE || "3000000";
+const pixelStreamingWebrtcMaxBitrate = process.env.ADAPTSIM_PS_WEBRTC_MAX_BITRATE || "10000000";
+const pixelStreamingEncoderMaxBitrate = process.env.ADAPTSIM_PS_ENCODER_MAX_BITRATE || "10000000";
+const pixelStreamingEncoderTargetBitrate = process.env.ADAPTSIM_PS_ENCODER_TARGET_BITRATE || "";
 const l4StatusTimeoutMs = Number(process.env.ADAPTSIM_L4_STATUS_TIMEOUT_MS || workerTriggerTimeoutMs);
 const demoSceneId = "scan_hallway_alpha";
 const demoScenarioIds = ["scan_hallway_delay_001", "scan_hallway_observer_002"];
@@ -2120,12 +2127,27 @@ function buildPixelStreamingFallbackCommand({ mapPath, scenarioManifestPath, sem
     remoteEnvAssignment("PROJECT", l4UnrealProjectRoot),
     remoteEnvAssignment("ADAPTSIM_MAP_PATH", mapPath),
     remoteEnvAssignment("ADAPTSIM_SCENARIO_MANIFEST", scenarioManifestPath),
-    remoteEnvAssignment("ADAPTSIM_SEMANTIC_ENVIRONMENT", semanticEnvironmentPath)
+    remoteEnvAssignment("ADAPTSIM_SEMANTIC_ENVIRONMENT", semanticEnvironmentPath),
+    remoteEnvAssignment("ADAPTSIM_PS_RES_X", pixelStreamingResX),
+    remoteEnvAssignment("ADAPTSIM_PS_RES_Y", pixelStreamingResY),
+    remoteEnvAssignment("ADAPTSIM_PS_ENCODER_CODEC", pixelStreamingEncoderCodec),
+    remoteEnvAssignment("ADAPTSIM_PS_WEBRTC_MIN_BITRATE", pixelStreamingWebrtcMinBitrate),
+    remoteEnvAssignment("ADAPTSIM_PS_WEBRTC_MAX_BITRATE", pixelStreamingWebrtcMaxBitrate),
+    remoteEnvAssignment("ADAPTSIM_PS_ENCODER_MAX_BITRATE", pixelStreamingEncoderMaxBitrate),
+    remoteEnvAssignment("ADAPTSIM_PS_ENCODER_TARGET_BITRATE", pixelStreamingEncoderTargetBitrate)
   ].filter(Boolean).join(" ");
+  const extraUnrealArgs = [
+    `-PixelStreamingWebRTCMinBitrate=${pixelStreamingWebrtcMinBitrate}`,
+    `-PixelStreamingWebRTCMaxBitrate=${pixelStreamingWebrtcMaxBitrate}`,
+    `-PixelStreamingEncoderMaxBitrate=${pixelStreamingEncoderMaxBitrate}`,
+    pixelStreamingEncoderTargetBitrate
+      ? `-PixelStreamingEncoderTargetBitrate=${pixelStreamingEncoderTargetBitrate}`
+      : ""
+  ].filter(Boolean).map((arg) => `--extra-unreal-arg ${shellQuote(arg)}`).join(" ");
 
   return [
     `cd ${shellQuote(l4RepoRoot)}`,
-    `${envAssignments} scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart`
+    `${envAssignments} scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart ${extraUnrealArgs}`.trim()
   ].join(" && ");
 }
 
