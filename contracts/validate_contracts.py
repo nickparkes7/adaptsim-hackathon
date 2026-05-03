@@ -17,8 +17,10 @@ from contracts.models import (
     AfterActionReviewInput,
     AssetCard,
     BehaviorProfile,
+    GeneratedAssetDatabase,
     SemanticEnvironment,
     TelemetryLog,
+    ThreatInjectionPlan,
 )
 
 
@@ -84,8 +86,15 @@ def cross_validate(objects: list[Any]) -> None:
         "environment_id",
         "environment_id",
     )
+    generated_asset_databases = [o for o in objects if isinstance(o, GeneratedAssetDatabase)]
     telemetry_logs = [o for o in objects if isinstance(o, TelemetryLog)]
     aar_inputs = [o for o in objects if isinstance(o, AfterActionReviewInput)]
+    threat_injection_plans = [o for o in objects if isinstance(o, ThreatInjectionPlan)]
+    scenarios = {
+        getattr(o, "scenario_id"): o
+        for o in objects
+        if getattr(o, "contract_type", None) == "scenario_manifest"
+    }
 
     for asset in asset_cards.values():
         for profile_id in asset.behavior_profiles:
@@ -142,11 +151,40 @@ def cross_validate(objects: list[Any]) -> None:
             if event.trigger.anchor_id and event.trigger.anchor_id not in anchors:
                 raise ValueError(f"event {event.event_id} trigger references unknown anchor {event.trigger.anchor_id}")
 
-    scenarios = {
-        getattr(o, "scenario_id"): o
-        for o in objects
-        if getattr(o, "contract_type", None) == "scenario_manifest"
+    generated_asset_ids = {
+        asset.asset_id
+        for database in generated_asset_databases
+        for asset in database.asset_cards
     }
+    for plan in threat_injection_plans:
+        if plan.environment_id not in environments:
+            raise ValueError(f"threat plan {plan.plan_id} references missing environment {plan.environment_id}")
+        if plan.scenario_id not in scenarios:
+            raise ValueError(f"threat plan {plan.plan_id} references missing scenario {plan.scenario_id}")
+        environment = environments[plan.environment_id]
+        anchors = {anchor.anchor_id: anchor for anchor in environment.anchors}
+        scenario = scenarios[plan.scenario_id]
+        scenario_event_ids = {event.event_id for event in scenario.events}
+        for threat in plan.threats:
+            if threat.generated_asset_id not in generated_asset_ids:
+                raise ValueError(
+                    f"threat plan {plan.plan_id} references missing generated asset "
+                    f"{threat.generated_asset_id}"
+                )
+            if threat.entry_anchor_id not in anchors:
+                raise ValueError(
+                    f"threat plan {plan.plan_id} references unknown entry anchor {threat.entry_anchor_id}"
+                )
+            if threat.trigger.anchor_id and threat.trigger.anchor_id not in anchors:
+                raise ValueError(
+                    f"threat plan {plan.plan_id} trigger references unknown anchor {threat.trigger.anchor_id}"
+                )
+            if threat.scenario_event_id and threat.scenario_event_id not in scenario_event_ids:
+                raise ValueError(
+                    f"threat plan {plan.plan_id} references unknown scenario_event_id "
+                    f"{threat.scenario_event_id}"
+                )
+
     for log in telemetry_logs:
         if log.scenario_id not in scenarios:
             raise ValueError(f"telemetry log {log.run_id} references missing scenario {log.scenario_id}")
@@ -229,4 +267,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

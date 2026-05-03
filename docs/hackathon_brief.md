@@ -138,25 +138,24 @@ Example asset card:
 
 The database can be seeded from military training documents, doctrine, SME input, and controlled scenario templates. Models can help extract and normalize this material, but the resulting database should be explicit and inspectable.
 
-### 4. Generated 3D Assets
+### 4. Generated 3D Threat-Vector Assets
 
 Use Trellis/Trellis.2 or a comparable text/image-to-3D model as an offline asset factory, not as the live simulator.
 
 Good generation targets:
 
-- Obstacles.
-- Barricades.
-- Debris.
-- Props.
-- Equipment.
-- Training markers.
-- Static threat objects.
-- Concealment and cover objects.
+- Dismounted personnel visual stand-ins or metadata-backed placeholders.
+- UAV, FPV drone, and quadcopter visual shells.
+- UGV and vehicle visual shells.
+- USV visual shells where the environment includes water or maritime affordances.
+- Inert weapon/equipment exterior visuals.
+- Sensor and payload visual modules.
 
 Be cautious with:
 
-- Fully rigged humans.
-- Weapons that need exact animation handling.
+- Fully rigged humans, identifiable faces, or real unit markings.
+- Weapon mechanics, firing mechanisms, targeting aids, or assembly detail.
+- Sensor exploitation workflows or operational payload behavior.
 - Anything that requires precise collision or safety-critical geometry.
 
 Generated assets should pass through an Unreal ingestion step:
@@ -166,7 +165,11 @@ Generated assets should pass through an Unreal ingestion step:
 - Generate collision.
 - Set materials.
 - Add Gameplay Tags.
-- Mark whether the asset is spawnable, interactable, cover, concealment, obstacle, or decorative.
+- Preserve `threat_category`, `movement_domain`, `tactical_role`,
+  `runtime_binding_hint`, `spawn_affordances`, `behavior_profile_candidates`,
+  and `safety_note: "non-operational training simulation"`.
+- Mark whether the asset is spawnable, interactable, observable, mobile,
+  payload-bearing, or non-operational visual-only.
 
 ### 5. Adversary Planner
 
@@ -297,7 +300,8 @@ Avoid using models for:
 ### Models
 
 - LLM/VLM with structured JSON output for scenario reasoning, document extraction, and AAR.
-- Trellis/Trellis.2 or comparable 3D generation for offline static asset creation.
+- Trellis/Trellis.2 or comparable 3D generation for offline threat-vector visual
+  asset creation.
 - Optional local model path later for airgapped deployments.
 
 ### Current Boundaries
@@ -327,7 +331,9 @@ Build this:
 - One imported Unreal level.
 - A small set of tagged tactical affordances.
 - A small adversary asset database.
-- A small set of generated or marketplace/imported props.
+- A small set of generated or imported threat-vector visuals, such as UAV/FPV
+  drone shells, UGV/vehicle visuals, USV hulls where relevant, inert
+  equipment/sensor payloads, and reviewed adversary-runtime bindings.
 - One generic adversary character class.
 - Three to five reusable behavior profiles.
 - A scenario manifest schema.

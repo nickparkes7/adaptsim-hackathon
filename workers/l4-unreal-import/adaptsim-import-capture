@@ -12,6 +12,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import struct
 import sys
 import time
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ DEFAULT_UE_ROOT = "/home/nicholas.parkes/tools/unreal/UnrealEngine-5.7.4"
 DEFAULT_UE_PROJECT_ROOT = "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim"
 CAPTURE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
+# These placeholder tags intentionally cover the deterministic MVP planner's
+# semantic affordances until manual review or editor-exported semantics replace them.
 SEMANTIC_ANCHORS = [
     {
         "anchor_id": "entry",
@@ -39,11 +42,11 @@ SEMANTIC_ANCHORS = [
         "anchor_id": "exit",
         "anchor_type": "exit",
         "display_name": "Exit",
-        "tags": ["exit", "hallway", "placeholder"],
+        "tags": ["exit", "hallway", "fallback_route", "placeholder"],
         "location_cm": (420.0, 0.0, 90.0),
         "rotation_deg": (0.0, 180.0, 0.0),
         "linked_anchor_ids": ["hallway_center", "chokepoint"],
-        "notes": "Placeholder exit marker generated during Unreal import.",
+        "notes": "Placeholder exit and fallback-route marker generated during Unreal import.",
     },
     {
         "anchor_id": "hallway_center",
@@ -79,11 +82,11 @@ SEMANTIC_ANCHORS = [
         "anchor_id": "ambush_point",
         "anchor_type": "spawn_zone",
         "display_name": "Ambush Point",
-        "tags": ["spawn_zone", "ambush_point", "placeholder"],
+        "tags": ["spawn_zone", "ambush_point", "concealment", "placeholder"],
         "location_cm": (240.0, -140.0, 100.0),
         "rotation_deg": (0.0, -120.0, 0.0),
         "linked_anchor_ids": ["cover", "chokepoint", "observation_point"],
-        "notes": "Placeholder adversary spawn marker generated during Unreal import.",
+        "notes": "Placeholder concealed adversary spawn marker generated during Unreal import.",
     },
     {
         "anchor_id": "observation_point",
@@ -99,7 +102,7 @@ SEMANTIC_ANCHORS = [
         "anchor_id": "chokepoint",
         "anchor_type": "chokepoint",
         "display_name": "Chokepoint",
-        "tags": ["chokepoint", "near_cover", "placeholder"],
+        "tags": ["chokepoint", "near_chokepoint", "near_cover", "placeholder"],
         "location_cm": (120.0, 0.0, 100.0),
         "rotation_deg": (0.0, 90.0, 0.0),
         "linked_anchor_ids": ["hallway_center", "exit", "ambush_point"],
@@ -145,10 +148,58 @@ def csv3(values: tuple[float, float, float] | list[float]) -> str:
     return ",".join(f"{float(value):g}" for value in values[:3])
 
 
-def transform_from_manifest(manifest: dict[str, Any]) -> tuple[float, tuple[float, float, float], tuple[float, float, float]]:
+def mesh_bounds_from_glb(path: Path) -> dict[str, tuple[float, float, float]] | None:
+    if path.suffix.lower() not in {".glb", ".gltf"}:
+        return None
+    try:
+        with path.open("rb") as handle:
+            magic, version, _total_length = struct.unpack("<III", handle.read(12))
+            if magic != 0x46546C67 or version != 2:
+                return None
+            gltf = None
+            while True:
+                header = handle.read(8)
+                if len(header) < 8:
+                    break
+                chunk_length, chunk_type = struct.unpack("<I4s", header)
+                chunk = handle.read(chunk_length)
+                if chunk_type == b"JSON":
+                    gltf = json.loads(chunk.decode("utf-8"))
+                    break
+            if not gltf:
+                return None
+        primitive = (gltf.get("meshes") or [{}])[0].get("primitives", [{}])[0]
+        position_accessor_index = (primitive.get("attributes") or {}).get("POSITION")
+        if position_accessor_index is None:
+            return None
+        accessor = (gltf.get("accessors") or [])[int(position_accessor_index)]
+        mins = accessor.get("min")
+        maxs = accessor.get("max")
+        if not isinstance(mins, list) or not isinstance(maxs, list) or len(mins) < 3 or len(maxs) < 3:
+            return None
+        min_m = tuple(float(value) for value in mins[:3])
+        max_m = tuple(float(value) for value in maxs[:3])
+        center_m = tuple((min_m[index] + max_m[index]) / 2.0 for index in range(3))
+        size_m = tuple(max(max_m[index] - min_m[index], 0.001) for index in range(3))
+        return {
+            "min_m": min_m,
+            "max_m": max_m,
+            "center_m": center_m,
+            "size_m": size_m,
+        }
+    except Exception:
+        return None
+
+
+def transform_from_manifest(manifest: dict[str, Any], source_mesh: Path | None = None) -> tuple[float, tuple[float, float, float], tuple[float, float, float]]:
     transform = manifest.get("transform_to_unreal") or {}
     scale = float(transform.get("scale") or 1.0)
     if scale <= 0:
+        scale = 1.0
+    if source_mesh and source_mesh.suffix.lower() in {".glb", ".gltf"} and abs(scale - 100.0) < 0.0001:
+        # Unreal's Interchange GLTF importer already converts meters to centimeters.
+        # Applying the manifest's legacy 100x actor scale again makes large outdoor
+        # captures unusably huge and places the player/camera inside the scan.
         scale = 1.0
     rotation = transform.get("rotation_deg") or (0.0, 0.0, 0.0)
     translation_m = transform.get("translation_m") or (0.0, 0.0, 0.0)
@@ -156,14 +207,18 @@ def transform_from_manifest(manifest: dict[str, Any]) -> tuple[float, tuple[floa
     return scale, tuple(float(value) for value in rotation[:3]), location_cm
 
 
-def nav_extent_from_manifest(manifest: dict[str, Any]) -> tuple[float, float, float]:
+def nav_extent_from_manifest(manifest: dict[str, Any], mesh_bounds: dict[str, tuple[float, float, float]] | None = None) -> tuple[float, float, float]:
     fallback = (2500.0, 2500.0, 600.0)
     try:
-        size = manifest["render_mesh"]["bounds_m"]["size_m"]
+        if mesh_bounds:
+            size_values = mesh_bounds["size_m"]
+            size = {"x": size_values[0], "y": size_values[1], "z": size_values[2]}
+        else:
+            size = manifest["render_mesh"]["bounds_m"]["size_m"]
         extent = (
-            max(float(size["x"]) * 120.0, 800.0),
-            max(float(size["y"]) * 120.0, 800.0),
-            max(float(size["z"]) * 120.0, 400.0),
+            max(float(size["x"]) * 140.0, 800.0),
+            max(float(size["y"]) * 140.0, 800.0),
+            max(float(size["z"]) * 160.0, 400.0),
         )
     except Exception:
         return fallback
@@ -306,9 +361,9 @@ class ImportCaptureWorker:
         try:
             self.download_status()
             self.write_and_upload_status(
-                "ready_for_unreal_import",
+                "importing_unreal",
                 "L4 Unreal import is running.",
-                80,
+                92,
                 "importing",
             )
             self.download_inputs()
@@ -408,8 +463,15 @@ class ImportCaptureWorker:
         self.log(f"Synced Unreal Python scripts into {self.project_python_dir}")
 
     def run_unreal_import(self, manifest: dict[str, Any]) -> None:
-        scale, rotation_deg, location_cm = transform_from_manifest(manifest)
-        nav_extent_cm = nav_extent_from_manifest(manifest)
+        mesh_bounds = mesh_bounds_from_glb(self.mesh_path)
+        if mesh_bounds:
+            self.log(
+                "Detected GLB bounds min="
+                f"{csv3(mesh_bounds['min_m'])}m max={csv3(mesh_bounds['max_m'])}m; "
+                "using them for Unreal scaffold placement."
+            )
+        scale, rotation_deg, location_cm = transform_from_manifest(manifest, self.mesh_path)
+        nav_extent_cm = nav_extent_from_manifest(manifest, mesh_bounds)
         script_args = [
             "--source",
             str(self.mesh_path),
@@ -433,6 +495,9 @@ class ImportCaptureWorker:
             "--semantic-anchor-mode",
             self.args.semantic_anchor_mode,
         ]
+        if mesh_bounds:
+            script_args.append(f"--scan-bounds-min-m={csv3(mesh_bounds['min_m'])}")
+            script_args.append(f"--scan-bounds-max-m={csv3(mesh_bounds['max_m'])}")
         if self.args.replace_existing:
             script_args.append("--replace-existing")
 
@@ -450,6 +515,14 @@ class ImportCaptureWorker:
         ]
         self.log(f"Running Unreal import into {self.content_path} and {self.level_path}")
         self.run_command(command, cwd=self.ue_project_root)
+        self.assert_unreal_import_completed()
+
+    def assert_unreal_import_completed(self) -> None:
+        log_text = self.import_log_path.read_text(encoding="utf-8", errors="replace")
+        if "import_scanned_scene.py: error:" in log_text or "[Scanwright] Failed:" in log_text:
+            raise WorkerError("Unreal import script reported a Python error; see import.log for details.")
+        if "Scan import automation completed." not in log_text:
+            raise WorkerError("Unreal import script did not report completion; refusing to validate stale map assets.")
 
     def run_validation(self) -> dict[str, Any]:
         script_args = [
@@ -659,7 +732,7 @@ class ImportCaptureWorker:
                 {
                     "code": "unreal_import_failed",
                     "message": error_message[:500],
-                    "failed_phase": "ready_for_unreal_import",
+                    "failed_phase": "importing_unreal",
                     "retryable": True,
                 },
             )

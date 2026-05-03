@@ -78,10 +78,36 @@ From the local repo:
   -- --replace-existing --collision-mode complex --scale 1.0 --rotation-deg 0,0,0
 ```
 
-Future work: replace this two-step manual flow with
-`workers/l4-unreal-import/adaptsim-import-capture`, which should download the
-mesh, run Unreal import, validate the level, and upload `unreal/import_report.json`
-back to GCS.
+The worker path is now
+`workers/l4-unreal-import/adaptsim-import-capture`. It downloads the mesh, runs
+Unreal import, validates the level, writes a placeholder semantic environment,
+uploads `unreal/import_report.json`, `unreal/semantic_environment.json`, and
+`unreal/logs/import.log`, then advances the capture status. Keep the manual
+commands above as a debugging fallback.
+
+## Capture-Specific MVP Scenario
+
+After `adaptsim-import-capture` writes `unreal/semantic_environment.json`,
+generate the launch manifest from that capture environment instead of returning
+the fixed `scan_hallway_*` demo manifests:
+
+```bash
+python3 contracts/scenario_planner.py \
+  /path/to/captures/$CAPTURE_ID/unreal/semantic_environment.json \
+  --output /path/to/captures/$CAPTURE_ID/scenario_manifests/${CAPTURE_ID}_mvp_001.json
+```
+
+For `safety_park`, the selected MVP scenario is `safety_park_mvp_001` at
+`contracts/examples/scenario_manifests/safety_park_mvp_001.json`. Its matching
+checked-in placeholder environment is
+`contracts/examples/semantic_environments/safety_park.json`.
+
+The L4 placeholder anchors intentionally include the deterministic MVP tags
+`fallback_route`, `near_chokepoint`, `ambush_point`, and `concealment`.
+Gameplay intelligence can then compile a threat injection plan from the semantic
+environment and generated threat-vector database. ScenarioDirector still owns
+the runtime physical checks for NavMesh, collision, line of sight, route safety,
+and whether any reviewed generated asset is actually spawnable.
 
 ## Direct UnrealEditor-Cmd Import
 

@@ -26,6 +26,114 @@
       ],
       "title": "BoundsM",
       "type": "object"
+    },
+    "ThreatMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "demo_priority": {
+          "default": 0,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Demo Priority",
+          "type": "integer"
+        },
+        "platform_family": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Platform Family",
+          "type": "string"
+        },
+        "runtime_note": {
+          "default": "Visual prototype only; runtime behavior, collision, scale, and spawn whitelist require Unreal review.",
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Runtime Note",
+          "type": "string"
+        },
+        "source_asset_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Asset Id"
+        },
+        "source_database_path": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Database Path"
+        },
+        "source_rationale": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Rationale"
+        },
+        "threat_category": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Threat Category",
+          "type": "string"
+        },
+        "threat_domain": {
+          "default": "unknown",
+          "enum": [
+            "air",
+            "ground",
+            "maritime",
+            "equipment",
+            "personnel",
+            "unknown"
+          ],
+          "title": "Threat Domain",
+          "type": "string"
+        },
+        "threat_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Threat Id",
+          "type": "string"
+        },
+        "training_role": {
+          "maxLength": 180,
+          "minLength": 1,
+          "title": "Training Role",
+          "type": "string"
+        },
+        "visual_fidelity_goal": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Visual Fidelity Goal",
+          "type": "string"
+        }
+      },
+      "required": [
+        "threat_id",
+        "threat_category",
+        "platform_family",
+        "training_role",
+        "visual_fidelity_goal"
+      ],
+      "title": "ThreatMetadata",
+      "type": "object"
     }
   },
   "$id": "https://adaptsim.local/contracts/asset_card.schema.json",
@@ -36,6 +144,15 @@
       "pattern": "^[a-z][a-z0-9_]{2,63}$",
       "title": "Asset Id",
       "type": "string"
+    },
+    "behavior_profile_candidates": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{2,63}$",
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Behavior Profile Candidates",
+      "type": "array"
     },
     "behavior_profiles": {
       "items": {
@@ -74,7 +191,8 @@
         "equipment",
         "effect",
         "objective_marker",
-        "training_marker"
+        "training_marker",
+        "threat_vector"
       ],
       "title": "Category",
       "type": "string"
@@ -154,6 +272,24 @@
       "title": "Likelihood Modifiers",
       "type": "object"
     },
+    "movement_domain": {
+      "anyOf": [
+        {
+          "enum": [
+            "ground",
+            "air",
+            "water",
+            "interior"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Movement Domain"
+    },
     "preferred_affordances": {
       "items": {
         "pattern": "^[a-z][a-z0-9_]{1,63}$",
@@ -163,11 +299,39 @@
       "title": "Preferred Affordances",
       "type": "array"
     },
+    "runtime_binding_hint": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runtime Binding Hint"
+    },
+    "safety_note": {
+      "const": "non-operational training simulation",
+      "default": "non-operational training simulation",
+      "title": "Safety Note",
+      "type": "string"
+    },
     "schema_version": {
       "const": "1.0",
       "default": "1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "spawn_affordances": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Spawn Affordances",
+      "type": "array"
     },
     "spawn_policy": {
       "enum": [
@@ -176,6 +340,61 @@
       ],
       "title": "Spawn Policy",
       "type": "string"
+    },
+    "tactical_role": {
+      "anyOf": [
+        {
+          "enum": [
+            "recon",
+            "harassment",
+            "ambush",
+            "patrol",
+            "breach",
+            "overwatch",
+            "decoy"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tactical Role"
+    },
+    "threat_category": {
+      "anyOf": [
+        {
+          "enum": [
+            "dismounted_personnel",
+            "uav",
+            "fpv_drone",
+            "quadcopter",
+            "ugv",
+            "vehicle",
+            "usv",
+            "weapon_equipment",
+            "sensor_payload"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Threat Category"
+    },
+    "threat_metadata": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreatMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "unreal_asset_path": {
       "anyOf": [
@@ -190,6 +409,19 @@
       "default": null,
       "description": "Reviewed Unreal class, Blueprint, mesh, or data asset path.",
       "title": "Unreal Asset Path"
+    },
+    "visual_generation_prompt": {
+      "anyOf": [
+        {
+          "maxLength": 1200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Visual Generation Prompt"
     }
   },
   "required": [

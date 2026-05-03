@@ -1,0 +1,74 @@
+{
+  "contract_type": "threat_injection_plan",
+  "schema_version": "1.0",
+  "plan_id": "safety_park_threat_injection_plan_001",
+  "scenario_id": "safety_park_mvp_001",
+  "environment_id": "safety_park",
+  "planner_id": "planner_gameplay_intelligence",
+  "generated_at": "2026-05-03T00:00:00Z",
+  "semantic_environment_ref": "contracts/examples/semantic_environments/safety_park.json",
+  "threat_asset_database_ref": "contracts/examples/asset_cards",
+  "generated_asset_database_ref": "contracts/examples/generated_asset_databases/threat_vector_asset_database.json",
+  "scenario_director_constraints": [
+    "Scenario manifest event asset_id values remain limited to reviewed ScenarioDirector whitelist assets.",
+    "Generated threat-vector assets stay metadata-only until Unreal import validates mesh, scale, collision, and /Game path.",
+    "ScenarioDirector must recheck NavMesh, collision, line of sight, route availability, and avoid tags before runtime spawning.",
+    "Likelihood values are scenario sampling weights under training assumptions, not calibrated intelligence truth."
+  ],
+  "vignette_summary": "The safety_park trainee moves from entry toward the central chokepoint. A generated FPV Quadcopter Threat Visual cue appears from observation_point as a reconnaissance warning, then the whitelisted adversary contact opens from concealment and repositions toward the exit route.",
+  "trainee_objective": "Recognize the generated FPV threat cue as the trainee reaches the chokepoint, avoid fixation, identify the ambush contact, and preserve the exit fallback route.",
+  "assumptions": [
+    "The safety_park semantic environment is a placeholder scan import with deterministic tactical anchors.",
+    "The generated FPV asset is a non-operational visual recognition cue and is not directly spawned as an actor.",
+    "Reviewed fallback assets provide runtime behavior while generated threat metadata carries the vignette context."
+  ],
+  "threats": [
+    {
+      "injection_id": "safety_park_fpv_quadcopter_asset_inject_001",
+      "generated_asset_id": "fpv_quadcopter_asset",
+      "generated_asset_display_name": "FPV Quadcopter Threat Visual",
+      "threat_category": "fpv_drone",
+      "movement_domain": "air",
+      "tactical_role": "recon",
+      "scenario_event_id": "mvp_contact_001",
+      "plausibility_factors": [
+        "observation_point is tagged with line_of_sight, observation_point, placeholder, which matches the air recon cue.",
+        "chokepoint gives ScenarioDirector a deterministic trigger before the trainee fully commits through the chokepoint.",
+        "exit remains reachable, so the vignette can pressure recognition without sealing the route.",
+        "fpv_quadcopter_asset is a generated fpv_drone training visual, so the plan uses it as non-operational cue metadata until Unreal review whitelists the mesh.",
+        "The event is bound to /Game/AdaptSim/Maps/L_Reconstructed_safety_park through semantic anchors, not raw coordinates."
+      ],
+      "entry_anchor_id": "observation_point",
+      "entry_anchor_tags": [
+        "line_of_sight",
+        "observation_point",
+        "placeholder"
+      ],
+      "action_summary": "Present a short generated FPV reconnaissance cue from the observation line, then use the existing ambush behavior to force recognition, communication, cover use, and fallback discipline.",
+      "trainee_objective": "Recognize the generated FPV threat cue as the trainee reaches the chokepoint, avoid fixation, identify the ambush contact, and preserve the exit fallback route.",
+      "trigger": {
+        "trigger_type": "trainee_enters_anchor",
+        "anchor_id": "chokepoint"
+      },
+      "success_criteria": [
+        "Generated FPV cue is presented as a recognition inject tied to a semantic anchor.",
+        "Trainee detects or reports the air-threat cue before advancing through the contact area.",
+        "Trainee responds to the follow-on contact without blocking or losing the fallback route.",
+        "ScenarioDirector telemetry can connect trigger, cue, contact, and outcome events."
+      ],
+      "scenario_director_binding": [
+        "metadata_only_generated_visual_until_whitelisted",
+        "runtime_contact_uses_adversary_rifleman_irregular",
+        "contact_triggered_from_chokepoint_anchor",
+        "fallback_route_checked_against_exit_anchor"
+      ]
+    }
+  ],
+  "success_criteria": [
+    "Generated FPV cue is presented as a recognition inject tied to a semantic anchor.",
+    "Trainee detects or reports the air-threat cue before advancing through the contact area.",
+    "Trainee responds to the follow-on contact without blocking or losing the fallback route.",
+    "ScenarioDirector telemetry can connect trigger, cue, contact, and outcome events."
+  ],
+  "linked_scenario_manifest": "contracts/examples/gameplay_intelligence/safety_park/scenario_manifest.json"
+}

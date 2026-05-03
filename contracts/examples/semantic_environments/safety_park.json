@@ -1,0 +1,420 @@
+{
+  "contract_type": "semantic_environment",
+  "schema_version": "1.0",
+  "environment_id": "safety_park",
+  "source_scan_id": "safety_park",
+  "unreal_level_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park",
+  "coordinate_frame": "unreal_world_m",
+  "units": "meters",
+  "anchors": [
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "entry",
+      "anchor_type": "entry_point",
+      "display_name": "Entry",
+      "tags": [
+        "entry_point",
+        "hallway",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          -4.2,
+          0.0,
+          0.9
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "hallway_center",
+        "doorway"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder entry marker generated during Unreal import."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "exit",
+      "anchor_type": "exit",
+      "display_name": "Exit",
+      "tags": [
+        "exit",
+        "hallway",
+        "fallback_route",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          4.2,
+          0.0,
+          0.9
+        ],
+        "rotation_deg": [
+          0.0,
+          180.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "hallway_center",
+        "chokepoint"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder exit and fallback-route marker generated during Unreal import."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "hallway_center",
+      "anchor_type": "hallway",
+      "display_name": "Hallway Center",
+      "tags": [
+        "hallway",
+        "navigation",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "entry",
+        "exit",
+        "doorway",
+        "cover"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Central placeholder for routing and scenario triggers."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "doorway",
+      "anchor_type": "door",
+      "display_name": "Doorway",
+      "tags": [
+        "door",
+        "transition",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          -1.5,
+          2.4,
+          1.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "entry",
+        "hallway_center"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder threshold marker generated during Unreal import."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "cover",
+      "anchor_type": "cover",
+      "display_name": "Cover",
+      "tags": [
+        "cover",
+        "spawnable",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          -1.2,
+          -2.4,
+          0.8
+        ],
+        "rotation_deg": [
+          0.0,
+          35.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "hallway_center",
+        "ambush_point"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder cover affordance; review against final collision."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "ambush_point",
+      "anchor_type": "spawn_zone",
+      "display_name": "Ambush Point",
+      "tags": [
+        "spawn_zone",
+        "ambush_point",
+        "concealment",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          2.4,
+          -1.4,
+          1.0
+        ],
+        "rotation_deg": [
+          0.0,
+          -120.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "cover",
+        "chokepoint",
+        "observation_point"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder concealed adversary spawn marker generated during Unreal import."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "observation_point",
+      "anchor_type": "line_of_sight",
+      "display_name": "Observation Point",
+      "tags": [
+        "line_of_sight",
+        "observation_point",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          0.0,
+          3.4,
+          1.6
+        ],
+        "rotation_deg": [
+          -10.0,
+          -90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "hallway_center",
+        "ambush_point"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder line-of-sight marker generated during Unreal import."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "chokepoint",
+      "anchor_type": "chokepoint",
+      "display_name": "Chokepoint",
+      "tags": [
+        "chokepoint",
+        "near_chokepoint",
+        "near_cover",
+        "placeholder"
+      ],
+      "transform": {
+        "location_m": [
+          1.2,
+          0.0,
+          1.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "linked_anchor_ids": [
+        "hallway_center",
+        "exit",
+        "ambush_point"
+      ],
+      "navmesh_reachable": true,
+      "notes": "Placeholder narrow-passage marker generated during Unreal import."
+    }
+  ],
+  "graph_edges": [
+    {
+      "from_anchor_id": "entry",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "entry",
+      "to_anchor_id": "doorway",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "exit",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "exit",
+      "to_anchor_id": "chokepoint",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "entry",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "exit",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "doorway",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "cover",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "doorway",
+      "to_anchor_id": "entry",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "doorway",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "cover",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "cover",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "cover",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "chokepoint",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "observation_point",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "observation_point",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "observation_point",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "exit",
+      "relation": "connects",
+      "distance_m": null
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": null
+    }
+  ]
+}

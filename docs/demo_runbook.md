@@ -2,16 +2,29 @@
 
 Last updated: 2026-05-03 UTC.
 
-This is the final integrated demo path for the current AdaptSim hackathon slice. It uses the imported horror corridor Unreal map, confirmed Cartographer semantic anchors, ScenarioDirector manifests, real adversary actor spawns, JSONL telemetry, deterministic AAR generation, and the Pixel Streaming browser player when the VM streamer is running.
+This is the final integrated demo path for the current AdaptSim hackathon slice.
+The preferred three-minute story uses the cached `safety_park` capture, the
+generated threat-vector asset database, the gameplay intelligence/threat
+injection plan, the A100/L4 handoff artifacts, and Pixel Streaming. The imported
+horror corridor remains the fastest Unreal runtime fallback proof for
+ScenarioDirector, adversary spawning, JSONL telemetry, deterministic AAR, and
+Pixel Streaming when the safety-park path is unavailable.
 
 ## Demo Thesis
 
-AdaptSim turns a scanned or place-like environment into a reusable Unreal training space, runs structured scenario variants against semantic anchors, records runtime facts, and generates an after-action review from telemetry rather than from an invented narrative.
+AdaptSim turns a scanned or place-like environment into a reusable Unreal
+training space, derives plausible threat vectors for that environment, runs
+structured scenario variants against semantic anchors, records runtime facts,
+and generates an after-action review from telemetry rather than from an invented
+narrative.
 
 ## Current Truth Table
 
 | Area | Status | Evidence |
 | --- | --- | --- |
+| Safety-park golden MVP | Pass when verifier completes | `scripts/integration/safety_park_golden_mvp.sh` stages current local contracts/workers/scripts to the VMs, seeds `safety_park`, runs A100 reconstruction, L4 import, API launch, stream status, telemetry, and AAR checks. Reports land under `docs/integration_logs/`. |
+| Threat asset database | Pass | `contracts/examples/generated_asset_databases/threat_vector_asset_database.json` contains UAV/FPV, UGV/vehicle, USV, inert equipment, sensor/payload, and adversary-runtime metadata instead of decorative prop cards. |
+| Threat injection plan | Pass | `contracts/examples/gameplay_intelligence/safety_park/threat_injection_plan.json` explains scene affordances, threat vectors, triggers, runtime bindings, and review gates for generated assets. |
 | Horror corridor map | Pass | `/Game/AdaptSim/Maps/L_HorrorCorridor_Imported` opens and is the default game/editor map on the VM. |
 | Semantic anchors | Pass with TargetPoint caveat | Confirmed export has `entry`, `exit`, `hallway_center`, `doorway`, `cover`, `ambush_point`, `observation_point`, and `chokepoint`. |
 | Scenario manifests | Pass | Local examples validate and were synced to `$PROJECT/Saved/AdaptSimContractExamples`. |
@@ -23,7 +36,7 @@ AdaptSim turns a scanned or place-like environment into a reusable Unreal traini
 | Input key `1` | Pass, with trigger caveat | `AAdaptSimDemoPlayerController` logged `demo_input_received key=1` and `scenario_started` with `-AdaptSimDemoInputStart`; adversary spawn still depends on the manifest's chokepoint trigger or automation fire-all. |
 | Game-mode visual | Pass | Screenshot `contracts/examples/telemetry/horror_corridor_ambush_delay_001_visual.png` shows the bright adversary marker in the corridor; the text label is mirrored from that camera angle. |
 | Pixel Streaming | Pass in clean browser, script-managed | `PixelStreaming2` is enabled and signalling serves port `80`. `scripts/pixel-streaming/*` now provides launch, restart, stop, and JSON status commands for Control API shell-out. On 2026-05-03, a clean browser session reached live H.264 video at `1280x720` with `Controls stream input: true` after restarting Unreal with audio transmit/receive disabled. Old tabs can remain stuck at `WEBRTC CONNECTION NEGOTIATED`; close the tab or use a cache-busting URL before retesting. |
-| Frontend app | Fallback | No dedicated AdaptSim frontend repo is confirmed; use Pixel Streaming player plus checked-in artifacts/API fixture. |
+| Frontend app | Pass for MVP lane | `apps/web` is a React/Vite app. `CaptureSimulationFlow.jsx` covers capture upload, generated threat asset database status, Trellis threat visual status, threat injection plan, scenario launch, stream embed/link, telemetry, artifacts, and AAR. |
 
 ## Local Setup
 
@@ -41,8 +54,12 @@ python3 -m unittest contracts.test_aar_generator
 Expected integrated validation result:
 
 ```text
-OK: validated 14 file(s): after_action_review_input=1, asset_card=2, behavior_profile=3, scenario_manifest=4, semantic_environment=2, telemetry_log=2
+OK: validated ... file(s)
 ```
+
+The exact count changes as new safety-park, generated asset database, and
+gameplay intelligence fixtures land. Treat exit code `0` as the contract
+acceptance signal.
 
 ## VM Setup
 
@@ -68,6 +85,116 @@ nvidia-smi
 df -h
 free -h
 systemctl is-active coturn
+```
+
+## VM Repo Checkout
+
+The local server triggers expect both VMs to have this repo at
+`~/adaptsim/repos/adaptsim-hackathon`. For a persistent VM checkout, keep both
+VM mirrors on the same committed `origin/main` checkpoint that the local server
+is running. For the golden verifier, the script stages the current local
+`contracts`, `workers`, `unreal`, and `scripts/pixel-streaming` slices into a
+run-specific VM directory, so it can test local agent output before it is merged
+to the persistent VM mirror.
+
+Preserve any previous VM mirror by moving it aside; do not delete VM files,
+Docker images, model caches, captures, or Unreal project files.
+
+Expected remote executable paths:
+
+```text
+A100: ~/adaptsim/repos/adaptsim-hackathon/workers/a100-reconstruction/adaptsim-reconstruct
+A100: ~/adaptsim/repos/adaptsim-hackathon/workers/asset-generation/adaptsim-generate-asset
+L4:   ~/adaptsim/repos/adaptsim-hackathon/workers/l4-unreal-import/adaptsim-import-capture
+L4:   ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/adaptsim-pixel-streaming.sh
+L4:   ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/vm_pixel_streaming.sh
+```
+
+Read-only verification:
+
+```bash
+gcloud compute ssh --zone "us-east1-b" "a100-instance-02" --tunnel-through-iap --project "gecko-dev-fde" \
+  --command 'test -x ~/adaptsim/repos/adaptsim-hackathon/workers/a100-reconstruction/adaptsim-reconstruct && test -x ~/adaptsim/repos/adaptsim-hackathon/workers/asset-generation/adaptsim-generate-asset'
+
+gcloud compute ssh --zone "us-east1-d" "linux-pixel-streaming" --project "gecko-dev-fde" --tunnel-through-iap \
+  --command 'test -x ~/adaptsim/repos/adaptsim-hackathon/workers/l4-unreal-import/adaptsim-import-capture && test -x ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/adaptsim-pixel-streaming.sh && test -x ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/vm_pixel_streaming.sh'
+```
+
+## Control API Worker Triggers
+
+Local server SSH triggers use `gcloud compute ssh --tunnel-through-iap`.
+
+Real command overrides:
+
+```bash
+export ADAPTSIM_A100_RECONSTRUCT_COMMAND='cd ~/adaptsim/repos/adaptsim-hackathon && workers/a100-reconstruction/adaptsim-reconstruct --capture-id {capture_id} --gcs-root {gcs_root}'
+export ADAPTSIM_L4_LAUNCH_COMMAND='cd ~/adaptsim/repos/adaptsim-hackathon && PROJECT="/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim" ADAPTSIM_MAP_PATH="{map_path}" ADAPTSIM_SCENARIO_MANIFEST="{scenario_manifest_path}" ADAPTSIM_SEMANTIC_ENVIRONMENT="{semantic_environment_path}" scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart'
+export ADAPTSIM_L4_STATUS_COMMAND='cd ~/adaptsim/repos/adaptsim-hackathon && scripts/pixel-streaming/adaptsim-pixel-streaming.sh status'
+```
+
+Server trigger dry-run without launching workers:
+
+```bash
+export ADAPTSIM_ENABLE_WORKER_TRIGGERS=1
+export ADAPTSIM_A100_RECONSTRUCT_COMMAND='printf "DRY RUN A100 capture={capture_id} gcs={gcs_root}\n"'
+export ADAPTSIM_L4_LAUNCH_COMMAND='printf "DRY RUN L4 scene={scene_id} scenario={scenario_id} run={run_id} map={map_path} manifest={scenario_manifest_path} semantic={semantic_environment_path}\n"'
+export ADAPTSIM_L4_STATUS_COMMAND='printf "{\"status\":\"launching\",\"ready\":false,\"provider\":\"unreal_pixel_streaming\",\"components\":{\"signalling\":{\"log_file\":\"dry-run-wilbur.log\"},\"unreal\":{\"log_file\":\"dry-run-unreal.log\"}}}\n"'
+```
+
+With those dry-run overrides, the API still exercises local `gcloud`, IAP, SSH,
+and server placeholder substitution, but the remote launch command only prints
+text.
+
+For imported captures, the Control API resolves the Pixel Streaming launch
+context before shelling out:
+
+```text
+ADAPTSIM_MAP_PATH = capture status unreal.level_path
+ADAPTSIM_SCENARIO_MANIFEST = selected manifest path from the launch body, or /home/nicholas.parkes/adaptsim/data/captures/<capture_id>/scenario_manifests/<scenario_id>.json
+ADAPTSIM_SEMANTIC_ENVIRONMENT = /home/nicholas.parkes/adaptsim/data/captures/<capture_id>/unreal/semantic_environment.json
+```
+
+Accepted launch-body aliases for the selected manifest include
+`scenario_manifest_path`, `selected_manifest_path`, and `manifest_path`. The API
+also accepts `map_path` and `semantic_environment_path` when a manual override is
+needed. When `ADAPTSIM_ENABLE_WORKER_TRIGGERS=1`, `GET /runs/:id/stream` polls
+the L4 status command and returns `ready` only when that status JSON reports
+`ready: true`; local mock/dev mode keeps the existing timer fallback.
+
+## Safety Park Golden MVP Verification
+
+Run the end-to-end golden verifier after the reconstruction, import, contract,
+streaming, and API agents have landed their outputs:
+
+```bash
+cd /Users/nicholas.parkes/Repos/adaptsim-hackathon
+scripts/integration/safety_park_golden_mvp.sh
+```
+
+The verifier stages the current local `contracts`, `workers`, `unreal`, and
+`scripts/pixel-streaming` slices into run-specific VM directories, seeds
+`safety_park` metadata/status and the `safety_park_mvp_001` scenario manifest to
+GCS, runs the A100 golden reconstruction path, verifies
+`unreal-import/scene_mesh.glb` and `unreal-import/reconstruction_manifest.json`,
+runs the L4 Unreal import, verifies `unreal/import_report.json` and
+`unreal/semantic_environment.json`, launches Pixel Streaming through the local
+Control API, and verifies the stream, scenario manifest, telemetry, and AAR API
+endpoints. It does not require raw browser photos or screenshots.
+
+Each run writes a pass/fail report with exact commands, capture id, GCS paths,
+and VM log paths:
+
+```text
+docs/integration_logs/safety_park_golden_<UTC timestamp>.md
+```
+
+Useful overrides:
+
+```bash
+ADAPTSIM_API_PORT=18787 \
+ADAPTSIM_STREAM_READY_TIMEOUT_SECONDS=240 \
+ADAPTSIM_GCP_PROJECT=gecko-dev-fde \
+scripts/integration/safety_park_golden_mvp.sh
 ```
 
 ## Sync Demo Contracts
@@ -296,11 +423,11 @@ ENVIRONMENT="$PROJECT/Saved/AdaptSimContractExamples/semantic_environments/horro
 ls -1t "$PROJECT/Saved/AdaptSimTelemetry/${SCENARIO_ID}"_*.jsonl | head -1
 ```
 
-Expected runtime facts:
+Expected runtime facts for this legacy fallback scenario:
 
 - Map loaded: `/Game/AdaptSim/Maps/L_HorrorCorridor_Imported`.
-- Trigger fired: `delay_barricade_001` on scenario start.
-- Prop spawned: `prop_light_barricade` at `chokepoint`.
+- Legacy fixture trigger fired: `delay_barricade_001` on scenario start.
+- Legacy fixture prop spawned: `prop_light_barricade` at `chokepoint`.
 - Trigger fired: `alcove_delay_contact_001` at `chokepoint`.
 - Adversaries spawned: two `AdaptSimAdversaryCharacter` actors for `adversary_rifleman_irregular`.
 - Fallback anchor: `exit`.
@@ -391,16 +518,77 @@ Open or show:
 /Users/nicholas.parkes/Repos/adaptsim-hackathon/contracts/examples/aar/horror_corridor_ambush_delay_001_live_aar.md
 ```
 
-## Demo Flow
+## Three-Minute Demo Flow
 
-1. Show the stream at `http://34.139.126.187/player.html`; if video does not flow, run the preflight and compare Wilbur/player ICE candidate ports against the active Unreal WebRTC flags.
-2. Call out the real imported horror corridor map and the confirmed semantic anchors.
-3. Show `contracts/examples/scenario_manifests/horror_corridor_ambush_delay_001.json`.
-4. Run the input-start command to show keyboard `1` starts the configured scenario.
-5. Run the 30-second ScenarioDirector command to prove the manifest executes against the horror corridor map and produces behavior telemetry.
-6. Show `contracts/examples/telemetry/horror_corridor_ambush_delay_001_visual.png` for adversary visibility if WebRTC video is blocked.
-7. Generate or open `contracts/examples/aar/horror_corridor_ambush_delay_001_live_aar.md`.
-8. Close with the distinction: Unreal owns physical runtime and telemetry; deterministic AAR only summarizes observed facts.
+Start the real local API with worker triggers and the public Pixel Streaming URL:
+
+```bash
+cd /Users/nicholas.parkes/Repos/adaptsim-hackathon
+
+export GCS_BUCKET=aiscanners-hackathon2025
+export GCS_CAPTURE_PREFIX=adaptsim-captures
+export GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+export GCS_SIGNING_REGION=us
+export ADAPTSIM_ENABLE_WORKER_TRIGGERS=1
+export ADAPTSIM_PIXEL_STREAM_URL=http://34.139.126.187/player.html
+
+npm run dev:api
+```
+
+Start the frontend in real API mode with presenter fast-forward enabled:
+
+```bash
+cd /Users/nicholas.parkes/Repos/adaptsim-hackathon
+
+VITE_ADAPTSIM_SCENE_ID=safety_park \
+VITE_ADAPTSIM_CACHED_SCENE_ID=safety_park \
+VITE_ADAPTSIM_FAST_FORWARD_RECONSTRUCTION=1 \
+VITE_ADAPTSIM_API_MODE=live \
+npm run dev:web
+```
+
+1. Open the web app and show the capture-to-simulation lane. Use the cached
+   `safety_park` path rather than waiting for reconstruction during the live
+   demo.
+2. Show the generated threat asset database:
+   `contracts/examples/generated_asset_databases/threat_vector_asset_database.json`.
+   The assets should read as environment-specific threat vectors such as
+   UAV/FPV drones, UGV/vehicle visuals, USV visuals where relevant, inert
+   equipment/sensor payloads, and adversary-runtime metadata.
+3. Show the threat injection plan:
+   `contracts/examples/gameplay_intelligence/safety_park/threat_injection_plan.json`.
+   Explain that this is the intelligence layer: it ties scene affordances to
+   plausible threat entries, runtime bindings, triggers, success criteria, and
+   review gates.
+4. Launch `safety_park_mvp_001` through the Control API or web UI and open the
+   Pixel Streaming player. The generated threat visuals may still be
+   `prototype`/`never_spawn`; runtime spawning must use reviewed ScenarioDirector
+   assets or existing Unreal actor bindings.
+5. Show telemetry and AAR. Close with the distinction: GPT-5.5/Trellis propose
+   and generate reviewed threat visuals; Unreal owns physical runtime,
+   collision, NavMesh, spawning, and telemetry; deterministic AAR only
+   summarizes observed facts.
+
+## Horror Corridor Fallback Flow
+
+1. Show the stream at `http://34.139.126.187/player.html`; if video does not
+   flow, run the preflight and compare Wilbur/player ICE candidate ports against
+   the active Unreal WebRTC flags.
+2. Call out the real imported horror corridor map and the confirmed semantic
+   anchors.
+3. Show
+   `contracts/examples/scenario_manifests/horror_corridor_ambush_delay_001.json`.
+4. Run the input-start command to show keyboard `1` starts the configured
+   scenario.
+5. Run the 30-second ScenarioDirector command to prove the manifest executes
+   against the horror corridor map and produces behavior telemetry.
+6. Show
+   `contracts/examples/telemetry/horror_corridor_ambush_delay_001_visual.png`
+   for adversary visibility if WebRTC video is blocked.
+7. Generate or open
+   `contracts/examples/aar/horror_corridor_ambush_delay_001_live_aar.md`.
+8. Note that the old barricade/prop event in this fallback scenario is a legacy
+   runtime fixture, not the Trellis threat-vector asset generation story.
 
 ## Final Fallback Path
 
@@ -441,7 +629,12 @@ python3 contracts/aar_generator.py contracts/examples/telemetry/mock_hallway_del
 
 ## Known Gaps
 
-- Streamed interactive play and headless scenario execution are still separate demo beats unless the public browser stream is actively showing video and accepting input; the scenario/AAR proof can always run via `UnrealEditor-Cmd`.
+- Streamed interactive play and headless scenario execution are still separate
+  demo beats unless the public browser stream is actively showing video and
+  accepting input; the scenario/AAR proof can always run via `UnrealEditor-Cmd`.
+- Generated Trellis threat visuals remain prototype metadata until Unreal import,
+  scale/collision review, runtime binding, and whitelist activation make a given
+  asset spawnable.
 - Keyboard `1` starts the scenario through `AAdaptSimDemoPlayerController`, but there is no real `trainee_action` telemetry yet.
 - The selected manifest's adversary event uses `trainee_enters_anchor`, so input-only startup does not spawn the adversary until the trainee reaches the chokepoint; use `-AdaptSimScenarioDirectorFireAllForTest` for the compact demo proof.
 - One multi-count ambush spawn still reports a legacy/derived `ambush_service_alcove` anchor id in telemetry.

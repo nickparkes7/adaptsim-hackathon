@@ -14,6 +14,8 @@ The Pydantic models in `contracts/models.py` are the maintainable source of trut
 - `unreal_import_report`: L4 Unreal import and validation report under `unreal/import_report.json`. Owner: L4 Unreal import worker.
 - `asset_generation_request`: minimal request to derive semantic environments, asset cards, or scenario manifests from a reconstructed/imported capture. Owner: control API or planner service.
 - `asset_generation_result`: generated-asset references and errors for the request above. Owner: asset/planner generation service.
+- `generated_asset_database`: GPT-5.5 output from source intake. Generated cards must be threat-vector assets with `threat_category`, `movement_domain`, `tactical_role`, `visual_generation_prompt`, `runtime_binding_hint`, `spawn_affordances`, `behavior_profile_candidates`, `safety_note: "non-operational training simulation"`, and review-oriented `threat_metadata`.
+- `threat_injection_plan`: gameplay intelligence output that explains why generated threat cues are plausible in a semantic environment, where they enter, what they do, trainee objectives, triggers, success criteria, and the ScenarioDirector constraints that keep generated assets metadata-only until review.
 - `semantic_anchor`: one tagged room, hallway, door, cover item, exit, no-spawn zone, or other tactical affordance.
 - `semantic_environment`: one scanned Unreal level plus anchors and graph edges.
 - `scenario_manifest`: planner output consumed by Unreal. Each event includes rationale, trigger, required tags, avoid tags, severity, scenario likelihood under assumptions, and behavior profile.
@@ -88,6 +90,14 @@ python3 contracts/validate_contracts.py contracts/examples/scenario_manifests/sc
 
 The directory validation fails if a scenario references an unknown asset, a non-whitelisted asset, a behavior profile not allowed by that asset, a missing environment, a missing trigger anchor, or required semantic tags that are not present in the environment export.
 
+The checked-in generated asset database fixture is:
+
+- `contracts/examples/generated_asset_databases/threat_vector_asset_database.json`
+
+It intentionally shows threat-vector assets instead of generic props: dismounted
+personnel, FPV/quadcopter, UGV/vehicle, USV, inert weapon/equipment visual, and
+sensor/payload visual.
+
 ## AAR Generator
 
 Generate a concise deterministic markdown AAR from either a `telemetry_log` JSON file or an `after_action_review_input` JSON file:
@@ -108,6 +118,33 @@ python3 -m unittest contracts.test_aar_generator
 ## Planner Usage
 
 The planner should load reviewed `asset_card`, `behavior_profile`, and `semantic_environment` JSON before it generates scenarios. It may score or sample candidate events, but it must output only a `scenario_manifest` with `asset_id` values from the reviewed asset cards, `behavior_profile` values allowed by those assets, and required tags that can be satisfied by the target environment. The `likelihood` field is a scenario sampling weight under the listed assumptions; it must not be presented as calibrated intelligence truth.
+
+For imported captures, generate a capture-specific MVP manifest from the capture's own `semantic_environment`; do not return the fixed `scan_hallway_*` manifests for a reconstructed capture:
+
+```bash
+python3 contracts/scenario_planner.py /path/to/captures/<capture_id>/unreal/semantic_environment.json \
+  --output /path/to/captures/<capture_id>/scenario_manifests/<capture_id>_mvp_001.json
+```
+
+The checked-in safety-park MVP pair is:
+
+- Semantic environment: `contracts/examples/semantic_environments/safety_park.json`
+- Scenario manifest: `contracts/examples/scenario_manifests/safety_park_mvp_001.json`
+- Scenario ID: `safety_park_mvp_001`
+
+Generate the gameplay intelligence layer for the safety-park demo:
+
+```bash
+python3 contracts/gameplay_intelligence.py contracts/examples/semantic_environments/safety_park.json \
+  --output-dir contracts/examples/gameplay_intelligence/safety_park
+```
+
+This writes:
+
+- `contracts/examples/gameplay_intelligence/safety_park/threat_injection_plan.json`
+- `contracts/examples/gameplay_intelligence/safety_park/scenario_manifest.json`
+
+The plan may reference generated threat-vector assets such as `fpv_quadcopter_asset` for the vignette. The paired scenario manifest keeps runtime `asset_id` values limited to whitelisted ScenarioDirector assets, carrying generated threat asset IDs only as metadata until Unreal review makes them spawnable.
 
 ## Unreal Usage
 

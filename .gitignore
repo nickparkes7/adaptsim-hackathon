@@ -6,6 +6,8 @@ ngc-cli/
 .env
 .env.*
 .adaptsim/
+data/
+tmp/
 __pycache__/
 *.traineddata
 *.traineddata.gz

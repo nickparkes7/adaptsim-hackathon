@@ -225,9 +225,39 @@ The VM is a deployment target, not a repo boundary. Both VMs should clone the
 same repo and run only their relevant package:
 
 ```text
-A100: ~/adaptsim/repos/adaptsim-hackathon/workers/a100-reconstruction
-L4:   ~/adaptsim/repos/adaptsim-hackathon/workers/l4-unreal-import
+A100 repo: ~/adaptsim/repos/adaptsim-hackathon
+L4 repo:   ~/adaptsim/repos/adaptsim-hackathon
 ```
+
+Remote executable paths used by the local Control API:
+
+```text
+A100 reconstruction:
+~/adaptsim/repos/adaptsim-hackathon/workers/a100-reconstruction/adaptsim-reconstruct
+
+A100 asset generation:
+~/adaptsim/repos/adaptsim-hackathon/workers/asset-generation/adaptsim-generate-asset
+
+L4 Unreal import:
+~/adaptsim/repos/adaptsim-hackathon/workers/l4-unreal-import/adaptsim-import-capture
+
+L4 Pixel Streaming controller:
+~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/adaptsim-pixel-streaming.sh
+
+L4 Pixel Streaming VM bridge:
+~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/vm_pixel_streaming.sh
+```
+
+Pin both VM mirrors to the committed `origin/main` checkpoint used for the demo:
+
+```text
+f843c605a2cd3204f45de8fc87258587dc788f97
+Add AdaptSim MVP pipeline integration
+```
+
+Prefer `git clone`, `git fetch origin main`, and `git checkout --detach` on each
+VM. If VM SSH credentials cannot access GitHub, deploy from a local `git bundle`
+or archive created from that commit, not from uncommitted local files.
 
 Generated captures, images, splats, meshes, logs, and Unreal import outputs
 belong in GCS, not Git.
@@ -241,7 +271,8 @@ Purpose: turn uploaded image sets into reconstruction artifacts.
 Build the first reliable interface as a CLI:
 
 ```bash
-adaptsim-reconstruct \
+cd ~/adaptsim/repos/adaptsim-hackathon
+workers/a100-reconstruction/adaptsim-reconstruct \
   --capture-id CAPTURE_ID \
   --gcs-root gs://aiscanners-hackathon2025/adaptsim-captures
 ```
@@ -305,7 +336,8 @@ it proves faster or more robust for large image sets.
 Acceptance criteria:
 
 - `SfmScene.from_colmap(...)` can load the generated scene.
-- Registered image count and sparse point count are written to `sfm/report.json`.
+- Registered image count and sparse point count are written to
+  `sfm/colmap/report.json`.
 - The job fails early if too few images register.
 
 ### A100-4: FVDB Splat Reconstruction
@@ -394,7 +426,8 @@ Purpose: import A100 artifacts into Unreal and make the scene launchable.
 Build a VM-local wrapper:
 
 ```bash
-adaptsim-import-capture \
+cd ~/adaptsim/repos/adaptsim-hackathon
+workers/l4-unreal-import/adaptsim-import-capture \
   --capture-id CAPTURE_ID \
   --gcs-root gs://aiscanners-hackathon2025/adaptsim-captures
 ```
@@ -606,6 +639,24 @@ downloaded JSON key.
 MVP worker trigger strategy: the control API should invoke checked-in worker
 CLIs over `gcloud compute ssh` to the A100 and L4 VMs. Pub/Sub, Cloud Run, and
 object notification orchestration can come after the hackathon path is working.
+All local server SSH triggers must include `--tunnel-through-iap`.
+
+Real command examples for local server overrides:
+
+```bash
+export ADAPTSIM_A100_RECONSTRUCT_COMMAND='cd ~/adaptsim/repos/adaptsim-hackathon && workers/a100-reconstruction/adaptsim-reconstruct --capture-id {capture_id} --gcs-root {gcs_root}'
+export ADAPTSIM_L4_LAUNCH_COMMAND='cd ~/adaptsim/repos/adaptsim-hackathon && PROJECT="/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim"; scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart --scenario-manifest "$PROJECT/Saved/AdaptSimContractExamples/scenario_manifests/{scenario_id}.json"'
+```
+
+Read-only executable checks:
+
+```bash
+gcloud compute ssh --zone "us-east1-b" "a100-instance-02" --tunnel-through-iap --project "gecko-dev-fde" \
+  --command 'test -x ~/adaptsim/repos/adaptsim-hackathon/workers/a100-reconstruction/adaptsim-reconstruct && test -x ~/adaptsim/repos/adaptsim-hackathon/workers/asset-generation/adaptsim-generate-asset'
+
+gcloud compute ssh --zone "us-east1-d" "linux-pixel-streaming" --project "gecko-dev-fde" --tunnel-through-iap \
+  --command 'test -x ~/adaptsim/repos/adaptsim-hackathon/workers/l4-unreal-import/adaptsim-import-capture && test -x ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/adaptsim-pixel-streaming.sh && test -x ~/adaptsim/repos/adaptsim-hackathon/scripts/pixel-streaming/vm_pixel_streaming.sh'
+```
 
 ## Parallelization
 

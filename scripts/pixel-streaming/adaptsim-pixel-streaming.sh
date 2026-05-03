@@ -43,6 +43,7 @@ LAUNCH_MAP="${ADAPTSIM_MAP_PATH:-${DEFAULT_MAP_PATH}}"
 LAUNCH_SCENARIO_MANIFEST="${ADAPTSIM_SCENARIO_MANIFEST:-${PROJECT}/${DEFAULT_SCENARIO_MANIFEST_REL}}"
 LAUNCH_SEMANTIC_ENVIRONMENT="${ADAPTSIM_SEMANTIC_ENVIRONMENT:-${PROJECT}/${DEFAULT_SEMANTIC_ENVIRONMENT_REL}}"
 LAUNCH_DEMO_INPUT_START="${ADAPTSIM_DEMO_INPUT_START:-true}"
+LAUNCH_DEMO_AUTO_PRESS_1="${ADAPTSIM_DEMO_AUTO_PRESS_1:-true}"
 EXTRA_UNREAL_ARGS=()
 
 usage() {
@@ -63,6 +64,8 @@ Launch options:
   --no-scenario-flags           Launch without AdaptSim manifest/environment flags.
   --demo-input-start            Add -AdaptSimDemoInputStart. This is the default.
   --no-demo-input-start         Do not add -AdaptSimDemoInputStart.
+  --demo-auto-press-1           Add -AdaptSimDemoAutoPress1. This is the default.
+  --no-demo-auto-press-1        Do not auto-start the scenario from the demo controller.
   --hold-seconds SECONDS        Demo hold window. Default: 25.
   --extra-unreal-arg ARG        Append one raw Unreal CLI argument. Repeatable.
 
@@ -202,6 +205,11 @@ is_http_ready() {
   curl -fsS --max-time 2 "${LOCAL_PLAYER_URL}" -o /dev/null >/dev/null 2>&1
 }
 
+is_streamer_registered() {
+  command_exists ss || return 1
+  ss -Htn state established "( sport = :${STREAMER_PORT} )" 2>/dev/null | grep -q .
+}
+
 status_value_for_component() {
   local running="$1"
   local stale="$2"
@@ -233,19 +241,23 @@ emit_status() {
   local signalling_running="false"
   local unreal_running="false"
   local signalling_http_ready="false"
+  local signalling_streamer_ready="false"
 
   [[ -n "${signalling_pid}" ]] && signalling_running="true"
   [[ -n "${unreal_pid}" ]] && unreal_running="true"
   if is_http_ready; then
     signalling_http_ready="true"
   fi
+  if is_streamer_registered; then
+    signalling_streamer_ready="true"
+  fi
 
   local signalling_status unreal_status overall_status ready
   signalling_status="$(status_value_for_component "${signalling_running}" "${signalling_stale}" "${signalling_http_ready}")"
-  unreal_status="$(status_value_for_component "${unreal_running}" "${unreal_stale}" "true")"
+  unreal_status="$(status_value_for_component "${unreal_running}" "${unreal_stale}" "${signalling_streamer_ready}")"
 
   ready="false"
-  if [[ "${signalling_running}" == "true" && "${unreal_running}" == "true" && "${signalling_http_ready}" == "true" ]]; then
+  if [[ "${signalling_running}" == "true" && "${unreal_running}" == "true" && "${signalling_http_ready}" == "true" && "${signalling_streamer_ready}" == "true" ]]; then
     overall_status="ready"
     ready="true"
   elif [[ "${signalling_running}" == "false" && "${unreal_running}" == "false" && "${signalling_stale}" == "false" && "${unreal_stale}" == "false" ]]; then
@@ -272,6 +284,7 @@ emit_status() {
   export SIGNALLING_RUNNING="${signalling_running}"
   export SIGNALLING_STATUS="${signalling_status}"
   export SIGNALLING_HTTP_READY="${signalling_http_ready}"
+  export SIGNALLING_STREAMER_READY="${signalling_streamer_ready}"
   export UNREAL_PID="${unreal_pid}"
   export UNREAL_PID_SOURCE="${unreal_pid_source}"
   export UNREAL_PID_FILE_PID="${unreal_pid_file_pid}"
@@ -344,6 +357,7 @@ data = {
             "pid_file": os.environ["SIGNALLING_PID_FILE"],
             "log_file": os.environ["SIGNALLING_LOG_FILE"],
             "http_ready": as_bool("SIGNALLING_HTTP_READY"),
+            "streamer_connected": as_bool("SIGNALLING_STREAMER_READY"),
         },
         "unreal": {
             "status": os.environ["UNREAL_STATUS"],
@@ -360,6 +374,14 @@ data = {
         "disable_transmit_audio": as_bool("DISABLE_TRANSMIT_AUDIO"),
         "disable_receive_audio": as_bool("DISABLE_RECEIVE_AUDIO"),
         "encoder_codec": os.environ["ENCODER_CODEC"],
+    },
+    "stream": {
+        "status": "ready" if as_bool("READY") else (
+            "waiting_for_streamer"
+            if as_bool("SIGNALLING_RUNNING") and as_bool("UNREAL_RUNNING") and as_bool("SIGNALLING_HTTP_READY")
+            else "launching"
+        ),
+        "streamer_connected": as_bool("SIGNALLING_STREAMER_READY"),
     },
 }
 
@@ -524,7 +546,7 @@ start_signalling_impl() {
 write_last_launch() {
   ensure_state_dir
   export LAST_LAUNCH_FILE
-  export LAUNCH_MAP LAUNCH_SCENARIO_MANIFEST LAUNCH_SEMANTIC_ENVIRONMENT LAUNCH_DEMO_INPUT_START
+  export LAUNCH_MAP LAUNCH_SCENARIO_MANIFEST LAUNCH_SEMANTIC_ENVIRONMENT LAUNCH_DEMO_INPUT_START LAUNCH_DEMO_AUTO_PRESS_1
   export DEMO_HOLD_SECONDS RES_X RES_Y
   export WEBRTC_MIN_PORT WEBRTC_MAX_PORT DISABLE_TRANSMIT_AUDIO DISABLE_RECEIVE_AUDIO ENCODER_CODEC
   export STREAMER_PORT PUBLIC_PLAYER_URL LOCAL_PLAYER_URL
@@ -546,6 +568,7 @@ data = {
     "scenario_manifest": os.environ["LAUNCH_SCENARIO_MANIFEST"] or None,
     "semantic_environment": os.environ["LAUNCH_SEMANTIC_ENVIRONMENT"] or None,
     "demo_input_start": as_bool("LAUNCH_DEMO_INPUT_START"),
+    "demo_auto_press_1": as_bool("LAUNCH_DEMO_AUTO_PRESS_1"),
     "demo_hold_seconds": os.environ["DEMO_HOLD_SECONDS"],
     "resolution": {
         "x": os.environ["RES_X"],
@@ -594,6 +617,7 @@ start_unreal_impl() {
     "-ResX=${RES_X}"
     "-ResY=${RES_Y}"
     -AudioMixer
+    "-ExecCmds=DisableAllScreenMessages"
     "-PixelStreamingConnectionURL=ws://127.0.0.1:${STREAMER_PORT}"
     "-PixelStreamingWebRTCMinPort=${WEBRTC_MIN_PORT}"
     "-PixelStreamingWebRTCMaxPort=${WEBRTC_MAX_PORT}"
@@ -611,6 +635,9 @@ start_unreal_impl() {
   if [[ "${LAUNCH_DEMO_INPUT_START}" == "true" ]]; then
     unreal_args+=(-AdaptSimDemoInputStart)
     unreal_args+=("-AdaptSimDemoHoldSeconds=${DEMO_HOLD_SECONDS}")
+  fi
+  if [[ "${LAUNCH_DEMO_AUTO_PRESS_1}" == "true" ]]; then
+    unreal_args+=(-AdaptSimDemoAutoPress1)
   fi
   if [[ "${#EXTRA_UNREAL_ARGS[@]}" -gt 0 ]]; then
     unreal_args+=("${EXTRA_UNREAL_ARGS[@]}")
@@ -635,6 +662,7 @@ parse_launch_args() {
   LAUNCH_SCENARIO_MANIFEST="${ADAPTSIM_SCENARIO_MANIFEST:-${PROJECT}/${DEFAULT_SCENARIO_MANIFEST_REL}}"
   LAUNCH_SEMANTIC_ENVIRONMENT="${ADAPTSIM_SEMANTIC_ENVIRONMENT:-${PROJECT}/${DEFAULT_SEMANTIC_ENVIRONMENT_REL}}"
   LAUNCH_DEMO_INPUT_START="${ADAPTSIM_DEMO_INPUT_START:-true}"
+  LAUNCH_DEMO_AUTO_PRESS_1="${ADAPTSIM_DEMO_AUTO_PRESS_1:-true}"
   DEMO_HOLD_SECONDS="${ADAPTSIM_DEMO_HOLD_SECONDS:-${DEMO_HOLD_SECONDS}}"
   EXTRA_UNREAL_ARGS=()
 
@@ -666,6 +694,14 @@ parse_launch_args() {
         ;;
       --no-demo-input-start)
         LAUNCH_DEMO_INPUT_START="false"
+        shift
+        ;;
+      --demo-auto-press-1)
+        LAUNCH_DEMO_AUTO_PRESS_1="true"
+        shift
+        ;;
+      --no-demo-auto-press-1)
+        LAUNCH_DEMO_AUTO_PRESS_1="false"
         shift
         ;;
       --hold-seconds)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import math
 import os
 import re
 import shlex
@@ -152,6 +153,8 @@ class ImportSettings:
     actor_location_cm: tuple[float, float, float]
     actor_rotation_deg: tuple[float, float, float]
     nav_extent_cm: tuple[float, float, float]
+    scan_bounds_min_m: tuple[float, float, float] | None
+    scan_bounds_max_m: tuple[float, float, float] | None
     spawn_all_static_meshes: bool
     create_semantic_anchors: bool
     semantic_anchor_mode: str
@@ -216,6 +219,12 @@ def parse_csv3(value: str, label: str) -> tuple[float, float, float]:
         raise argparse.ArgumentTypeError(f"{label} must contain only numbers") from exc
 
 
+def parse_optional_csv3(value: str | None, label: str) -> tuple[float, float, float] | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return parse_csv3(str(value), label)
+
+
 def unreal_command_args() -> list[str]:
     env_args_b64 = os.environ.get("ADAPTSIM_SCAN_ARGS_B64")
     if env_args_b64:
@@ -277,6 +286,8 @@ def parse_args() -> ImportSettings:
     parser.add_argument("--location-cm", default=os.environ.get("ADAPTSIM_SCAN_LOCATION_CM", "0,0,0"))
     parser.add_argument("--rotation-deg", default=os.environ.get("ADAPTSIM_SCAN_ROTATION_DEG", "0,0,0"))
     parser.add_argument("--nav-extent-cm", default=os.environ.get("ADAPTSIM_NAV_EXTENT_CM", DEFAULT_NAV_EXTENT_CM))
+    parser.add_argument("--scan-bounds-min-m", default=os.environ.get("ADAPTSIM_SCAN_BOUNDS_MIN_M"))
+    parser.add_argument("--scan-bounds-max-m", default=os.environ.get("ADAPTSIM_SCAN_BOUNDS_MAX_M"))
     parser.add_argument("--spawn-all-static-meshes", dest="spawn_all_static_meshes", action="store_true")
     parser.add_argument("--spawn-first-static-mesh-only", dest="spawn_all_static_meshes", action="store_false")
     parser.add_argument("--semantic-anchors", dest="create_semantic_anchors", action="store_true")
@@ -327,6 +338,8 @@ def parse_args() -> ImportSettings:
         actor_location_cm=parse_csv3(args.location_cm, "--location-cm"),
         actor_rotation_deg=parse_csv3(args.rotation_deg, "--rotation-deg"),
         nav_extent_cm=parse_csv3(args.nav_extent_cm, "--nav-extent-cm"),
+        scan_bounds_min_m=parse_optional_csv3(args.scan_bounds_min_m, "--scan-bounds-min-m"),
+        scan_bounds_max_m=parse_optional_csv3(args.scan_bounds_max_m, "--scan-bounds-max-m"),
         spawn_all_static_meshes=args.spawn_all_static_meshes,
         create_semantic_anchors=args.create_semantic_anchors,
         semantic_anchor_mode=args.semantic_anchor_mode,
@@ -531,7 +544,14 @@ def is_static_mesh(asset) -> bool:
 
 def configure_static_mesh(mesh, settings: ImportSettings) -> None:
     log(f"Configuring StaticMesh {mesh.get_name()}")
-    if settings.enable_nanite:
+    material = scan_visible_material(settings)
+    if material:
+        if assign_static_mesh_material(mesh, material):
+            log(f"Assigned scan visible material to {mesh.get_name()}")
+        else:
+            warn(f"Could not assign scan visible material to {mesh.get_name()}")
+
+    if settings.enable_nanite and not material_requires_nanite_disabled(material):
         if enable_nanite(mesh):
             log(f"Nanite enabled for {mesh.get_name()}")
         else:
@@ -539,6 +559,14 @@ def configure_static_mesh(mesh, settings: ImportSettings) -> None:
                 f"Could not enable Nanite for {mesh.get_name()}; this may require "
                 "EditorScriptingUtilities or a loaded static mesh editor module."
             )
+    elif settings.enable_nanite:
+        if disable_nanite(mesh):
+            log(f"Nanite disabled for {mesh.get_name()} because the scan uses an engine vertex-color material")
+        else:
+            warn(f"Could not disable Nanite for {mesh.get_name()}; vertex-color material may render as default")
+    else:
+        if disable_nanite(mesh):
+            log(f"Nanite disabled for {mesh.get_name()}")
 
     if settings.collision_mode != "none":
         if configure_collision(mesh, settings.collision_mode):
@@ -560,6 +588,202 @@ def configure_static_mesh(mesh, settings: ImportSettings) -> None:
             unreal.EditorAssetLibrary.save_loaded_asset(mesh, only_if_is_dirty=False)
         except Exception as exc:
             warn(f"Could not save {mesh.get_name()}: {exc}")
+
+
+def scan_vertex_color_material_path(settings: ImportSettings) -> tuple[str, str, str]:
+    directory = f"{settings.destination_path}/Materials"
+    asset_name = f"M_{to_asset_token(settings.scan_id)}_VertexColor"
+    return directory, asset_name, f"{directory}/{asset_name}"
+
+
+def engine_vertex_color_material():
+    for material_path in (
+        "/Engine/EngineDebugMaterials/VertexColorViewMode_ColorOnly",
+        "/Engine/EngineDebugMaterials/VertexColorMaterial",
+    ):
+        material = load_asset(material_path)
+        if material:
+            log(f"Using engine vertex-color material {material_path}")
+            return material
+    return None
+
+
+def scan_visible_material(settings: ImportSettings):
+    material = ensure_scan_vertex_color_material(settings)
+    if material:
+        return material
+    warn("Project vertex-color material was unavailable; falling back to engine debug material.")
+    return engine_vertex_color_material()
+
+
+def material_path_name(material) -> str:
+    try:
+        return str(material.get_path_name())
+    except Exception:
+        return ""
+
+
+def material_requires_nanite_disabled(material) -> bool:
+    return material_path_name(material).startswith("/Engine/EngineDebugMaterials/")
+
+
+def ensure_scan_vertex_color_material(settings: ImportSettings):
+    """Create/update the material that displays GLB COLOR_0 vertex data in Unreal."""
+    directory, asset_name, material_path = scan_vertex_color_material_path(settings)
+    material = load_asset(material_path)
+    if not material:
+        if not hasattr(unreal, "AssetToolsHelpers") or not hasattr(unreal, "MaterialFactoryNew"):
+            warn("Unreal material factory APIs are unavailable; scan mesh may use importer fallback material.")
+            return None
+        ensure_content_directory(directory)
+        try:
+            material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+                asset_name,
+                directory,
+                unreal.Material,
+                unreal.MaterialFactoryNew(),
+            )
+        except Exception as exc:
+            warn(f"Could not create scan vertex-color material {material_path}: {exc}")
+            return None
+
+    configure_vertex_color_material(material)
+    if settings.save_assets and hasattr(unreal, "EditorAssetLibrary"):
+        try:
+            unreal.EditorAssetLibrary.save_loaded_asset(material, only_if_is_dirty=False)
+        except Exception as exc:
+            warn(f"Could not save scan vertex-color material {material_path}: {exc}")
+    return material
+
+
+def configure_vertex_color_material(material) -> None:
+    try_set_any_editor_property(material, ("two_sided", "bTwoSided"), True)
+    shading_model = getattr(unreal, "MaterialShadingModel", None)
+    if shading_model and hasattr(shading_model, "MSM_UNLIT"):
+        try_set_editor_property(material, "shading_model", shading_model.MSM_UNLIT)
+    try_set_any_editor_property(
+        material,
+        (
+            "used_with_nanite",
+            "b_used_with_nanite",
+            "bUsedWithNanite",
+            "use_with_nanite",
+        ),
+        True,
+    )
+
+    editing = getattr(unreal, "MaterialEditingLibrary", None)
+    vertex_color_class = getattr(unreal, "MaterialExpressionVertexColor", None)
+    material_property = getattr(unreal, "MaterialProperty", None)
+    if not editing or not vertex_color_class or not material_property:
+        warn("MaterialEditingLibrary or MaterialExpressionVertexColor is unavailable; material graph was not updated.")
+        return
+
+    try:
+        if hasattr(editing, "delete_all_material_expressions"):
+            editing.delete_all_material_expressions(material)
+    except Exception as exc:
+        warn(f"Could not clear existing material expressions for {material.get_name()}: {exc}")
+
+    try:
+        vertex_color = editing.create_material_expression(material, vertex_color_class, -360, 0)
+    except Exception as exc:
+        warn(f"Could not create VertexColor material expression for {material.get_name()}: {exc}")
+        return
+
+    base_color = getattr(material_property, "MP_BASE_COLOR", None)
+    if base_color is not None:
+        if not connect_expression_to_material_property(editing, vertex_color, base_color):
+            warn(f"Could not connect VertexColor output to Base Color for {material.get_name()}")
+    emissive_color = getattr(material_property, "MP_EMISSIVE_COLOR", None)
+    if emissive_color is not None:
+        if not connect_expression_to_material_property(editing, vertex_color, emissive_color):
+            warn(f"Could not connect VertexColor output to Emissive Color for {material.get_name()}")
+
+    constant_class = getattr(unreal, "MaterialExpressionConstant", None)
+    if constant_class:
+        roughness = getattr(material_property, "MP_ROUGHNESS", None)
+        metallic = getattr(material_property, "MP_METALLIC", None)
+        if roughness is not None:
+            add_material_constant(editing, material, constant_class, roughness, 0.85, -360, 180)
+        if metallic is not None:
+            add_material_constant(editing, material, constant_class, metallic, 0.0, -360, 320)
+
+    try:
+        if hasattr(editing, "layout_material_expressions"):
+            editing.layout_material_expressions(material)
+    except Exception:
+        pass
+    try:
+        if hasattr(editing, "recompile_material"):
+            editing.recompile_material(material)
+    except Exception:
+        pass
+    try:
+        material.mark_package_dirty()
+        material.post_edit_change()
+    except Exception:
+        pass
+
+
+def connect_expression_to_material_property(editing, expression, material_property) -> bool:
+    for output_name in ("", "RGB", "Color", "RGBA"):
+        try:
+            if not editing.connect_material_property(expression, output_name, material_property):
+                continue
+            try:
+                node = editing.get_material_property_input_node(expression.get_outer(), material_property)
+                if node:
+                    return True
+            except Exception:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def add_material_constant(editing, material, constant_class, material_property, value: float, x: int, y: int) -> None:
+    try:
+        node = editing.create_material_expression(material, constant_class, x, y)
+        try_set_editor_property(node, "r", value)
+        editing.connect_material_property(node, "", material_property)
+    except Exception:
+        pass
+
+
+def assign_static_mesh_material(mesh, material) -> bool:
+    assigned = False
+    slot_count = 1
+    static_materials = try_get_editor_property(mesh, "static_materials", None)
+    if static_materials:
+        try:
+            slot_count = max(slot_count, len(static_materials))
+        except Exception:
+            pass
+        for static_material in static_materials:
+            assigned = try_set_editor_property(static_material, "material_interface", material) or assigned
+
+    try:
+        section_count = mesh.get_num_sections(0)
+        if section_count:
+            slot_count = max(slot_count, int(section_count))
+    except Exception:
+        pass
+
+    for index in range(slot_count):
+        try:
+            mesh.set_material(index, material)
+            assigned = True
+        except Exception:
+            pass
+
+    if assigned:
+        try:
+            mesh.mark_package_dirty()
+            mesh.post_edit_change()
+        except Exception:
+            pass
+    return assigned
 
 
 def enable_nanite(static_mesh) -> bool:
@@ -584,6 +808,29 @@ def enable_nanite(static_mesh) -> bool:
         return True
     except Exception as exc:
         warn(f"Nanite setup error for {static_mesh.get_name()}: {exc}")
+        return False
+
+
+def disable_nanite(static_mesh) -> bool:
+    try:
+        settings = try_get_editor_property(static_mesh, "nanite_settings")
+        if not settings:
+            return False
+        changed = try_set_editor_property(settings, "enabled", False)
+        changed = try_set_editor_property(settings, "b_enabled", False) or changed
+
+        if hasattr(unreal, "EditorStaticMeshLibrary") and hasattr(
+            unreal.EditorStaticMeshLibrary, "set_nanite_settings"
+        ):
+            try:
+                unreal.EditorStaticMeshLibrary.set_nanite_settings(static_mesh, settings, apply_changes=True)
+            except TypeError:
+                unreal.EditorStaticMeshLibrary.set_nanite_settings(static_mesh, settings, True)
+        else:
+            try_set_editor_property(static_mesh, "nanite_settings", settings)
+        return changed
+    except Exception as exc:
+        warn(f"Nanite disable error for {static_mesh.get_name()}: {exc}")
         return False
 
 
@@ -625,7 +872,9 @@ def vector(values: tuple[float, float, float]):
 
 
 def rotator(values: tuple[float, float, float]):
-    return unreal.Rotator(values[0], values[1], values[2])
+    # Callers pass Unreal-style (pitch, yaw, roll). Unreal Python's positional
+    # Rotator constructor takes (roll, pitch, yaw).
+    return unreal.Rotator(values[2], values[0], values[1])
 
 
 def get_actor_subsystem():
@@ -826,6 +1075,24 @@ def upsert_scan_actors(meshes: list, settings: ImportSettings) -> None:
 def ensure_actor(label: str, actor_class, location_cm, rotation_deg):
     actor = find_actor(label)
     if actor:
+        try:
+            actor.set_actor_location(vector(location_cm), sweep=False, teleport=True)
+        except TypeError:
+            try:
+                actor.set_actor_location(vector(location_cm), False, True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            actor.set_actor_rotation(rotator(rotation_deg), teleport_physics=True)
+        except TypeError:
+            try:
+                actor.set_actor_rotation(rotator(rotation_deg), True)
+            except Exception:
+                pass
+        except Exception:
+            pass
         return actor
     return spawn_actor_from_class(actor_class, vector(location_cm), rotator(rotation_deg), label)
 
@@ -859,6 +1126,15 @@ def enum_member(enum_class, token: str):
         except Exception:
             pass
 
+    return None
+
+
+def auto_receive_player0():
+    enum_class = getattr(unreal, "AutoReceiveInput", None)
+    for token in ("player0", "player_0"):
+        value = enum_member(enum_class, token)
+        if value is not None:
+            return value
     return None
 
 
@@ -998,11 +1274,106 @@ def upsert_semantic_anchors(settings: ImportSettings) -> None:
         configure_semantic_anchor(actor, definition, class_kind)
 
 
+def scan_layout_from_settings(settings: ImportSettings) -> dict[str, tuple[float, float, float]]:
+    if settings.scan_bounds_min_m and settings.scan_bounds_max_m:
+        min_cm = tuple(
+            settings.actor_location_cm[index] + settings.scan_bounds_min_m[index] * 100.0 * settings.actor_scale
+            for index in range(3)
+        )
+        max_cm = tuple(
+            settings.actor_location_cm[index] + settings.scan_bounds_max_m[index] * 100.0 * settings.actor_scale
+            for index in range(3)
+        )
+        low = tuple(min(min_cm[index], max_cm[index]) for index in range(3))
+        high = tuple(max(min_cm[index], max_cm[index]) for index in range(3))
+        center = tuple((low[index] + high[index]) / 2.0 for index in range(3))
+        extent = tuple(max((high[index] - low[index]) / 2.0, 100.0) for index in range(3))
+        return {"min": low, "max": high, "center": center, "extent": extent}
+
+    nav_extent = (
+        max(settings.nav_extent_cm[0] / 2.0, 400.0),
+        max(settings.nav_extent_cm[1] / 2.0, 400.0),
+        max(settings.nav_extent_cm[2] / 2.0, 200.0),
+    )
+    center = settings.actor_location_cm
+    return {
+        "min": tuple(center[index] - nav_extent[index] for index in range(3)),
+        "max": tuple(center[index] + nav_extent[index] for index in range(3)),
+        "center": center,
+        "extent": nav_extent,
+    }
+
+
+def yaw_toward(source: tuple[float, float, float], target: tuple[float, float, float]) -> float:
+    return math.degrees(math.atan2(target[1] - source[1], target[0] - source[0]))
+
+
+def scaffold_positions(settings: ImportSettings) -> dict[str, tuple[float, float, float]]:
+    layout = scan_layout_from_settings(settings)
+    center = layout["center"]
+    extent = layout["extent"]
+    high = layout["max"]
+    low = layout["min"]
+
+    stand_off = max(800.0, min(max(extent[0], extent[1]) * 0.12, 2500.0))
+    player = (
+        center[0] - extent[0] - stand_off,
+        center[1],
+        max(low[2] + 180.0, min(high[2] + 180.0, center[2] + max(extent[2] * 0.35, 220.0))),
+    )
+    player_rotation = (0.0, yaw_toward(player, center), 0.0)
+
+    camera = (
+        center[0] - extent[0] * 0.85,
+        center[1] - extent[1] * 0.85,
+        high[2] + max(800.0, extent[2] * 0.25),
+    )
+    camera_rotation = (-32.0, yaw_toward(camera, center), 0.0)
+
+    key_light = (
+        center[0] - extent[0] * 0.2,
+        center[1] - extent[1] * 0.3,
+        high[2] + max(1200.0, extent[2] * 0.6),
+    )
+    nav_center = (
+        center[0],
+        center[1],
+        (low[2] + high[2]) / 2.0,
+    )
+    return {
+        "center": center,
+        "extent": extent,
+        "player": player,
+        "player_rotation": player_rotation,
+        "camera": camera,
+        "camera_rotation": camera_rotation,
+        "key_light": key_light,
+        "nav_center": nav_center,
+    }
+
+
+def build_navigation_data() -> bool:
+    try:
+        if hasattr(unreal, "EditorLevelLibrary") and hasattr(unreal.EditorLevelLibrary, "build_paths"):
+            unreal.EditorLevelLibrary.build_paths()
+            return True
+    except Exception as exc:
+        warn(f"Could not build paths through EditorLevelLibrary: {exc}")
+    try:
+        if hasattr(unreal, "SystemLibrary"):
+            unreal.SystemLibrary.execute_console_command(None, "RebuildNavigation")
+            return True
+    except Exception as exc:
+        warn(f"Could not execute RebuildNavigation console command: {exc}")
+    return False
+
+
 def create_demo_scaffold(settings: ImportSettings, meshes: list) -> None:
     if not load_or_create_level(settings.demo_level_path):
         fail(f"Could not load or create demo level {settings.demo_level_path}")
 
     upsert_scan_actors(meshes, settings)
+    positions = scaffold_positions(settings)
 
     player_start_class = resolve_unreal_class("PlayerStart", "/Script/Engine.PlayerStart")
     directional_light_class = resolve_unreal_class("DirectionalLight", "/Script/Engine.DirectionalLight")
@@ -1016,19 +1387,23 @@ def create_demo_scaffold(settings: ImportSettings, meshes: list) -> None:
         "DirectionalLightComponent", "/Script/Engine.DirectionalLightComponent", required=False
     )
     camera_component_class = resolve_unreal_class("CameraComponent", "/Script/Engine.CameraComponent", required=False)
+    sky_light_class = resolve_unreal_class("SkyLight", "/Script/Engine.SkyLight", required=False)
+    sky_light_component_class = resolve_unreal_class(
+        "SkyLightComponent", "/Script/Engine.SkyLightComponent", required=False
+    )
 
     player_start = ensure_actor(
         "AdaptSim_PlayerStart",
         player_start_class,
-        (-300.0, 0.0, 120.0),
-        (0.0, 0.0, 0.0),
+        positions["player"],
+        positions["player_rotation"],
     )
     log(f"Ensured {actor_label(player_start)}")
 
     directional_light = ensure_actor(
         "AdaptSim_KeyLight",
         directional_light_class,
-        (0.0, 0.0, 450.0),
+        positions["key_light"],
         (-45.0, -35.0, 0.0),
     )
     light_component = (
@@ -1043,18 +1418,38 @@ def create_demo_scaffold(settings: ImportSettings, meshes: list) -> None:
     camera = ensure_actor(
         "AdaptSim_DemoCamera",
         camera_actor_class,
-        (-650.0, -850.0, 350.0),
-        (-18.0, 38.0, 0.0),
+        positions["camera"],
+        positions["camera_rotation"],
     )
     camera_component = first_component(camera, camera_component_class) if camera_component_class else None
     if camera_component:
-        try_set_editor_property(camera_component, "field_of_view", 70.0)
+        try_set_editor_property(camera_component, "field_of_view", 78.0)
+    player0 = auto_receive_player0()
+    if player0 is not None:
+        if not try_set_editor_property(camera, "auto_activate_for_player", player0):
+            warn("Could not set AdaptSim_DemoCamera auto_activate_for_player")
     log(f"Ensured {actor_label(camera)}")
+
+    if sky_light_class:
+        sky_light = ensure_actor(
+            "AdaptSim_SkyLight",
+            sky_light_class,
+            (positions["center"][0], positions["center"][1], positions["camera"][2]),
+            (0.0, 0.0, 0.0),
+        )
+        sky_component = (
+            first_component(sky_light, sky_light_component_class)
+            if sky_light_component_class
+            else None
+        )
+        if sky_component:
+            try_set_editor_property(sky_component, "intensity", 1.5)
+        log(f"Ensured {actor_label(sky_light)}")
 
     nav_volume = ensure_actor(
         "AdaptSim_NavMeshBounds",
         nav_mesh_bounds_class,
-        (0.0, 0.0, 180.0),
+        positions["nav_center"],
         (0.0, 0.0, 0.0),
     )
     try:
@@ -1068,6 +1463,8 @@ def create_demo_scaffold(settings: ImportSettings, meshes: list) -> None:
     except Exception:
         pass
     log(f"Ensured {actor_label(nav_volume)}")
+    if build_navigation_data():
+        log("Navigation data build requested for imported scan level")
 
     upsert_semantic_anchors(settings)
 

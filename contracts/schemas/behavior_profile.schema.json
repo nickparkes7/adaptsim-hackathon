@@ -21,7 +21,8 @@
           "equipment",
           "effect",
           "objective_marker",
-          "training_marker"
+          "training_marker",
+          "threat_vector"
         ],
         "type": "string"
       },

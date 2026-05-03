@@ -20,6 +20,20 @@ HttpOrApiUrl = Annotated[str, Field(pattern=r"^(https?://|/api/).+")]
 Probability = Annotated[float, Field(ge=0, le=1)]
 Meters = float
 JsonScalar = str | int | float | bool | None
+ThreatCategory = Literal[
+    "dismounted_personnel",
+    "uav",
+    "fpv_drone",
+    "quadcopter",
+    "ugv",
+    "vehicle",
+    "usv",
+    "weapon_equipment",
+    "sensor_payload",
+]
+MovementDomain = Literal["ground", "air", "water", "interior"]
+TacticalRole = Literal["recon", "harassment", "ambush", "patrol", "breach", "overwatch", "decoy"]
+SafetyNote = Literal["non-operational training simulation"]
 
 CapturePhase = Literal[
     "created",
@@ -416,7 +430,13 @@ class AssetGenerationRequest(ContractModel):
 
 
 class GeneratedAssetReference(ContractModel):
-    artifact_type: Literal["semantic_environment", "asset_card", "scenario_manifest", "unreal_level"]
+    artifact_type: Literal[
+        "semantic_environment",
+        "asset_card",
+        "scenario_manifest",
+        "unreal_level",
+        "generated_glb",
+    ]
     artifact_id: Identifier | None = None
     gcs_uri: GcsUri | None = None
     unreal_asset_path: AssetPath | None = None
@@ -448,6 +468,27 @@ class AssetGenerationResult(ContractModel):
         return self
 
 
+class ThreatMetadata(ContractModel):
+    threat_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    threat_domain: Literal["air", "ground", "maritime", "equipment", "personnel", "unknown"] = "unknown"
+    threat_category: Tag = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    platform_family: str = Field(min_length=1, max_length=96)
+    training_role: str = Field(min_length=1, max_length=180)
+    visual_fidelity_goal: str = Field(min_length=1, max_length=240)
+    source_asset_id: Identifier | None = None
+    source_database_path: str | None = Field(default=None, max_length=500)
+    source_rationale: str | None = Field(default=None, max_length=500)
+    demo_priority: int = Field(default=0, ge=0, le=10)
+    runtime_note: str = Field(
+        default=(
+            "Visual prototype only; runtime behavior, collision, scale, and spawn whitelist "
+            "require Unreal review."
+        ),
+        min_length=1,
+        max_length=240,
+    )
+
+
 class AssetCard(ContractModel):
     contract_type: Literal["asset_card"] = "asset_card"
     schema_version: Literal["1.0"] = SCHEMA_VERSION
@@ -460,6 +501,7 @@ class AssetCard(ContractModel):
         "effect",
         "objective_marker",
         "training_marker",
+        "threat_vector",
     ]
     display_name: str = Field(min_length=1, max_length=96)
     description: str = Field(min_length=1, max_length=500)
@@ -478,14 +520,25 @@ class AssetCard(ContractModel):
     collision_profile: Literal["none", "block_all", "overlap_only", "pawn"]
     bounds_m: BoundsM | None = None
     ingestion_status: Literal["ready", "prototype", "placeholder"] = "prototype"
+    threat_metadata: ThreatMetadata | None = None
+    threat_category: ThreatCategory | None = None
+    movement_domain: MovementDomain | None = None
+    tactical_role: TacticalRole | None = None
+    visual_generation_prompt: str | None = Field(default=None, max_length=1200)
+    runtime_binding_hint: str | None = Field(default=None, max_length=300)
+    spawn_affordances: list[Tag] = Field(default_factory=list, max_length=32)
+    behavior_profile_candidates: list[Identifier] = Field(default_factory=list, max_length=12)
+    safety_note: SafetyNote = "non-operational training simulation"
 
     @field_validator(
         "gameplay_tags",
         "capabilities",
         "equipment",
         "preferred_affordances",
+        "spawn_affordances",
         "constraints",
         "behavior_profiles",
+        "behavior_profile_candidates",
     )
     @classmethod
     def require_unique_values(cls, value: list[str]) -> list[str]:
@@ -498,8 +551,10 @@ class AssetCard(ContractModel):
         "capabilities",
         "equipment",
         "preferred_affordances",
+        "spawn_affordances",
         "constraints",
         "behavior_profiles",
+        "behavior_profile_candidates",
     )
     @classmethod
     def validate_tokens(cls, value: list[str]) -> list[str]:
@@ -520,12 +575,98 @@ class AssetCard(ContractModel):
 
     @model_validator(mode="after")
     def validate_spawn_contract(self) -> AssetCard:
+        if self.category == "threat_vector":
+            required = {
+                "threat_category": self.threat_category,
+                "movement_domain": self.movement_domain,
+                "tactical_role": self.tactical_role,
+                "visual_generation_prompt": self.visual_generation_prompt,
+                "runtime_binding_hint": self.runtime_binding_hint,
+            }
+            missing = [field for field, value in required.items() if not value]
+            if missing:
+                raise ValueError(f"threat_vector assets require {', '.join(missing)}")
         if self.spawn_policy == "scenario_director_whitelist":
             if not self.unreal_asset_path:
                 raise ValueError("whitelisted spawnable assets require unreal_asset_path")
             if not self.behavior_profiles:
                 raise ValueError("whitelisted spawnable assets require at least one behavior_profile")
         return self
+
+
+class GeneratedAssetDatabaseCard(AssetCard):
+    category: Literal["adversary_role", "equipment", "effect", "training_marker", "threat_vector"]
+    threat_category: ThreatCategory
+    movement_domain: MovementDomain
+    tactical_role: TacticalRole
+    visual_generation_prompt: str = Field(min_length=1, max_length=1200)
+    runtime_binding_hint: str = Field(min_length=1, max_length=300)
+    spawn_affordances: list[Tag] = Field(min_length=1, max_length=32)
+    behavior_profile_candidates: list[Identifier] = Field(default_factory=list, max_length=12)
+    safety_note: SafetyNote = "non-operational training simulation"
+    threat_metadata: ThreatMetadata
+    source_rationale: str = Field(min_length=1, max_length=500)
+
+
+class GeneratedTrellisCandidate(ContractModel):
+    asset_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    display_name: str = Field(min_length=1, max_length=96)
+    threat_category: ThreatCategory
+    movement_domain: MovementDomain
+    tactical_role: TacticalRole
+    visual_generation_prompt: str = Field(min_length=1, max_length=1200)
+    generation_prompt: str = Field(min_length=1, max_length=1600)
+    visual_descriptor: str = Field(min_length=1, max_length=800)
+    geometry_descriptor: str = Field(min_length=1, max_length=800)
+    material_descriptor: str = Field(min_length=1, max_length=800)
+    texture_descriptor: str = Field(min_length=1, max_length=800)
+    scale_descriptor: str = Field(min_length=1, max_length=500)
+    scene_context: str = Field(min_length=1, max_length=500)
+    detail_checklist: list[str] = Field(min_length=1, max_length=24)
+    negative_prompt: str = Field(min_length=1, max_length=800)
+    source_asset_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    target_format: Literal["glb"] = "glb"
+    resolution: Literal["512", "1024", "1536"] = "1024"
+    texture_size: Literal[1024, 2048, 4096] = 4096
+    runtime_binding_hint: str = Field(min_length=1, max_length=300)
+    spawn_affordances: list[Tag] = Field(min_length=1, max_length=32)
+    behavior_profile_candidates: list[Identifier] = Field(default_factory=list, max_length=12)
+    safety_note: SafetyNote = "non-operational training simulation"
+    asset_category: Literal["equipment", "threat_vector", "static_prop", "training_marker"]
+    equipment: list[Tag] = Field(default_factory=list, max_length=24)
+    threat_metadata: ThreatMetadata
+    allow_cached_demo_output: bool = False
+    cached_demo_key: str = Field(default="", max_length=120)
+    safety_notes: list[str] = Field(default_factory=list, max_length=24)
+
+    @field_validator("spawn_affordances", "behavior_profile_candidates", "equipment")
+    @classmethod
+    def validate_unique_tokens(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("values must be unique")
+        for token in value:
+            if not token or not token.replace("_", "").isalnum() or not token[0].isalpha():
+                raise ValueError(f"invalid token: {token!r}")
+        return value
+
+
+class GeneratedAssetDatabase(ContractModel):
+    contract_type: Literal["generated_asset_database"] = "generated_asset_database"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    session_summary: str = Field(min_length=1, max_length=1000)
+    input_evidence: list[str] = Field(default_factory=list, max_length=24)
+    asset_cards: list[GeneratedAssetDatabaseCard] = Field(min_length=1, max_length=16)
+    trellis_candidates: list[GeneratedTrellisCandidate] = Field(default_factory=list, max_length=12)
+    behavior_profiles: list[Identifier] = Field(default_factory=list, max_length=24)
+    scenario_seed_notes: list[str] = Field(default_factory=list, max_length=24)
+    cautions: list[str] = Field(default_factory=list, max_length=24)
+
+    @field_validator("behavior_profiles")
+    @classmethod
+    def validate_unique_profile_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("behavior_profiles must be unique")
+        return value
 
 
 class BehaviorProfile(ContractModel):
@@ -542,6 +683,7 @@ class BehaviorProfile(ContractModel):
             "effect",
             "objective_marker",
             "training_marker",
+            "threat_vector",
         ]
     ] = Field(min_length=1, max_length=8)
     runtime_system: Literal["none", "state_tree", "behavior_tree", "smart_object", "gameplay_ability"]
@@ -671,6 +813,65 @@ class Trigger(ContractModel):
             raise ValueError("timer_elapsed trigger requires delay_s")
         if self.trigger_type == "telemetry_condition" and not self.condition:
             raise ValueError("telemetry_condition trigger requires condition")
+        return self
+
+
+class ThreatInjection(ContractModel):
+    injection_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_asset_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_asset_display_name: str = Field(min_length=1, max_length=96)
+    threat_category: ThreatCategory
+    movement_domain: MovementDomain
+    tactical_role: TacticalRole
+    scenario_event_id: Identifier | None = None
+    plausibility_factors: list[str] = Field(min_length=1, max_length=8)
+    entry_anchor_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    entry_anchor_tags: list[Tag] = Field(min_length=1, max_length=24)
+    action_summary: str = Field(min_length=1, max_length=500)
+    trainee_objective: str = Field(min_length=1, max_length=500)
+    trigger: Trigger
+    success_criteria: list[str] = Field(min_length=1, max_length=8)
+    scenario_director_binding: list[str] = Field(min_length=1, max_length=8)
+
+    @field_validator("entry_anchor_tags")
+    @classmethod
+    def validate_unique_anchor_tags(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("entry_anchor_tags must be unique")
+        return value
+
+
+class ThreatInjectionPlan(ContractModel):
+    contract_type: Literal["threat_injection_plan"] = "threat_injection_plan"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    plan_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    scenario_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    environment_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    planner_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_at: datetime
+    semantic_environment_ref: str = Field(min_length=1, max_length=260)
+    threat_asset_database_ref: str = Field(min_length=1, max_length=260)
+    generated_asset_database_ref: str = Field(min_length=1, max_length=260)
+    scenario_director_constraints: list[str] = Field(min_length=1, max_length=12)
+    vignette_summary: str = Field(min_length=1, max_length=700)
+    trainee_objective: str = Field(min_length=1, max_length=700)
+    assumptions: list[str] = Field(min_length=1, max_length=12)
+    threats: list[ThreatInjection] = Field(min_length=1, max_length=12)
+    success_criteria: list[str] = Field(min_length=1, max_length=12)
+    linked_scenario_manifest: str | None = Field(default=None, max_length=260)
+
+    @model_validator(mode="after")
+    def validate_injections(self) -> ThreatInjectionPlan:
+        injection_ids = [threat.injection_id for threat in self.threats]
+        duplicates = {injection_id for injection_id in injection_ids if injection_ids.count(injection_id) > 1}
+        if duplicates:
+            raise ValueError(f"duplicate injection_id values: {sorted(duplicates)}")
+        generated_asset_ids = [threat.generated_asset_id for threat in self.threats]
+        duplicate_assets = {
+            asset_id for asset_id in generated_asset_ids if generated_asset_ids.count(asset_id) > 1
+        }
+        if duplicate_assets:
+            raise ValueError(f"duplicate generated_asset_id values: {sorted(duplicate_assets)}")
         return self
 
 
@@ -868,9 +1069,11 @@ CONTRACT_MODELS = {
     "asset_generation_request": AssetGenerationRequest,
     "asset_generation_result": AssetGenerationResult,
     "asset_card": AssetCard,
+    "generated_asset_database": GeneratedAssetDatabase,
     "behavior_profile": BehaviorProfile,
     "semantic_anchor": SemanticAnchor,
     "semantic_environment": SemanticEnvironment,
+    "threat_injection_plan": ThreatInjectionPlan,
     "scenario_manifest": ScenarioManifest,
     "telemetry_event": TelemetryEvent,
     "telemetry_log": TelemetryLog,

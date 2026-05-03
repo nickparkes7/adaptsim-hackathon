@@ -1,4 +1,8 @@
-export function MapStage() {
+import { Button } from "./ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Input } from "./ui/input";
+
+export function MapStage({ children }) {
   return (
     <section
       id="workflow-page-02"
@@ -11,12 +15,12 @@ export function MapStage() {
     >
       <div className="stage-heading compact-step-heading">
         <div>
-          <h2 id="global-map-title">Geospatial View</h2>
+          <h2 id="global-map-title">Scene</h2>
         </div>
         <div className="step-heading-actions">
-          <button id="confirm-map-step" className="primary-button confirm-button map-confirm-button" type="button">
+          <Button id="confirm-map-step" className="primary-button confirm-button map-confirm-button" type="button">
             Confirm
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -39,72 +43,73 @@ export function MapStage() {
         <p id="map-readiness-detail">Waiting for Step 01 source intake.</p>
       </div>
 
-      <details className="map-source-inline" aria-label="Map source controls">
-        <summary className="map-source-inline-head">
-          <div>
-            <p className="eyebrow">Map Source</p>
-            <strong>High-Fidelity Globe</strong>
+      <Collapsible className="map-source-inline" aria-label="Map source controls">
+        <CollapsibleTrigger asChild>
+          <Button className="map-source-inline-head" variant="outline" type="button">
+            <span>Map source</span>
+            <span id="map-source-pill" className="count-pill">
+              Cesium
+            </span>
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="map-source-inline-body" forceMount>
+          <div className="map-source-controls">
+            <label className="field">
+              <span>Provider</span>
+              <div className="provider-row">
+                <select id="map-provider" name="map-provider" aria-label="Map imagery provider"></select>
+                <Button id="add-map-provider" className="quiet-button add-provider-button" variant="outline" type="button" aria-expanded="false">
+                  Add
+                </Button>
+              </div>
+            </label>
+            <Button id="apply-map-source" className="primary-button" type="button">
+              Apply
+            </Button>
           </div>
-          <span id="map-source-pill" className="count-pill">
-            Cesium
-          </span>
-        </summary>
-        <div className="map-source-controls">
-          <label className="field">
-            <span>Provider</span>
-            <div className="provider-row">
-              <select id="map-provider" name="map-provider" aria-label="Map imagery provider"></select>
-              <button id="add-map-provider" className="quiet-button add-provider-button" type="button" aria-expanded="false">
-                Add Source
-              </button>
+          <div id="custom-map-source" className="custom-map-source" hidden>
+            <label className="field">
+              <span>Source name</span>
+              <Input
+                id="custom-provider-name"
+                name="custom-provider-name"
+                type="text"
+                maxLength="80"
+                autoComplete="off"
+                placeholder="Team imagery service"
+              />
+            </label>
+            <label className="field">
+              <span>Source type</span>
+              <select id="custom-provider-type" name="custom-provider-type">
+                <option value="raster">Raster tile URL template</option>
+                <option value="arcgis">ArcGIS MapServer URL</option>
+                <option value="3dtiles">3D Tiles URL</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>URL</span>
+              <Input
+                id="custom-provider-url"
+                name="custom-provider-url"
+                type="url"
+                autoComplete="off"
+                spellCheck="false"
+                placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
+              />
+            </label>
+            <div className="button-row">
+              <Button id="save-custom-provider" className="primary-button" type="button">
+                Save
+              </Button>
+              <Button id="cancel-custom-provider" className="quiet-button" variant="outline" type="button">
+                Cancel
+              </Button>
             </div>
-          </label>
-          <button id="apply-map-source" className="primary-button" type="button">
-            Apply Source
-          </button>
-        </div>
-        <div id="custom-map-source" className="custom-map-source" hidden>
-          <label className="field">
-            <span>Source name</span>
-            <input
-              id="custom-provider-name"
-              name="custom-provider-name"
-              type="text"
-              maxLength="80"
-              autoComplete="off"
-              placeholder="Team imagery service…"
-            />
-          </label>
-          <label className="field">
-            <span>Source type</span>
-            <select id="custom-provider-type" name="custom-provider-type">
-              <option value="raster">Raster tile URL template</option>
-              <option value="arcgis">ArcGIS MapServer URL</option>
-              <option value="3dtiles">3D Tiles URL</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>URL</span>
-            <input
-              id="custom-provider-url"
-              name="custom-provider-url"
-              type="url"
-              autoComplete="off"
-              spellCheck="false"
-              placeholder="https://tiles.example.com/{z}/{x}/{y}.png…"
-            />
-          </label>
-          <div className="button-row">
-            <button id="save-custom-provider" className="primary-button" type="button">
-              Save Source
-            </button>
-            <button id="cancel-custom-provider" className="quiet-button" type="button">
-              Cancel
-            </button>
           </div>
-        </div>
-        <p id="map-source-status" className="map-source-status" aria-live="polite"></p>
-      </details>
+          <p id="map-source-status" className="map-source-status" aria-live="polite"></p>
+        </CollapsibleContent>
+      </Collapsible>
 
       <section className="globe-stage" aria-label="Interactive globe">
         <div id="earth-canvas" aria-label="Interactive geospatial globe for selecting a location"></div>
@@ -116,21 +121,22 @@ export function MapStage() {
           <p id="selected-coordinates">Awaiting geospatial input.</p>
         </div>
         <div className="globe-overlay top-right map-tools" aria-label="Map controls">
-          <button id="center-selected" className="overlay-button" type="button" title="Center selected location">
+          <Button id="center-selected" className="overlay-button" variant="outline" type="button" title="Center selected location">
             Center
-          </button>
-          <button id="zoom-in-map" className="overlay-button icon-button" type="button" aria-label="Zoom in" title="Zoom in">
+          </Button>
+          <Button id="zoom-in-map" className="overlay-button icon-button" variant="outline" type="button" aria-label="Zoom in" title="Zoom in">
             +
-          </button>
-          <button
+          </Button>
+          <Button
             id="zoom-out-map"
             className="overlay-button icon-button"
+            variant="outline"
             type="button"
             aria-label="Zoom out"
             title="Zoom out"
           >
             -
-          </button>
+          </Button>
         </div>
         <div id="country-hover" className="country-hover" hidden></div>
         <div id="public-site-hover" className="site-hover" hidden></div>
@@ -160,6 +166,7 @@ export function MapStage() {
           </div>
         </div>
       </section>
+      {children && <div className="scene-support-stack">{children}</div>}
     </section>
   );
 }

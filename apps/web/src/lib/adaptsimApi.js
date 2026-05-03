@@ -1,12 +1,16 @@
-const defaultApiBase = "http://127.0.0.1:8787/api/v1";
+const defaultApiBase = "/api/v1";
 const defaultSceneId = "scan_hallway_alpha";
+const defaultCachedSceneId = "safety_park";
 const operatorId = "hackathon_demo";
 
 const apiBase = normalizeApiBase(import.meta.env.VITE_ADAPTSIM_API_BASE || defaultApiBase);
 const configuredSceneId = import.meta.env.VITE_ADAPTSIM_SCENE_ID || defaultSceneId;
+const configuredCachedSceneId = import.meta.env.VITE_ADAPTSIM_CACHED_SCENE_ID || defaultCachedSceneId;
 const configuredApiMode = String(import.meta.env.VITE_ADAPTSIM_API_MODE || "").toLowerCase();
+const configuredFastForward = String(import.meta.env.VITE_ADAPTSIM_FAST_FORWARD_RECONSTRUCTION ?? "1").toLowerCase();
 const forceMockApi = configuredApiMode === "mock";
 const preferMockFallback = configuredApiMode === "auto";
+const fastForwardDefault = !["0", "false", "off", "no"].includes(configuredFastForward);
 
 const phaseDefinitions = [
   ["created", "Created", 0, "Capture record is ready for image selection."],
@@ -38,36 +42,230 @@ export const failureCaptureStatuses = new Set(["failed", "sfm_failed"]);
 export const adaptsimApiConfig = {
   apiBase,
   defaultSceneId: configuredSceneId,
+  cachedSceneId: configuredCachedSceneId,
   operatorId,
   mode: forceMockApi ? "mock" : preferMockFallback ? "auto" : "live",
-  isMockMode: forceMockApi
+  isMockMode: forceMockApi,
+  fastForwardDefault
 };
 
 const mockCaptureStore = new Map();
 const mockRunStore = new Map();
+const mockGeneratedAssetStore = new Map();
 
 const mockScenarios = [
   {
     scenario_id: "scan_hallway_delay_001",
-    display_name: "Side Room Delay Contact",
+    display_name: "UAV Recon To Delayed Contact",
     status: "ready",
     training_objective:
-      "Detect and respond to delayed contact from an occluded side room while preserving movement discipline through the hallway.",
-    event_count: 1,
-    severity_max: 0.78,
+      "Move from entry to exit while identifying aerial reconnaissance, avoiding the chokepoint, and responding to delayed contact.",
+    event_count: 3,
+    severity_max: 0.82,
     manifest_url: "/api/v1/scenarios/scan_hallway_delay_001/manifest"
   },
   {
     scenario_id: "scan_hallway_observer_002",
-    display_name: "Partial Obstacle With Observer",
+    display_name: "UGV Probe With Overwatch",
     status: "ready",
     training_objective:
-      "Adapt to a partially obstructed hallway while detecting an observer positioned on a covered line of sight.",
-    event_count: 2,
-    severity_max: 0.62,
+      "Recognize a ground probe, deny the open approach vector, and bound toward cover while an overwatch role activates.",
+    event_count: 4,
+    severity_max: 0.74,
     manifest_url: "/api/v1/scenarios/scan_hallway_observer_002/manifest"
   }
 ];
+
+function buildMockThreatInjectionPlan(sceneId = configuredSceneId) {
+  const resolvedSceneId = sceneId || configuredSceneId || "safety_park";
+  return {
+    contract_type: "threat_injection_plan",
+    schema_version: "0.1-demo",
+    scene_id: resolvedSceneId,
+    source: "frontend_fixture_until_agent_d_endpoint",
+    demo_mode: "cached",
+    readiness: {
+      reconstruction: "cached_loaded",
+      threat_assets: "generated",
+      threat_plan: "compiled",
+      simulation: "ready"
+    },
+    objective:
+      "Move from entry to exit while identifying aerial reconnaissance and responding to delayed dismounted contact.",
+    scene_affordances: [
+      {
+        anchor_id: "entry_gate",
+        role: "trainee_spawn",
+        tactical_label: "Entry",
+        finding: "Covered start with a clean path into the training lane."
+      },
+      {
+        anchor_id: "main_path_chokepoint",
+        role: "movement_pressure_point",
+        tactical_label: "Chokepoint",
+        finding: "Narrow movement channel forces a decision before the exit is visible."
+      },
+      {
+        anchor_id: "low_wall_cover",
+        role: "cover_position",
+        tactical_label: "Cover",
+        finding: "Hard cover supports the expected bound after contact."
+      },
+      {
+        anchor_id: "tree_line_north",
+        role: "uav_entry_vector",
+        tactical_label: "Open sky / tree line",
+        finding: "Clear aerial approach vector for a small UAV visual."
+      },
+      {
+        anchor_id: "service_cut_los",
+        role: "line_of_sight_break",
+        tactical_label: "Line of sight",
+        finding: "Interrupted sightline supports delayed reveal of adversary actors."
+      },
+      {
+        anchor_id: "exit_zone",
+        role: "completion_zone",
+        tactical_label: "Exit",
+        finding: "Scenario completion zone with room for Pixel Streaming handoff."
+      }
+    ],
+    threat_assets: [
+      {
+        asset_id: "uav_fpv_quadrotor_recon",
+        display_name: "FPV Recon Quadcopter",
+        threat_category: "uav",
+        movement_domain: "air",
+        tactical_role: "recon",
+        generation_status: "cached_ready",
+        runtime_binding: "simple_drone_patrol"
+      },
+      {
+        asset_id: "ugv_low_profile_probe",
+        display_name: "Low-Profile UGV Probe",
+        threat_category: "ugv",
+        movement_domain: "ground",
+        tactical_role: "decoy",
+        generation_status: "ready",
+        runtime_binding: "vehicle_actor"
+      },
+      {
+        asset_id: "adversary_rifleman_irregular",
+        display_name: "Dismounted Contact Team",
+        threat_category: "dismounted_personnel",
+        movement_domain: "ground",
+        tactical_role: "ambush",
+        generation_status: "runtime_actor_ready",
+        runtime_binding: "adapt_sim_adversary_runtime"
+      },
+      {
+        asset_id: "sensor_payload_gimbal_visual",
+        display_name: "EO/IR Sensor Payload",
+        threat_category: "sensor_payload",
+        movement_domain: "air",
+        tactical_role: "overwatch",
+        generation_status: "cached_ready",
+        runtime_binding: "visual_equipment"
+      },
+      {
+        asset_id: "adversary_vehicle_utility",
+        display_name: "Adversary Utility Vehicle",
+        threat_category: "vehicle",
+        movement_domain: "ground",
+        tactical_role: "patrol",
+        generation_status: "generating",
+        runtime_binding: "pending_review"
+      }
+    ],
+    spawn_entry_anchors: ["tree_line_north", "main_path_chokepoint", "service_cut_los"],
+    triggers: ["on_scenario_start", "trainee_enters_chokepoint", "trainee_crosses_los_break"],
+    expected_trainee_response:
+      "Identify the aerial threat, avoid lingering in the chokepoint, move to cover, report contact, and continue to the exit zone.",
+    threat_sequence: [
+      {
+        step: 1,
+        trigger: "on_scenario_start",
+        action: "spawn_uav_recon",
+        anchor_id: "tree_line_north",
+        trainee_task: "Identify aerial threat before entering the chokepoint."
+      },
+      {
+        step: 2,
+        trigger: "trainee_enters_chokepoint",
+        action: "activate_ugv_decoy",
+        anchor_id: "main_path_chokepoint",
+        trainee_task: "Avoid fixation on the ground probe and move to cover."
+      },
+      {
+        step: 3,
+        trigger: "trainee_crosses_los_break",
+        action: "spawn_dismounted_contact",
+        anchor_id: "service_cut_los",
+        trainee_task: "React to delayed contact and continue to the exit."
+      }
+    ],
+    assumptions: [
+      "Plausible training threat, not calibrated intelligence truth.",
+      "Runtime behavior can bind Trellis visuals to existing Unreal drone, vehicle, or adversary actors."
+    ]
+  };
+}
+
+export function adaptThreatInjectionPlanPayload(payload, sceneId = configuredSceneId) {
+  const fallback = buildMockThreatInjectionPlan(sceneId);
+  const source = payload && typeof payload === "object" ? payload : fallback;
+  const rawAssets = Array.isArray(source.threat_assets)
+    ? source.threat_assets
+    : Array.isArray(source.assets)
+      ? source.assets
+      : fallback.threat_assets;
+  const rawAffordances = Array.isArray(source.scene_affordances)
+    ? source.scene_affordances
+    : Array.isArray(source.affordances)
+      ? source.affordances
+      : fallback.scene_affordances;
+  const rawSequence = Array.isArray(source.threat_sequence)
+    ? source.threat_sequence
+    : Array.isArray(source.sequence)
+      ? source.sequence
+      : fallback.threat_sequence;
+
+  return {
+    ...fallback,
+    ...source,
+    scene_id: source.scene_id || sceneId || fallback.scene_id,
+    objective: source.objective || source.training_objective || fallback.objective,
+    scene_affordances: rawAffordances.map((affordance, index) => ({
+      anchor_id: affordance.anchor_id || affordance.id || `anchor_${index + 1}`,
+      role: affordance.role || affordance.type || "scenario_anchor",
+      tactical_label: affordance.tactical_label || affordance.label || affordance.role || "Anchor",
+      finding: affordance.finding || affordance.description || affordance.note || ""
+    })),
+    threat_assets: rawAssets.map((asset, index) => ({
+      asset_id: asset.asset_id || asset.id || `threat_asset_${index + 1}`,
+      display_name: asset.display_name || asset.name || asset.asset_id || `Threat Asset ${index + 1}`,
+      threat_category: asset.threat_category || asset.category || "threat_asset",
+      movement_domain: asset.movement_domain || asset.domain || "ground",
+      tactical_role: asset.tactical_role || asset.role || "patrol",
+      generation_status: asset.generation_status || asset.visual_status || asset.status || "pending_review",
+      runtime_binding: asset.runtime_binding || asset.binding || "pending_review"
+    })),
+    threat_sequence: rawSequence.map((step, index) => ({
+      step: Number(step.step || index + 1),
+      trigger: step.trigger || "manual_start",
+      action: step.action || step.event || "activate_threat",
+      anchor_id: step.anchor_id || step.anchor || fallback.spawn_entry_anchors[index] || "scenario_anchor",
+      trainee_task: step.trainee_task || step.expected_response || "Maintain awareness and continue the objective."
+    })),
+    spawn_entry_anchors: Array.isArray(source.spawn_entry_anchors)
+      ? source.spawn_entry_anchors
+      : rawSequence.map((step) => step.anchor_id || step.anchor).filter(Boolean),
+    triggers: Array.isArray(source.triggers)
+      ? source.triggers
+      : rawSequence.map((step) => step.trigger).filter(Boolean),
+    assumptions: Array.isArray(source.assumptions) && source.assumptions.length ? source.assumptions : fallback.assumptions
+  };
+}
 
 function normalizeApiBase(value) {
   return String(value || defaultApiBase).replace(/\/+$/, "");
@@ -203,7 +401,7 @@ function mockCaptureArtifacts(captureId, ready = false) {
   const prefix = buildMockGcsPrefix(captureId);
   return {
     raw_metadata_uri: `${prefix}raw/metadata.json`,
-    sfm_report_uri: ready ? `${prefix}sfm/report.json` : null,
+    sfm_report_uri: ready ? `${prefix}sfm/colmap/report.json` : null,
     splat_ply_uri: ready ? `${prefix}reconstruction/splat.ply` : null,
     splat_usdz_url: ready ? `data:text/plain;charset=utf-8,Mock%20USDZ%20artifact%20for%20${captureId}` : null,
     mesh_preview_url: ready ? `data:text/plain;charset=utf-8,Mock%20mesh%20preview%20for%20${captureId}` : null,
@@ -251,7 +449,7 @@ function buildMockSceneStatus(sceneId) {
   if (sceneId === defaultSceneId || !mockCaptureStore.has(sceneId)) {
     return {
       scene_id: sceneId || defaultSceneId,
-      display_name: sceneId === defaultSceneId ? "Horror Corridor" : sceneId,
+      display_name: sceneId === defaultSceneId ? "Cached Safety Park Training Lane" : sceneId,
       status: "ready",
       source_scan_id: "scan_hallway_alpha_raw",
       unreal_level_path: "/Game/Maps/L_ScannedHallwayAlpha",
@@ -289,8 +487,129 @@ function buildMockSceneStatus(sceneId) {
   };
 }
 
+function buildMockGeneratedAssetDatabase(session) {
+  const sourceFiles = session.sourceFiles || [];
+  const sourceCount = sourceFiles.length;
+  const firstSourceName = sourceFiles[0]?.name || "capture source";
+  return {
+    contract_type: "generated_asset_database",
+    schema_version: "1.0",
+    session_summary: `GPT-5.5 generated a threat asset database from ${sourceCount || 1} capture source${sourceCount === 1 ? "" : "s"}, anchored on ${firstSourceName}.`,
+    input_evidence: sourceFiles.slice(0, 4).map((source) => ({
+      source_id: source.id,
+      name: source.name,
+      cue: "Capture lane source image"
+    })),
+    asset_cards: [
+      {
+        asset_id: "uav_fpv_quadrotor_recon",
+        display_name: "FPV Recon Quadcopter",
+        category: "uav",
+        movement_domain: "air",
+        tactical_role: "recon",
+        lifecycle_status: "demo_ready",
+        spawn_policy: "bind_to_drone_actor"
+      },
+      {
+        asset_id: "ugv_low_profile_probe",
+        display_name: "Low-Profile UGV Probe",
+        category: "ugv",
+        movement_domain: "ground",
+        tactical_role: "decoy",
+        lifecycle_status: "demo_ready",
+        spawn_policy: "bind_to_vehicle_actor"
+      },
+      {
+        asset_id: "adversary_rifleman_irregular",
+        display_name: "Dismounted Contact Team",
+        category: "dismounted_personnel",
+        movement_domain: "ground",
+        tactical_role: "ambush",
+        lifecycle_status: "runtime_actor_ready",
+        spawn_policy: "bind_to_adversary_actor"
+      },
+      {
+        asset_id: "sensor_payload_gimbal_visual",
+        display_name: "EO/IR Sensor Payload",
+        category: "sensor_payload",
+        movement_domain: "air",
+        tactical_role: "overwatch",
+        lifecycle_status: "demo_ready",
+        spawn_policy: "visual_equipment_attachment"
+      }
+    ],
+    trellis_candidates: [
+      {
+        asset_id: "uav_fpv_quadrotor_recon",
+        display_name: "FPV Recon Quadcopter",
+        generation_prompt:
+          "A compact FPV-style training quadcopter visual with ducted rotors, a forward camera pod, matte composite surfaces, and no readable markings.",
+        visual_descriptor: "Small aerial reconnaissance threat visual with camera-forward silhouette.",
+        scale_descriptor: "About 0.35 meters across."
+      },
+      {
+        asset_id: "ugv_low_profile_probe",
+        display_name: "Low-Profile UGV Probe",
+        generation_prompt:
+          "A low-profile unmanned ground vehicle training visual with rugged wheels, a sensor mast, compact chassis, and weathered field finish.",
+        visual_descriptor: "Ground probe silhouette for decoy or patrol behavior.",
+        scale_descriptor: "About 0.8 meters long and 0.35 meters tall."
+      },
+      {
+        asset_id: "sensor_payload_gimbal_visual",
+        display_name: "EO/IR Sensor Payload",
+        generation_prompt:
+          "A compact electro-optical sensor gimbal visual for a training UAV, with rounded turret housing, lens glass, and neutral non-branded materials.",
+        visual_descriptor: "Sensor payload visual that can attach to a drone actor.",
+        scale_descriptor: "About 0.16 meters wide."
+      }
+    ],
+    behavior_profiles: [],
+    scenario_seed_notes: ["Use generated threat visuals as reviewed training assets before ScenarioDirector spawning."],
+    cautions: ["Mock threat asset database; plausible training threat, not calibrated intelligence truth."]
+  };
+}
+
+function buildMockGeneratedAssetSession(session) {
+  const elapsed = Date.now() - session.createdAt;
+  const databaseReady = elapsed >= 4200;
+  const generationStatus = elapsed < 600 ? "queued" : databaseReady ? "complete" : "running";
+  const assetDatabase = databaseReady ? buildMockGeneratedAssetDatabase(session) : null;
+  const trellisElapsed = Math.max(0, elapsed - 4200);
+  const trellisStatus = !databaseReady
+    ? "not_started"
+    : trellisElapsed < 900
+      ? "queued"
+      : trellisElapsed < 3200
+        ? "running"
+        : "submitted";
+
+  return {
+    session_id: session.session_id,
+    status: databaseReady ? "asset_database_ready" : "generating_asset_database",
+    status_url: `/api/v1/generative-assets/sessions/${session.session_id}`,
+    storage_path: `.adaptsim/mock-generated-sessions/${session.session_id}`,
+    input_fingerprint: session.input_fingerprint,
+    generation: {
+      provider: "openai",
+      model: "gpt-5.5",
+      status: generationStatus,
+      error: ""
+    },
+    asset_database: assetDatabase,
+    trellis: {
+      model: "microsoft/TRELLIS.2-4B",
+      status: trellisStatus,
+      endpoint_configured: true,
+      job_id: databaseReady ? `trellis_${session.session_id}` : "",
+      request_path: databaseReady ? `.adaptsim/mock-generated-sessions/${session.session_id}/trellis_request.json` : "",
+      error: ""
+    }
+  };
+}
+
 function mockPixelStreamDataUrl(runId, scenarioId) {
-  const html = `<!doctype html><html><body style="margin:0;background:#07100f;color:#fff7e8;font-family:system-ui;display:grid;place-items:center;min-height:100vh"><main style="max-width:680px;padding:32px;text-align:center"><p style="letter-spacing:.12em;text-transform:uppercase;color:#f3ad4e;font-weight:800">Mock Pixel Streaming</p><h1 style="margin:.25rem 0 1rem;font-size:42px">AdaptSim Runtime</h1><p>Run ${runId} is connected to ${scenarioId}. Replace mock mode with the control API to embed the live Unreal stream.</p></main></body></html>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#07100f;color:#fff7e8;font-family:system-ui;display:grid;place-items:center;min-height:100vh"><main style="max-width:680px;padding:32px;text-align:center"><p style="letter-spacing:.12em;text-transform:uppercase;color:#f3ad4e;font-weight:800">Mock Pixel Streaming</p><h1 style="margin:.25rem 0 1rem;font-size:42px">AdaptSim Training Vignette</h1><p>Run ${runId} is connected to ${scenarioId}. Threat injection plan compiled; replace mock mode with the control API to embed the live Unreal stream.</p></main></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
@@ -373,23 +692,23 @@ export async function uploadFileToSignedUrl(file, upload) {
   return { ok: true };
 }
 
-export function submitCapture(captureId, uploadedImageCount) {
+export function submitCapture(captureId, uploadedImageCount, options = {}) {
   const payload = {
     uploaded_image_count: uploadedImageCount,
-    start_reconstruction: true
+    start_reconstruction: options.startReconstruction !== false
   };
 
   return liveOrMock(
     async () => {
       const capture = mockCaptureStore.get(captureId);
       if (capture) {
-        capture.status = "queued_reconstruction";
+        capture.status = payload.start_reconstruction ? "queued_reconstruction" : "uploaded";
         capture.submittedAt = Date.now();
         capture.uploadedImageCount = uploadedImageCount;
       }
       return {
         capture_id: captureId,
-        status: "queued_reconstruction",
+        status: payload.start_reconstruction ? "queued_reconstruction" : "uploaded",
         status_url: `/api/v1/captures/${captureId}/status`
       };
     },
@@ -431,6 +750,58 @@ export function getCaptureArtifacts(captureId) {
   );
 }
 
+export function getSafetyParkDemoSourceImages() {
+  return requestJson("/demo/safety-park/source-images");
+}
+
+export function createGeneratedAssetSession(payload) {
+  return liveOrMock(
+    async () => {
+      const sourceFiles = Array.isArray(payload?.sourceFiles) ? payload.sourceFiles : [];
+      const sessionId = `asset_${slugify(payload?.displayName || sourceFiles[0]?.name || "capture")}_${Date.now().toString(36)}`.slice(0, 90);
+      const session = {
+        session_id: sessionId,
+        sourceFiles,
+        createdAt: Date.now(),
+        input_fingerprint: Date.now().toString(36)
+      };
+      mockGeneratedAssetStore.set(sessionId, session);
+      return buildMockGeneratedAssetSession(session);
+    },
+    () =>
+      requestJson("/generative-assets/sessions", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      })
+  );
+}
+
+export function getGeneratedAssetSession(sessionId) {
+  return liveOrMock(
+    async () => {
+      const session = mockGeneratedAssetStore.get(sessionId);
+      if (!session) throw new Error(`Mock generated asset session ${sessionId} was not found.`);
+      return buildMockGeneratedAssetSession(session);
+    },
+    () => requestJson(`/generative-assets/sessions/${sessionId}`)
+  );
+}
+
+export function relayGeneratedAssetSessionToTrellis(sessionId) {
+  return liveOrMock(
+    async () => {
+      const session = mockGeneratedAssetStore.get(sessionId);
+      if (!session) throw new Error(`Mock generated asset session ${sessionId} was not found.`);
+      const payload = buildMockGeneratedAssetSession(session);
+      return payload.trellis;
+    },
+    () =>
+      requestJson(`/generative-assets/sessions/${sessionId}/trellis`, {
+        method: "POST"
+      })
+  );
+}
+
 export function getSceneStatus(sceneId) {
   return liveOrMock(
     async () => buildMockSceneStatus(sceneId),
@@ -449,6 +820,23 @@ export function getScenarios(sceneId) {
     },
     () => requestJson(`/scenes/${sceneId}/scenarios`)
   );
+}
+
+export async function getThreatInjectionPlan(sceneId) {
+  const resolvedSceneId = sceneId || configuredSceneId;
+  const mockPlan = () => adaptThreatInjectionPlanPayload(buildMockThreatInjectionPlan(resolvedSceneId), resolvedSceneId);
+  if (forceMockApi) return mockPlan();
+
+  try {
+    const payload = await requestJson(`/scenes/${encodeURIComponent(resolvedSceneId)}/threat-injection-plan`);
+    return adaptThreatInjectionPlanPayload(payload, resolvedSceneId);
+  } catch (error) {
+    if (!preferMockFallback && error?.status && error.status < 500 && error.status !== 404) {
+      throw error;
+    }
+    console.warn("Threat injection endpoint unavailable; using frontend fixture.", error);
+    return mockPlan();
+  }
 }
 
 export function launchScenario(sceneId, scenarioId) {
@@ -534,9 +922,18 @@ export function getRunTelemetry(runId) {
             timestamp: new Date(Date.now() - 6200).toISOString(),
             sim_time_s: 4.8,
             source: "scenario_director",
-            event_type: "trigger_fired",
-            anchor_id: "hallway_main",
-            data: { trigger_type: "trainee_enters_anchor" }
+            event_type: "uav_recon_spawned",
+            anchor_id: "tree_line_north",
+            data: { trigger_type: "on_scenario_start", runtime_binding: "simple_drone_patrol" }
+          },
+          {
+            event_id: "trigger_fired_002",
+            timestamp: new Date(Date.now() - 3600).toISOString(),
+            sim_time_s: 7.1,
+            source: "scenario_director",
+            event_type: "dismounted_contact_spawned",
+            anchor_id: "service_cut_los",
+            data: { trigger_type: "trainee_crosses_los_break", runtime_binding: "adapt_sim_adversary_runtime" }
           },
           {
             event_id: "run_ready_001",
@@ -593,7 +990,7 @@ export function getRunAar(runId) {
         run_id: runId,
         scenario_id: run?.scenario_id || "scan_hallway_delay_001",
         content_type: "text/markdown",
-        markdown: `# After Action Review: ${runId}\n\nMock stream reached ready state and telemetry events were received for ${run?.scenario_id || "scan_hallway_delay_001"}.`
+        markdown: `# After Action Review: ${runId}\n\nMock stream reached ready state, the UAV recon event spawned, and delayed contact telemetry was received for ${run?.scenario_id || "scan_hallway_delay_001"}.`
       };
     },
     () => requestJson(`/runs/${runId}/aar`)

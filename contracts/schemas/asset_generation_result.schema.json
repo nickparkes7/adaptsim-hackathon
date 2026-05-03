@@ -21,7 +21,8 @@
             "semantic_environment",
             "asset_card",
             "scenario_manifest",
-            "unreal_level"
+            "unreal_level",
+            "generated_glb"
           ],
           "title": "Artifact Type",
           "type": "string"

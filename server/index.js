@@ -3,7 +3,7 @@ const path = require("node:path");
 const http = require("node:http");
 const os = require("node:os");
 const crypto = require("node:crypto");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 
 let createTesseractWorker = null;
 let tesseractPsm = null;
@@ -23,6 +23,7 @@ const contractsExamplesDir = path.join(projectRoot, "contracts", "examples");
 const webDistDir = path.join(projectRoot, "apps/web/dist");
 const webPublicDir = path.join(projectRoot, "apps/web/public");
 const dataDir = process.env.DATA_DIR || path.join(webPublicDir, "data");
+const safetyParkZipPath = process.env.ADAPTSIM_SAFETY_PARK_ZIP || path.join(projectRoot, "data", "safety_park", "safety_park.zip");
 const staticRoot = process.env.STATIC_ROOT || webDistDir;
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 32 * 1024);
 const maxVisionBodyBytes = Number(process.env.MAX_VISION_BODY_BYTES || 8 * 1024 * 1024);
@@ -57,9 +58,26 @@ const a100Project = process.env.ADAPTSIM_GCP_PROJECT || "gecko-dev-fde";
 const l4Instance = process.env.ADAPTSIM_L4_INSTANCE || "linux-pixel-streaming";
 const l4Zone = process.env.ADAPTSIM_L4_ZONE || "us-east1-d";
 const l4Project = process.env.ADAPTSIM_GCP_PROJECT || "gecko-dev-fde";
+const l4RepoRoot = process.env.ADAPTSIM_L4_REPO_ROOT || "/home/nicholas.parkes/adaptsim/repos/adaptsim-hackathon";
+const l4UnrealProjectRoot = process.env.ADAPTSIM_L4_UNREAL_PROJECT_ROOT || "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim";
+const l4ContractExamplesRoot = process.env.ADAPTSIM_L4_CONTRACT_EXAMPLES_ROOT || `${l4UnrealProjectRoot}/Saved/AdaptSimContractExamples`;
+const l4CaptureDataRoot = process.env.ADAPTSIM_L4_CAPTURE_DATA_ROOT || "/home/nicholas.parkes/adaptsim/data/captures";
+const defaultPixelStreamingMapPath = process.env.ADAPTSIM_DEFAULT_MAP_PATH || "/Game/AdaptSim/Maps/L_HorrorCorridor_Imported";
+const defaultPixelStreamingSemanticEnvironmentPath = process.env.ADAPTSIM_DEFAULT_SEMANTIC_ENVIRONMENT_PATH || path.posix.join(l4ContractExamplesRoot, "semantic_environments", "horror_corridor_imported.json");
+const l4StatusTimeoutMs = Number(process.env.ADAPTSIM_L4_STATUS_TIMEOUT_MS || workerTriggerTimeoutMs);
 const demoSceneId = "scan_hallway_alpha";
 const demoScenarioIds = ["scan_hallway_delay_001", "scan_hallway_observer_002"];
 const demoRunId = "run_hallway_delay_001";
+const safetyParkDemoImageNames = [
+  "000060.jpg",
+  "000067.jpg",
+  "000076.jpg",
+  "000081.jpg",
+  "000091.jpg",
+  "000101.jpg",
+  "000128.jpg",
+  "000153.jpg"
+];
 const launchedRuns = new Map();
 const defaultAllowedOrigins = [
   "http://127.0.0.1:5173",
@@ -74,6 +92,7 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 const assetSessionJobs = new Map();
+const unrealImportTriggerPromises = new Map();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -114,6 +133,7 @@ function getAllowedCorsOrigin(request) {
   try {
     const originUrl = new URL(origin);
     if (request.headers.host && originUrl.host === request.headers.host) return origin;
+    if (["localhost", "127.0.0.1", "::1"].includes(originUrl.hostname)) return origin;
   } catch {}
 
   return allowedOrigins.has(origin) ? origin : "";
@@ -159,6 +179,74 @@ function sendFile(response, filePath, { body = true } = {}) {
     response.end("Could not read file.");
   });
   stream.pipe(response);
+}
+
+function handleSafetyParkDemoSourceImages(request, response) {
+  if (!fs.existsSync(safetyParkZipPath)) {
+    throw new HttpError(503, `Safety Park dataset zip was not found at ${safetyParkZipPath}.`);
+  }
+
+  sendJson(request, response, 200, {
+    dataset_id: "safety_park_fvdb_tutorial",
+    display_name: "Safety Park FVDB tutorial source photos",
+    archive_path: safetyParkZipPath,
+    source_url: "https://fvdb-reality-capture.readthedocs.io/latest/tutorials/radiance_field_and_mesh_reconstruction.html",
+    image_count: safetyParkDemoImageNames.length,
+    embedded_gps: false,
+    notes:
+      "The FVDB tutorial JPGs do not carry WGS84 EXIF GPS in the sampled files; AdaptSim still runs metadata, vision, and open-image geolocation passes after staging.",
+    images: safetyParkDemoImageNames.map((filename) => ({
+      filename,
+      content_type: "image/jpeg",
+      size_bytes: null,
+      url: `/api/v1/demo/safety-park/source-images/${filename}`
+    }))
+  });
+}
+
+function streamSafetyParkDemoImage(request, response, filename) {
+  const safeFilename = path.basename(filename || "");
+  if (!safetyParkDemoImageNames.includes(safeFilename)) {
+    throw new HttpError(404, `Safety Park demo image ${safeFilename || filename} was not found.`);
+  }
+  if (!fs.existsSync(safetyParkZipPath)) {
+    throw new HttpError(503, `Safety Park dataset zip was not found at ${safetyParkZipPath}.`);
+  }
+
+  const zipEntry = `images_raw/${safeFilename}`;
+  const unzip = spawn("unzip", ["-p", safetyParkZipPath, zipEntry], {
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let stderr = "";
+  let didWriteHead = false;
+
+  unzip.stderr.on("data", (chunk) => {
+    stderr += String(chunk || "");
+  });
+  unzip.on("error", (error) => {
+    if (!response.headersSent) {
+      sendJson(request, response, 500, { error: `Could not read Safety Park demo image: ${error.message}` });
+    } else {
+      response.destroy(error);
+    }
+  });
+  unzip.on("close", (code) => {
+    if (code !== 0 && !didWriteHead && !response.headersSent) {
+      sendJson(request, response, 500, { error: stderr.trim() || `unzip exited with code ${code}` });
+    }
+  });
+
+  setSecurityHeaders(response);
+  setCorsHeaders(request, response);
+  response.writeHead(200, {
+    "Content-Type": "image/jpeg",
+    "Cache-Control": "no-cache"
+  });
+  didWriteHead = true;
+  response.on("close", () => {
+    if (!response.writableEnded && !unzip.killed) unzip.kill();
+  });
+  unzip.stdout.pipe(response);
 }
 
 function getPathname(urlPath) {
@@ -651,6 +739,53 @@ function createGeneratedSessionRecord(body) {
 
 function assetDatabaseResponseSchema() {
   const textArray = { type: "array", items: { type: "string" }, maxItems: 24 };
+  const threatCategory = {
+    type: "string",
+    enum: [
+      "dismounted_personnel",
+      "uav",
+      "fpv_drone",
+      "quadcopter",
+      "ugv",
+      "vehicle",
+      "usv",
+      "weapon_equipment",
+      "sensor_payload"
+    ]
+  };
+  const movementDomain = { type: "string", enum: ["ground", "air", "water", "interior"] };
+  const tacticalRole = { type: "string", enum: ["recon", "harassment", "ambush", "patrol", "breach", "overwatch", "decoy"] };
+  const safetyNote = { type: "string", enum: ["non-operational training simulation"] };
+  const threatMetadata = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      threat_id: { type: "string", pattern: "^[a-z][a-z0-9_]{2,63}$" },
+      threat_domain: { type: "string", enum: ["air", "ground", "maritime", "equipment", "personnel", "unknown"] },
+      threat_category: { type: "string", pattern: "^[a-z][a-z0-9_]{1,63}$" },
+      platform_family: { type: "string" },
+      training_role: { type: "string" },
+      visual_fidelity_goal: { type: "string" },
+      source_asset_id: { type: ["string", "null"] },
+      source_database_path: { type: ["string", "null"] },
+      source_rationale: { type: ["string", "null"] },
+      demo_priority: { type: "integer", minimum: 0, maximum: 10 },
+      runtime_note: { type: "string" }
+    },
+    required: [
+      "threat_id",
+      "threat_domain",
+      "threat_category",
+      "platform_family",
+      "training_role",
+      "visual_fidelity_goal",
+      "source_asset_id",
+      "source_database_path",
+      "source_rationale",
+      "demo_priority",
+      "runtime_note"
+    ]
+  };
   const modifierWeights = {
     type: "array",
     maxItems: 12,
@@ -706,6 +841,15 @@ function assetDatabaseResponseSchema() {
               required: ["x", "y", "z"]
             },
             ingestion_status: { type: "string", enum: ["ready", "prototype", "placeholder"] },
+            threat_category: threatCategory,
+            movement_domain: movementDomain,
+            tactical_role: tacticalRole,
+            visual_generation_prompt: { type: "string" },
+            runtime_binding_hint: { type: "string" },
+            spawn_affordances: textArray,
+            behavior_profile_candidates: textArray,
+            safety_note: safetyNote,
+            threat_metadata: threatMetadata,
             source_rationale: { type: "string" }
           },
           required: [
@@ -727,6 +871,15 @@ function assetDatabaseResponseSchema() {
             "collision_profile",
             "bounds_m",
             "ingestion_status",
+            "threat_category",
+            "movement_domain",
+            "tactical_role",
+            "visual_generation_prompt",
+            "runtime_binding_hint",
+            "spawn_affordances",
+            "behavior_profile_candidates",
+            "safety_note",
+            "threat_metadata",
             "source_rationale"
           ]
         }
@@ -740,6 +893,10 @@ function assetDatabaseResponseSchema() {
           properties: {
             asset_id: { type: "string", pattern: "^[a-z][a-z0-9_]{2,63}$" },
             display_name: { type: "string" },
+            threat_category: threatCategory,
+            movement_domain: movementDomain,
+            tactical_role: tacticalRole,
+            visual_generation_prompt: { type: "string" },
             generation_prompt: { type: "string" },
             visual_descriptor: { type: "string" },
             geometry_descriptor: { type: "string" },
@@ -753,11 +910,24 @@ function assetDatabaseResponseSchema() {
             target_format: { type: "string", enum: ["glb"] },
             resolution: { type: "string", enum: ["512", "1024", "1536"] },
             texture_size: { type: "integer", enum: [1024, 2048, 4096] },
+            runtime_binding_hint: { type: "string" },
+            spawn_affordances: textArray,
+            behavior_profile_candidates: textArray,
+            safety_note: safetyNote,
+            asset_category: { type: "string", enum: ["equipment", "threat_vector", "static_prop", "training_marker"] },
+            equipment: textArray,
+            threat_metadata: threatMetadata,
+            allow_cached_demo_output: { type: "boolean" },
+            cached_demo_key: { type: "string" },
             safety_notes: textArray
           },
           required: [
             "asset_id",
             "display_name",
+            "threat_category",
+            "movement_domain",
+            "tactical_role",
+            "visual_generation_prompt",
             "generation_prompt",
             "visual_descriptor",
             "geometry_descriptor",
@@ -771,6 +941,15 @@ function assetDatabaseResponseSchema() {
             "target_format",
             "resolution",
             "texture_size",
+            "runtime_binding_hint",
+            "spawn_affordances",
+            "behavior_profile_candidates",
+            "safety_note",
+            "asset_category",
+            "equipment",
+            "threat_metadata",
+            "allow_cached_demo_output",
+            "cached_demo_key",
             "safety_notes"
           ]
         }
@@ -798,21 +977,27 @@ function buildAssetGenerationPrompt(manifest) {
     "You are AdaptSim's asset-database generator. Produce a strict JSON generated_asset_database for a training simulation authoring pipeline.",
     "The primary users are military training and analysis teams. Generate explicit, inspectable defensive-training assets centered on realistic threat vectors, not tourism scenery.",
     "Use the uploaded photos, video/file metadata, extracted coordinates, and analyst notes only as source cues. Generate training-relevant threat-vector assets, not live intelligence.",
-    "Use manifest.militaryContext as the Step 02 source of truth for threat-vector themes. Prefer weapons, inert weapon cues, small tools, vehicles, drones, equipment cases, barriers, sensor shells, communications markers, and other equipment-oriented training assets over location-specific place cards.",
+    "Use manifest.militaryContext as the Step 02 source of truth for threat-vector themes. Prefer inert weapon/equipment cues, vehicles, drones, equipment cases, sensor shells, communications markers, and other equipment-oriented training assets over location-specific place cards.",
     "Do not create asset cards whose primary value is a country, city, port, airport, landmark, or base name. Geographic context may explain why the simulation needs a vector, but the asset itself should be a reusable threat vector, equipment cue, vehicle cue, or training prop.",
     "The output must be suitable for later validation against AdaptSim asset-card contracts and for offline Trellis/TRELLIS.2 static asset generation.",
-    "Prefer asset_cards with category threat_vector. Use adversary_role for abstract OPFOR/persona metadata, equipment for inert representative equipment, static_prop for physical training props, effect for simulated non-damaging cues, objective_marker/training_marker for evaluator controls.",
-    "Threat-vector assets should describe realistic defensive-training concerns such as surveillance cue, suspicious package cue, small UAS cue, vehicle checkpoint concern, crowd anomaly, concealment indicator, restricted-area probe, communications disruption marker, access-control concern, perimeter observation cue, and evacuation friction cue.",
+    "Prefer asset_cards with category threat_vector. Use adversary_role for abstract OPFOR/persona metadata, equipment for inert representative equipment, effect for simulated non-damaging cues, and objective_marker/training_marker for evaluator controls. static_prop is allowed only when it is a reviewed physical training cue, not the primary database framing.",
+    "Generate threat-vector assets for non-operational military training simulation. Do not frame the database as decorative props, generic barricades, crates, caution signs, objective placards, or set dressing.",
+    "Asset coverage should include UAV/FPV drone/quadcopter assets, UGV or light vehicle assets, USV assets only where water or maritime context is relevant, inert weapon/equipment visual assets, sensor or payload visuals, and dismounted personnel metadata for the existing Unreal adversary runtime.",
+    "Threat-vector assets should describe realistic defensive-training concerns such as surveillance cue, small UAS cue, vehicle checkpoint concern, concealment indicator, restricted-area probe, communications disruption marker, access-control concern, perimeter observation cue, and evacuation friction cue.",
+    "Every asset_card must include threat_category, movement_domain, tactical_role, visual_generation_prompt, runtime_binding_hint, spawn_affordances, behavior_profile_candidates, safety_note exactly \"non-operational training simulation\", and threat_metadata.",
     "Each threat_vector must include observable indicators, training purpose, likely trainee decision point, and simulation-safe constraints in description, capabilities, preferred_affordances, constraints, gameplay_tags, and source_rationale.",
-    "For Trellis candidates, prefer static non-functional props associated with those threat vectors: mock suspicious package, inert drone silhouette, inspection marker, temporary barrier, sensor mast shell, training sign, equipment case, low-detail vehicle proxy, crowd marker, debris/obstruction prop, and other non-functional visual cues.",
+    "For the demo, ensure trellis_candidates include at least one air threat visual such as a small quadcopter or FPV drone and at least one ground vehicle/equipment visual such as a light UGV, rover, cart, sensor payload, or inert equipment case. If the source input is sparse, mark source_rationale as a generic demo fallback rather than implying real-world presence.",
+    "Allowed movement_domain values are ground, air, water, and interior. Allowed tactical_role values are recon, harassment, ambush, patrol, breach, overwatch, and decoy.",
+    "Use runtime_binding_hint to describe the intended Unreal binding surface at a high level, such as placeholder pawn, skeletal actor, static mesh visual, sensor payload mesh, Niagara-safe effect shell, or reviewed Blueprint path requirement.",
+    "Use spawn_affordances for placement cues such as concealment, line_of_sight, rooftop, doorway, open_floor, vehicle_route, waterway, dock_edge, fallback_route, or objective_area. Use behavior_profile_candidates for compatible behavior names, not operational instructions.",
     "For every trellis_candidate, write descriptors detailed enough for high-quality 3D generation: silhouette, component breakdown, proportions, dimensions in meters, materials, surface texture, color palette, wear/weathering, seams, handles, fasteners, labels or markings if visible, and scene placement context.",
-    "Each trellis_candidate.generation_prompt should be a consolidated text-to-3D prompt of roughly 80-140 words. Include the object type, its key geometry, scale, material stack, texture style, age/wear, and what should be emphasized from the source cue.",
-    "Use detail_checklist to enumerate the concrete geometry/texture details Trellis should preserve. Keep descriptors static and visual; do not include instructions for functionality, damage effects, targeting, real-world unit markings, or weapon operation.",
-    "Do not generate live force disposition, target-specific vulnerabilities, ingress/egress attack guidance, standoff distances, timing guidance, weapon employment, construction details, evasion steps, real-world attack plans, or operational readiness claims.",
+    "Each trellis_candidate.visual_generation_prompt and generation_prompt should describe a non-operational visual training asset in roughly 80-140 words. Include the threat-vector type, key geometry, scale, material stack, texture style, age/wear, and what should be emphasized from the source cue. Each trellis_candidate must include asset_category, equipment, threat_metadata, allow_cached_demo_output, and cached_demo_key.",
+    "Use detail_checklist to enumerate the concrete geometry/texture details Trellis should preserve. Keep descriptors static and visual; do not include instructions for functionality, damage effects, targeting, real-world unit markings, weapon operation, sensor exploitation, or payload use.",
+    "Do not generate live force disposition, target-specific vulnerabilities, ingress/egress attack guidance, standoff distances, timing guidance, weapon employment, construction details, evasion steps, real-world attack plans, operational readiness claims, or location-specific security gaps.",
     "For real landmarks, public venues, bases, or sensitive locations, keep threat vectors generic and training-focused. Do not identify exploitable weak points, optimal attack positions, or location-specific security gaps.",
     "session_summary must state that the database is a military training threat-vector asset database and must name the main training threat themes in non-operational language.",
     "Do not mark generated assets as scenario_director_whitelist unless a reviewed Unreal /Game path is already known. Use never_spawn and placeholder/prototype status for generated candidates.",
-    "Avoid fully rigged humans, exact weapon mechanics, or safety-critical geometry as Trellis outputs. Represent human/adversary roles as asset-card metadata only.",
+    "Do not include dismounted personnel as Trellis candidates for this demo. Soldiers should use existing Unreal adversary runtime unless a reviewed rigged asset is already available. Represent personnel only as asset-card metadata and runtime_binding_hint. For weapon/equipment visuals, depict inert exterior forms only, with no working mechanisms or assembly detail.",
     `Input manifest JSON:\n${JSON.stringify(manifest, null, 2)}`
   ].join("\n\n");
 }
@@ -839,6 +1024,60 @@ function buildOpenAiAssetInput(manifest, sourceFiles) {
   return [{ role: "user", content }];
 }
 
+function threatDomainFromMovement(movementDomain, threatCategory) {
+  const category = String(threatCategory || "");
+  if (movementDomain === "air" || ["uav", "fpv_drone", "quadcopter"].includes(category)) return "air";
+  if (movementDomain === "water" || category === "usv") return "maritime";
+  if (["weapon_equipment", "sensor_payload"].includes(category)) return "equipment";
+  if (category === "dismounted_personnel") return "personnel";
+  if (movementDomain === "ground" || ["ugv", "vehicle"].includes(category)) return "ground";
+  return "unknown";
+}
+
+function cachedDemoKeyForThreat(threatCategory, movementDomain) {
+  const category = String(threatCategory || "");
+  if (["uav", "fpv_drone", "quadcopter"].includes(category) || movementDomain === "air") return "fpv_quadcopter";
+  if (["ugv", "vehicle"].includes(category) || movementDomain === "ground") return "light_ugv";
+  if (["weapon_equipment", "sensor_payload"].includes(category)) return "equipment_visual";
+  return "generic_static_prop";
+}
+
+function normalizeThreatMetadata(source, fallback = {}) {
+  const metadata = source?.threat_metadata && typeof source.threat_metadata === "object" ? source.threat_metadata : {};
+  const threatCategory = toSlug(metadata.threat_category || source?.threat_category || fallback.threat_category || "vehicle", "vehicle");
+  const movementDomain = metadata.threat_domain
+    || threatDomainFromMovement(source?.movement_domain || fallback.movement_domain, threatCategory);
+  const threatId = toSlug(metadata.threat_id || source?.asset_id || fallback.asset_id || `threat_${threatCategory}`, "threat_vector");
+  const sourceAssetId = metadata.source_asset_id || source?.source_asset_id || fallback.source_asset_id || source?.asset_id || null;
+  return {
+    threat_id: threatId,
+    threat_domain: ["air", "ground", "maritime", "equipment", "personnel", "unknown"].includes(movementDomain)
+      ? movementDomain
+      : "unknown",
+    threat_category: threatCategory,
+    platform_family: clampApiText(metadata.platform_family || source?.display_name || fallback.display_name, 96, threatId),
+    training_role: clampApiText(
+      metadata.training_role || source?.tactical_role || fallback.tactical_role,
+      180,
+      "Visual recognition training cue; no operational behavior is encoded."
+    ),
+    visual_fidelity_goal: clampApiText(
+      metadata.visual_fidelity_goal || source?.visual_descriptor || source?.visual_generation_prompt,
+      240,
+      "Recognizable silhouette and approximate scale for non-operational demo review."
+    ),
+    source_asset_id: sourceAssetId ? toSlug(sourceAssetId, "source_asset") : null,
+    source_database_path: metadata.source_database_path || null,
+    source_rationale: clampApiText(metadata.source_rationale || source?.source_rationale || fallback.source_rationale, 500, ""),
+    demo_priority: Math.max(0, Math.min(10, Number(metadata.demo_priority ?? fallback.demo_priority ?? 5) || 0)),
+    runtime_note: clampApiText(
+      metadata.runtime_note || source?.runtime_binding_hint || fallback.runtime_binding_hint,
+      240,
+      "Visual prototype only; runtime behavior, collision, scale, and spawn whitelist require Unreal review."
+    )
+  };
+}
+
 function normalizeGeneratedAssetDatabase(database) {
   const fallback = {
     contract_type: "generated_asset_database",
@@ -855,8 +1094,9 @@ function normalizeGeneratedAssetDatabase(database) {
   merged.asset_cards = Array.isArray(merged.asset_cards)
     ? merged.asset_cards.map((card) => {
         if (!card || typeof card !== "object") return card;
+        let nextCard = card;
         if (Array.isArray(card.likelihood_modifiers)) {
-          return {
+          nextCard = {
             ...card,
             likelihood_modifiers: Object.fromEntries(
               card.likelihood_modifiers
@@ -864,11 +1104,13 @@ function normalizeGeneratedAssetDatabase(database) {
                 .map((entry) => [entry.tag, Number(entry.weight) || 0])
             )
           };
+        } else if (!card.likelihood_modifiers || typeof card.likelihood_modifiers !== "object") {
+          nextCard = { ...card, likelihood_modifiers: {} };
         }
-        if (!card.likelihood_modifiers || typeof card.likelihood_modifiers !== "object") {
-          return { ...card, likelihood_modifiers: {} };
-        }
-        return card;
+        return {
+          ...nextCard,
+          threat_metadata: normalizeThreatMetadata(nextCard)
+        };
       })
     : [];
   merged.trellis_candidates = Array.isArray(merged.trellis_candidates)
@@ -877,8 +1119,10 @@ function normalizeGeneratedAssetDatabase(database) {
         const detailChecklist = Array.isArray(candidate.detail_checklist)
           ? candidate.detail_checklist.map((item) => clampApiText(item, 160)).filter(Boolean).slice(0, 24)
           : [];
+        const threatMetadata = normalizeThreatMetadata(candidate);
         return {
           ...candidate,
+          visual_generation_prompt: clampApiText(candidate.visual_generation_prompt, 1600, candidate.generation_prompt || ""),
           generation_prompt: clampApiText(candidate.generation_prompt, 1600),
           visual_descriptor: clampApiText(candidate.visual_descriptor, 800),
           geometry_descriptor: clampApiText(candidate.geometry_descriptor, 800),
@@ -887,7 +1131,18 @@ function normalizeGeneratedAssetDatabase(database) {
           scale_descriptor: clampApiText(candidate.scale_descriptor, 500),
           scene_context: clampApiText(candidate.scene_context, 500),
           detail_checklist: detailChecklist,
-          negative_prompt: clampApiText(candidate.negative_prompt, 800)
+          negative_prompt: clampApiText(candidate.negative_prompt, 800),
+          asset_category: candidate.asset_category || "threat_vector",
+          equipment: Array.isArray(candidate.equipment)
+            ? candidate.equipment.map((item) => toSlug(item, "equipment")).filter(Boolean).slice(0, 24)
+            : [],
+          threat_metadata: threatMetadata,
+          allow_cached_demo_output: candidate.allow_cached_demo_output !== false,
+          cached_demo_key: clampApiText(
+            candidate.cached_demo_key,
+            80,
+            cachedDemoKeyForThreat(candidate.threat_category, candidate.movement_domain)
+          )
         };
       })
     : [];
@@ -949,63 +1204,137 @@ async function callOpenAiAssetGenerator(manifest, sourceFiles) {
 function buildDetailedTrellisPrompt(candidate) {
   const detailChecklist = Array.isArray(candidate.detail_checklist) ? candidate.detail_checklist.filter(Boolean) : [];
   return [
-    candidate.generation_prompt,
+    candidate.visual_generation_prompt || candidate.generation_prompt,
     candidate.visual_descriptor ? `Visual descriptor: ${candidate.visual_descriptor}` : "",
     candidate.geometry_descriptor ? `Geometry and proportions: ${candidate.geometry_descriptor}` : "",
     candidate.material_descriptor ? `Materials: ${candidate.material_descriptor}` : "",
     candidate.texture_descriptor ? `Texture, color, and wear: ${candidate.texture_descriptor}` : "",
     candidate.scale_descriptor ? `Scale: ${candidate.scale_descriptor}` : "",
     candidate.scene_context ? `Scene context: ${candidate.scene_context}` : "",
+    candidate.threat_category ? `Threat category: ${candidate.threat_category}.` : "",
+    candidate.movement_domain ? `Movement domain: ${candidate.movement_domain}.` : "",
+    candidate.tactical_role ? `Tactical role for training metadata: ${candidate.tactical_role}.` : "",
+    candidate.runtime_binding_hint ? `Runtime binding hint: ${candidate.runtime_binding_hint}.` : "",
     detailChecklist.length ? `Required preserved details: ${detailChecklist.join("; ")}.` : "",
-    "Generate a static, watertight, simulation-ready GLB prop with clear silhouette, believable bevels, usable UVs, and no animated or functional behavior."
+    "Generate a static, watertight, simulation-ready GLB visual asset with clear silhouette, believable bevels, usable UVs, and no animated, operational, targeting, or functional behavior."
   ].filter(Boolean).join("\n");
 }
 
 function buildDetailedTrellisNegativePrompt(candidate) {
   return [
     candidate.negative_prompt,
-    "people, faces, bodies, readable real-world insignia, national or organizational markings, functional weapons, firing mechanisms, targeting aids, live maps, operational labels, excessive text, low-detail geometry, melted surfaces, floating parts, distorted proportions, unsafe sharp artifacts, glossy plastic look unless specified"
+    "identifiable faces, photoreal real persons, readable real-world insignia, national or organizational markings, functional weapon mechanisms, firing internals, targeting aids, live maps, operational labels, assembly instructions, excessive text, low-detail geometry, melted surfaces, floating parts, distorted proportions, unsafe sharp artifacts, glossy plastic look unless specified"
   ].filter(Boolean).join(", ");
 }
 
 function buildTrellisRelayPayload(record) {
   const database = record.asset_database || {};
   const candidates = Array.isArray(database.trellis_candidates) ? database.trellis_candidates : [];
+  const sourceCards = new Map(
+    (Array.isArray(database.asset_cards) ? database.asset_cards : [])
+      .filter((card) => card && typeof card === "object" && typeof card.asset_id === "string")
+      .map((card) => [card.asset_id, card])
+  );
+  const sessionId = toSlug(record.session_id, "asset_session");
+  const captureId = toSlug(record.capture_id || record.session_id, "asset_session");
+  const requestId = toSlug(`trellis_${sessionId}`, "trellis_request");
+  const gcsRoot = `gs://${gcsBucket}/${gcsCapturePrefix}`;
   return {
     contract_type: "trellis_asset_generation_request",
     schema_version: "1.0",
-    session_id: record.session_id,
+    request_id: requestId,
+    capture_id: captureId,
+    session_id: sessionId,
+    requested_at: new Date().toISOString(),
+    requester_id: "local_control_api",
     input_fingerprint: record.input_fingerprint,
     source_database_path: path.join(record.storage_path, "asset_database.json"),
+    gcs_root: gcsRoot,
     model: "microsoft/TRELLIS.2-4B",
+    batch_output_prefix: `${gcsRoot}/captures/${captureId}/asset-generation/${requestId}/`,
     model_capabilities: {
       modality: "image_to_3d_or_text_conditioned_static_asset",
       target_formats: ["glb"],
       preferred_gpu: "A100",
       notes: [
         "TRELLIS.2-4B should run on the VM or worker, not in the browser.",
-        "Generated outputs require Unreal ingestion review before scenario spawning."
+        "Generated outputs require Unreal ingestion review before scenario spawning.",
+        "Demo requests allow cached GLB fallbacks when Trellis is unavailable or too slow."
       ]
     },
-    assets: candidates.map((candidate) => ({
-      asset_id: candidate.asset_id,
-      display_name: candidate.display_name,
-      source_asset_id: candidate.source_asset_id,
-      prompt: buildDetailedTrellisPrompt(candidate),
-      visual_descriptor: candidate.visual_descriptor,
-      geometry_descriptor: candidate.geometry_descriptor,
-      material_descriptor: candidate.material_descriptor,
-      texture_descriptor: candidate.texture_descriptor,
-      scale_descriptor: candidate.scale_descriptor,
-      scene_context: candidate.scene_context,
-      detail_checklist: candidate.detail_checklist || [],
-      negative_prompt: buildDetailedTrellisNegativePrompt(candidate),
-      target_format: candidate.target_format || "glb",
-      resolution: candidate.resolution || "1024",
-      texture_size: candidate.texture_size || 4096,
-      output_prefix: `generated-assets/${record.session_id}/${candidate.asset_id}/`,
-      safety_notes: candidate.safety_notes || []
-    }))
+    assets: candidates.map((candidate, index) => {
+      const assetId = toSlug(candidate.asset_id || `trellis_asset_${index + 1}`, "trellis_asset");
+      const sourceCard = sourceCards.get(candidate.source_asset_id) || sourceCards.get(candidate.asset_id) || {};
+      const threatMetadata = normalizeThreatMetadata(candidate, sourceCard);
+      const cachedDemoKey = cachedDemoKeyForThreat(
+        sourceCard.threat_category || candidate.threat_category,
+        sourceCard.movement_domain || candidate.movement_domain
+      );
+      return {
+        asset_id: assetId,
+        request_id: toSlug(`${requestId}_${index + 1}_${assetId}`, "asset_request"),
+        display_name: clampApiText(candidate.display_name, 96, sourceCard.display_name || "Generated Trellis Asset"),
+        source_asset_id: candidate.source_asset_id || sourceCard.asset_id || "",
+        asset_kind: "threat_vector_visual",
+        prop_kind: toSlug(sourceCard.threat_category || candidate.threat_category || sourceCard.asset_id || candidate.source_asset_id || assetId, "threat_vector"),
+        asset_label: assetId,
+        prompt: buildDetailedTrellisPrompt(candidate),
+        visual_generation_prompt: candidate.visual_generation_prompt || candidate.generation_prompt || "",
+        threat_category: sourceCard.threat_category || candidate.threat_category || "",
+        movement_domain: sourceCard.movement_domain || candidate.movement_domain || "",
+        tactical_role: sourceCard.tactical_role || candidate.tactical_role || "",
+        asset_category: candidate.asset_category || sourceCard.category || "threat_vector",
+        visual_descriptor: candidate.visual_descriptor,
+        geometry_descriptor: candidate.geometry_descriptor,
+        material_descriptor: candidate.material_descriptor,
+        texture_descriptor: candidate.texture_descriptor,
+        scale_descriptor: candidate.scale_descriptor,
+        scene_context: candidate.scene_context,
+        detail_checklist: candidate.detail_checklist || [],
+        runtime_binding_hint: sourceCard.runtime_binding_hint || candidate.runtime_binding_hint || "",
+        spawn_affordances: Array.isArray(sourceCard.spawn_affordances) ? sourceCard.spawn_affordances : candidate.spawn_affordances || [],
+        behavior_profile_candidates: Array.isArray(sourceCard.behavior_profile_candidates)
+          ? sourceCard.behavior_profile_candidates
+          : candidate.behavior_profile_candidates || [],
+        negative_prompt: buildDetailedTrellisNegativePrompt(candidate),
+        target_format: candidate.target_format || "glb",
+        resolution: candidate.resolution || "1024",
+        texture_size: candidate.texture_size || 4096,
+        output_prefix: `${gcsRoot}/captures/${captureId}/asset-generation/${requestId}/assets/${assetId}/`,
+        bounds_m: sourceCard.bounds_m || null,
+        equipment: Array.isArray(candidate.equipment)
+          ? candidate.equipment
+          : Array.isArray(sourceCard.equipment)
+            ? sourceCard.equipment
+            : [],
+        gameplay_tags: Array.isArray(sourceCard.gameplay_tags)
+          ? sourceCard.gameplay_tags
+          : ["threat_vector", candidate.threat_category, candidate.movement_domain, candidate.tactical_role].filter(Boolean),
+        capabilities: Array.isArray(sourceCard.capabilities) ? sourceCard.capabilities : [],
+        preferred_affordances: Array.isArray(sourceCard.spawn_affordances)
+          ? sourceCard.spawn_affordances
+          : Array.isArray(sourceCard.preferred_affordances)
+            ? sourceCard.preferred_affordances
+            : candidate.spawn_affordances || [],
+        constraints: Array.isArray(sourceCard.constraints)
+          ? Array.from(new Set([...sourceCard.constraints, "requires_scale_review", "requires_pivot_review", "requires_collision"]))
+          : ["requires_collision", "requires_scale_review", "requires_pivot_review"],
+        collision_profile: sourceCard.collision_profile || "block_all",
+        ingestion_status: "prototype",
+        spawn_policy: "never_spawn",
+        safety_note: sourceCard.safety_note || candidate.safety_note || "non-operational training simulation",
+        threat_metadata: {
+          ...threatMetadata,
+          source_database_path: path.join(record.storage_path, "asset_database.json")
+        },
+        allow_cached_demo_output: candidate.allow_cached_demo_output !== false,
+        cached_demo_key: candidate.cached_demo_key || cachedDemoKey,
+        safety_notes: [
+          sourceCard.safety_note || candidate.safety_note || "non-operational training simulation",
+          ...(candidate.safety_notes || [])
+        ]
+      };
+    })
   };
 }
 
@@ -1020,7 +1349,7 @@ async function queueTrellisRelay(record) {
       ...record.trellis,
       status: payload.assets.length ? "queued" : "skipped",
       endpoint_configured: Boolean(trellisVmEndpoint),
-      job_id: payload.assets.length ? `trellis_${record.session_id}` : "",
+      job_id: payload.assets.length ? payload.request_id : "",
       request_path: requestPath,
       error: payload.assets.length ? "" : "No Trellis-suitable static asset candidates were generated."
     }
@@ -1441,44 +1770,45 @@ async function signGcsUrl(gcsUri, { method = "GET", contentType = null, duration
   return signedUrl;
 }
 
-function buildCaptureStatus(metadata, status, { message, percent, sfm = null, artifacts = null, unreal = null, error = null } = {}) {
-  const phaseMessages = {
-    created: "Capture created. Request upload URLs when images are selected.",
-    uploading: "Signed upload URLs issued. Browser uploads should go directly to GCS.",
-    uploaded: "Upload marked complete.",
-    queued_reconstruction: "Capture queued for A100 reconstruction.",
-    validating_images: "Validating uploaded images.",
-    sfm_solving: "Solving camera poses with SfM.",
-    reconstructing_splat: "Running splat reconstruction.",
-    exporting_splat: "Exporting splat artifacts.",
-    extracting_mesh: "Running mesh extraction.",
-    postprocessing_mesh: "Postprocessing mesh for Unreal import.",
-    ready_for_unreal_import: "Reconstruction artifacts are ready for Unreal import.",
-    importing_unreal: "Importing reconstructed scene into Unreal.",
-    imported_unreal: "Unreal import complete.",
-    ready: "Scene is ready for launch.",
-    failed: "Capture processing failed.",
-    sfm_failed: "SfM failed."
-  };
-  const defaultPercents = {
-    created: 0,
-    uploading: 5,
-    uploaded: 10,
-    queued_reconstruction: 15,
-    validating_images: 25,
-    sfm_solving: 40,
-    reconstructing_splat: 52,
-    exporting_splat: 58,
-    extracting_mesh: 68,
-    postprocessing_mesh: 78,
-    ready_for_unreal_import: 86,
-    importing_unreal: 92,
-    imported_unreal: 98,
-    ready: 100,
-    failed: 100,
-    sfm_failed: 100
-  };
+const capturePhaseMessages = {
+  created: "Capture created. Request upload URLs when images are selected.",
+  uploading: "Signed upload URLs issued. Browser uploads should go directly to GCS.",
+  uploaded: "Upload marked complete.",
+  queued_reconstruction: "Capture queued for A100 reconstruction.",
+  validating_images: "Validating uploaded images.",
+  sfm_solving: "Solving camera poses with SfM.",
+  reconstructing_splat: "Running splat reconstruction.",
+  exporting_splat: "Exporting splat artifacts.",
+  extracting_mesh: "Running mesh extraction.",
+  postprocessing_mesh: "Postprocessing mesh for Unreal import.",
+  ready_for_unreal_import: "Reconstruction artifacts are ready for Unreal import.",
+  importing_unreal: "Importing reconstructed scene into Unreal.",
+  imported_unreal: "Unreal import complete.",
+  ready: "Scene is ready for launch.",
+  failed: "Capture processing failed.",
+  sfm_failed: "SfM failed."
+};
 
+const captureDefaultPercents = {
+  created: 0,
+  uploading: 5,
+  uploaded: 10,
+  queued_reconstruction: 15,
+  validating_images: 25,
+  sfm_solving: 40,
+  reconstructing_splat: 52,
+  exporting_splat: 58,
+  extracting_mesh: 68,
+  postprocessing_mesh: 78,
+  ready_for_unreal_import: 86,
+  importing_unreal: 92,
+  imported_unreal: 98,
+  ready: 100,
+  failed: 100,
+  sfm_failed: 100
+};
+
+function buildCaptureStatus(metadata, status, { message, percent, sfm = null, artifacts = null, unreal = null, error = null } = {}) {
   return {
     contract_type: "capture_status",
     schema_version: schemaVersion,
@@ -1489,8 +1819,8 @@ function buildCaptureStatus(metadata, status, { message, percent, sfm = null, ar
     gcs_prefix: metadata.gcs_prefix,
     progress: {
       phase: status,
-      message: message || phaseMessages[status] || "Capture status updated.",
-      percent: percent == null ? defaultPercents[status] || 0 : percent
+      message: message || capturePhaseMessages[status] || "Capture status updated.",
+      percent: percent == null ? captureDefaultPercents[status] || 0 : percent
     },
     sfm: sfm || {
       input_images: Number(metadata.uploaded_image_count || 0),
@@ -1514,6 +1844,37 @@ function buildCaptureStatus(metadata, status, { message, percent, sfm = null, ar
     },
     error
   };
+}
+
+function captureStatusWithPhase(status, phase, { message, percent, unreal = {}, artifacts = {}, error = null } = {}) {
+  const next = cloneJson(status);
+  next.status = phase;
+  next.updated_at = nowIso();
+  next.progress = {
+    ...(next.progress || {}),
+    phase,
+    message: message || capturePhaseMessages[phase] || "Capture status updated.",
+    percent: percent == null ? captureDefaultPercents[phase] || 0 : percent
+  };
+  next.artifacts = {
+    ...(next.artifacts || {}),
+    ...artifacts
+  };
+  next.unreal = {
+    ...(next.unreal || {}),
+    ...unreal
+  };
+  next.error = error;
+  return next;
+}
+
+function captureHasReadyUnrealImport(status) {
+  const artifacts = status?.artifacts || {};
+  return status?.status === "ready"
+    && status?.unreal?.status === "ready"
+    && Boolean(status?.unreal?.level_path)
+    && Boolean(status?.unreal?.import_report_uri || artifacts.unreal_import_report_uri)
+    && Boolean(artifacts.semantic_environment_uri);
 }
 
 function validateCaptureCreateBody(body) {
@@ -1579,7 +1940,7 @@ function buildCaptureArtifacts(captureId) {
   const prefix = captureGcsPrefix(captureId);
   const definitions = [
     ["raw_metadata", "application/json", "raw/metadata.json"],
-    ["sfm_report", "application/json", "sfm/report.json"],
+    ["sfm_report", "application/json", "sfm/colmap/report.json"],
     ["splat_ply", "application/octet-stream", "reconstruction/splat.ply"],
     ["splat_usdz", "model/vnd.usdz+zip", "reconstruction/splat.usdz"],
     ["mesh_dlnr_ply", "application/octet-stream", "reconstruction/mesh_dlnr.ply"],
@@ -1614,6 +1975,208 @@ function buildRemoteCommand(template, fallback, variables = {}) {
   return command;
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function remoteEnvAssignment(name, value) {
+  if (value == null || value === "") return "";
+  return `${name}=${shellQuote(value)}`;
+}
+
+function firstString(...values) {
+  return values.find((value) => typeof value === "string" && value.trim())?.trim() || "";
+}
+
+function launchPathFromBody(body, ...keys) {
+  if (!body || typeof body !== "object") return "";
+  for (const key of keys) {
+    const value = key.split(".").reduce((current, part) => (
+      current && typeof current === "object" ? current[part] : undefined
+    ), body);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function normalizeVmLaunchPath(value, fieldName) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.length > 1000 || text.includes("\0")) {
+    throw new HttpError(400, `${fieldName} is not a valid VM path.`);
+  }
+  if (!text.startsWith("/") && !text.startsWith("~/")) {
+    throw new HttpError(400, `${fieldName} must be an absolute VM path.`);
+  }
+  return text;
+}
+
+function localCapturePath(captureId, ...parts) {
+  return path.posix.join(l4CaptureDataRoot, captureId, ...parts);
+}
+
+function localCapturePathFromGcsUri(gcsUri, captureId) {
+  const text = String(gcsUri || "").trim();
+  const prefix = captureGcsPrefix(captureId);
+  if (!text.startsWith(prefix)) return "";
+  const relativePath = text.slice(prefix.length).replace(/^\/+/, "");
+  if (!relativePath) return "";
+  return localCapturePath(captureId, relativePath);
+}
+
+function normalizeSelectedManifestPath(value, captureId) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.startsWith("gs://")) {
+    const localPath = localCapturePathFromGcsUri(text, captureId);
+    if (!localPath) {
+      throw new HttpError(400, "scenario_manifest_path GCS URI must be under the selected capture prefix.");
+    }
+    return localPath;
+  }
+  return normalizeVmLaunchPath(text, "scenario_manifest_path");
+}
+
+function selectedScenarioManifestPathFromBody(body, captureId) {
+  return normalizeSelectedManifestPath(
+    firstString(
+      launchPathFromBody(body, "scenario_manifest_path"),
+      launchPathFromBody(body, "scenarioManifestPath"),
+      launchPathFromBody(body, "selected_manifest_path"),
+      launchPathFromBody(body, "selectedManifestPath"),
+      launchPathFromBody(body, "manifest_path"),
+      launchPathFromBody(body, "manifestPath"),
+      launchPathFromBody(body, "scenario_manifest.path"),
+      launchPathFromBody(body, "scenario_manifest.local_path"),
+      launchPathFromBody(body, "selected_manifest.path"),
+      launchPathFromBody(body, "selected_manifest.local_path"),
+      launchPathFromBody(body, "manifest.path"),
+      launchPathFromBody(body, "manifest.local_path")
+    ),
+    captureId
+  );
+}
+
+function normalizeSemanticEnvironmentPath(value, captureId) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.startsWith("gs://") && captureId) {
+    const localPath = localCapturePathFromGcsUri(text, captureId);
+    if (!localPath) {
+      throw new HttpError(400, "semantic_environment_path GCS URI must be under the selected capture prefix.");
+    }
+    return localPath;
+  }
+  return normalizeVmLaunchPath(text, "semantic_environment_path");
+}
+
+function selectedSemanticEnvironmentPathFromBody(body, captureId) {
+  return normalizeSemanticEnvironmentPath(
+    firstString(
+      launchPathFromBody(body, "semantic_environment_path"),
+      launchPathFromBody(body, "semanticEnvironmentPath"),
+      launchPathFromBody(body, "semantic_environment.path"),
+      launchPathFromBody(body, "semantic_environment.local_path")
+    ),
+    captureId
+  );
+}
+
+function selectedMapPathFromBody(body) {
+  return normalizeVmLaunchPath(
+    firstString(
+      launchPathFromBody(body, "map_path"),
+      launchPathFromBody(body, "mapPath"),
+      launchPathFromBody(body, "unreal_level_path"),
+      launchPathFromBody(body, "unrealLevelPath")
+    ),
+    "map_path"
+  );
+}
+
+function buildPixelStreamingFallbackCommand({ mapPath, scenarioManifestPath, semanticEnvironmentPath }) {
+  const envAssignments = [
+    remoteEnvAssignment("PROJECT", l4UnrealProjectRoot),
+    remoteEnvAssignment("ADAPTSIM_MAP_PATH", mapPath),
+    remoteEnvAssignment("ADAPTSIM_SCENARIO_MANIFEST", scenarioManifestPath),
+    remoteEnvAssignment("ADAPTSIM_SEMANTIC_ENVIRONMENT", semanticEnvironmentPath)
+  ].filter(Boolean).join(" ");
+
+  return [
+    `cd ${shellQuote(l4RepoRoot)}`,
+    `${envAssignments} scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart`
+  ].join(" && ");
+}
+
+function buildPixelStreamingStatusCommand() {
+  const fallback = `cd ${shellQuote(l4RepoRoot)} && scripts/pixel-streaming/adaptsim-pixel-streaming.sh status`;
+  return buildRemoteCommand(process.env.ADAPTSIM_L4_STATUS_COMMAND, fallback, {});
+}
+
+function parseJsonObjectFromText(text) {
+  const source = String(text || "").trim();
+  if (!source) return null;
+  try {
+    return JSON.parse(source);
+  } catch {}
+
+  const firstBrace = source.indexOf("{");
+  const lastBrace = source.lastIndexOf("}");
+  if (firstBrace < 0 || lastBrace <= firstBrace) return null;
+  try {
+    return JSON.parse(source.slice(firstBrace, lastBrace + 1));
+  } catch {
+    return null;
+  }
+}
+
+function commandOutputHint(result, fallback = "No command output was captured.") {
+  const text = [
+    result?.stderr,
+    result?.stdout,
+    result?.exitCode && result.exitCode !== 0 ? `exit=${result.exitCode}` : ""
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return (text || fallback).slice(0, 500);
+}
+
+function l4LogHint(statusPayload, result = null) {
+  const components = statusPayload?.components || {};
+  const logs = [
+    components.signalling?.log_file ? `signalling=${components.signalling.log_file}` : "",
+    components.unreal?.log_file ? `unreal=${components.unreal.log_file}` : ""
+  ].filter(Boolean).join(", ");
+  if (logs) return `L4 status=${statusPayload.status || "unknown"}; logs: ${logs}`;
+  if (result && !result.ok) return `L4 status command failed: ${commandOutputHint(result)}`;
+  return "";
+}
+
+function resolvePixelStreamingLaunchContext({ sceneId, scenarioId, body, captureStatus }) {
+  const selectedManifestPath = selectedScenarioManifestPathFromBody(body, sceneId);
+  const bodyMapPath = selectedMapPathFromBody(body);
+  const bodySemanticPath = selectedSemanticEnvironmentPathFromBody(body, sceneId);
+
+  if (captureStatus) {
+    const mapPath = bodyMapPath || captureStatus.unreal?.level_path || "";
+    if (!mapPath) {
+      throw new HttpError(409, `Scene ${sceneId} has no imported Unreal level path yet.`);
+    }
+    const semanticEnvironmentPath = bodySemanticPath
+      || localCapturePathFromGcsUri(captureStatus.artifacts?.semantic_environment_uri, sceneId)
+      || localCapturePath(sceneId, "unreal", "semantic_environment.json");
+    return {
+      mapPath,
+      scenarioManifestPath: selectedManifestPath || localCapturePath(sceneId, "scenario_manifests", `${scenarioId}.json`),
+      semanticEnvironmentPath
+    };
+  }
+
+  return {
+    mapPath: bodyMapPath || defaultPixelStreamingMapPath,
+    scenarioManifestPath: selectedManifestPath || path.posix.join(l4ContractExamplesRoot, "scenario_manifests", `${scenarioId}.json`),
+    semanticEnvironmentPath: bodySemanticPath || defaultPixelStreamingSemanticEnvironmentPath
+  };
+}
+
 async function runGcloudSshTrigger({ instance, zone, project, command, timeout = workerTriggerTimeoutMs }) {
   if (!workerTriggersEnabled) {
     return { enabled: false, ok: true };
@@ -1624,6 +2187,7 @@ async function runGcloudSshTrigger({ instance, zone, project, command, timeout =
     instance,
     `--zone=${zone}`,
     `--project=${project}`,
+    "--tunnel-through-iap",
     "--command",
     command
   ], {
@@ -1635,7 +2199,7 @@ async function runGcloudSshTrigger({ instance, zone, project, command, timeout =
 }
 
 function triggerReconstructionWorker(captureId) {
-  const fallback = `cd ~/adaptsim/repos/adaptsim-hackathon && adaptsim-reconstruct --capture-id ${captureId} --gcs-root ${gcsRootUri()}`;
+  const fallback = `cd ~/adaptsim/repos/adaptsim-hackathon && workers/a100-reconstruction/adaptsim-reconstruct --capture-id ${captureId} --gcs-root ${gcsRootUri()}`;
   const command = buildRemoteCommand(process.env.ADAPTSIM_A100_RECONSTRUCT_COMMAND, fallback, {
     capture_id: captureId,
     gcs_root: gcsRootUri()
@@ -1648,12 +2212,17 @@ function triggerReconstructionWorker(captureId) {
   });
 }
 
-function triggerPixelStreamingLaunch({ sceneId, scenarioId, runId }) {
-  const fallback = `cd ~/adaptsim/repos/adaptsim-hackathon && adaptsim-launch-scenario --scene-id ${sceneId} --scenario-id ${scenarioId} --run-id ${runId}`;
-  const command = buildRemoteCommand(process.env.ADAPTSIM_L4_LAUNCH_COMMAND, fallback, {
-    scene_id: sceneId,
-    scenario_id: scenarioId,
-    run_id: runId
+function triggerUnrealImportWorker(captureId) {
+  const workerCommand = `workers/l4-unreal-import/adaptsim-import-capture --capture-id ${shellQuote(captureId)} --gcs-root ${shellQuote(gcsRootUri())}`;
+  const fallback = [
+    `cd ${shellQuote(l4RepoRoot)}`,
+    "test -x workers/l4-unreal-import/adaptsim-import-capture",
+    "mkdir -p ~/adaptsim/logs/l4-unreal-import",
+    `(nohup ${workerCommand} > ~/adaptsim/logs/l4-unreal-import/${captureId}.log 2>&1 < /dev/null &)`
+  ].join(" && ");
+  const command = buildRemoteCommand(process.env.ADAPTSIM_L4_IMPORT_COMMAND, fallback, {
+    capture_id: captureId,
+    gcs_root: gcsRootUri()
   });
   return runGcloudSshTrigger({
     instance: l4Instance,
@@ -1663,12 +2232,142 @@ function triggerPixelStreamingLaunch({ sceneId, scenarioId, runId }) {
   });
 }
 
+function triggerFailureMessage(label, resultOrError) {
+  if (resultOrError instanceof Error) {
+    return `${label}: ${resultOrError.message}`.slice(0, 500);
+  }
+  const detail = resultOrError?.stderr || resultOrError?.stdout || resultOrError?.exitCode || "unknown trigger failure";
+  return `${label}: ${detail}`.slice(0, 500);
+}
+
+async function markUnrealImportTriggerFailure(captureId, resultOrError) {
+  const latestStatus = await loadCaptureStatus(captureId).catch(() => null);
+  if (!latestStatus || captureHasReadyUnrealImport(latestStatus) || latestStatus.status === "failed") return;
+  if (!["ready_for_unreal_import", "importing_unreal"].includes(latestStatus.status)) return;
+
+  const failedStatus = captureStatusWithPhase(latestStatus, "failed", {
+    message: "L4 Unreal import trigger failed.",
+    percent: 100,
+    unreal: {
+      ...(latestStatus.unreal || {}),
+      status: "failed"
+    },
+    error: {
+      code: "unreal_import_trigger_failed",
+      message: triggerFailureMessage("L4 Unreal import trigger failed", resultOrError),
+      failed_phase: "importing_unreal",
+      retryable: true
+    }
+  });
+  await writeJsonToGcs(captureObjectUri(captureId, "status.json"), failedStatus);
+}
+
+async function maybeStartUnrealImportHandoff(status) {
+  if (status?.status !== "ready_for_unreal_import") return status;
+  if (!workerTriggersEnabled) return status;
+
+  const captureId = validateIdentifier(status.capture_id, "capture_id");
+  if (unrealImportTriggerPromises.has(captureId)) return status;
+
+  const importingStatus = captureStatusWithPhase(status, "importing_unreal", {
+    message: "Reconstruction complete; L4 Unreal import trigger dispatched.",
+    percent: captureDefaultPercents.importing_unreal,
+    unreal: {
+      ...(status.unreal || {}),
+      status: "importing",
+      level_path: null,
+      import_report_uri: null
+    }
+  });
+
+  unrealImportTriggerPromises.set(captureId, Promise.resolve());
+  try {
+    await writeJsonToGcs(captureObjectUri(captureId, "status.json"), importingStatus);
+  } catch (error) {
+    unrealImportTriggerPromises.delete(captureId);
+    throw error;
+  }
+
+  const triggerPromise = triggerUnrealImportWorker(captureId).then((result) => {
+    if (result.enabled && !result.ok) {
+      console.error(`L4 Unreal import trigger failed for ${captureId}: ${result.stderr || result.stdout || result.exitCode}`);
+      return markUnrealImportTriggerFailure(captureId, result).catch((statusError) => {
+        console.error(`Could not write L4 import trigger failure status for ${captureId}: ${statusError.message}`);
+      });
+    }
+    return null;
+  }).catch((error) => {
+    console.error(`L4 Unreal import trigger failed for ${captureId}: ${error.message}`);
+    return markUnrealImportTriggerFailure(captureId, error).catch((statusError) => {
+      console.error(`Could not write L4 import trigger failure status for ${captureId}: ${statusError.message}`);
+    });
+  }).finally(() => {
+    unrealImportTriggerPromises.delete(captureId);
+  });
+  unrealImportTriggerPromises.set(captureId, triggerPromise);
+  return importingStatus;
+}
+
+function triggerPixelStreamingLaunch({ sceneId, scenarioId, runId, mapPath, scenarioManifestPath, semanticEnvironmentPath }) {
+  const fallback = buildPixelStreamingFallbackCommand({ mapPath, scenarioManifestPath, semanticEnvironmentPath });
+  const command = buildRemoteCommand(process.env.ADAPTSIM_L4_LAUNCH_COMMAND, fallback, {
+    scene_id: sceneId,
+    scenario_id: scenarioId,
+    run_id: runId,
+    map_path: mapPath || "",
+    scenario_manifest_path: scenarioManifestPath || "",
+    semantic_environment_path: semanticEnvironmentPath || ""
+  });
+  return runGcloudSshTrigger({
+    instance: l4Instance,
+    zone: l4Zone,
+    project: l4Project,
+    command
+  });
+}
+
+function fetchPixelStreamingStatus(run) {
+  const command = buildRemoteCommand(process.env.ADAPTSIM_L4_STATUS_COMMAND, buildPixelStreamingStatusCommand(), {
+    scene_id: run.scene_id,
+    scenario_id: run.scenario_id,
+    run_id: run.run_id,
+    map_path: run.launch_context?.mapPath || "",
+    scenario_manifest_path: run.launch_context?.scenarioManifestPath || "",
+    semantic_environment_path: run.launch_context?.semanticEnvironmentPath || ""
+  });
+  return runGcloudSshTrigger({
+    instance: l4Instance,
+    zone: l4Zone,
+    project: l4Project,
+    command,
+    timeout: l4StatusTimeoutMs
+  });
+}
+
 function loadScenarioManifest(scenarioId) {
   const safeScenarioId = validateIdentifier(scenarioId, "scenario_id");
   const fileName = `${safeScenarioId}.json`;
   const filePath = path.join(contractsExamplesDir, "scenario_manifests", fileName);
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function listScenarioManifestsForScene(sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  const scenarioDir = path.join(contractsExamplesDir, "scenario_manifests");
+  if (!fs.existsSync(scenarioDir)) return [];
+
+  const manifests = [];
+  for (const entry of fs.readdirSync(scenarioDir)) {
+    if (!entry.endsWith(".json")) continue;
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(scenarioDir, entry), "utf8"));
+      if (manifest?.environment_id === safeSceneId) manifests.push(manifest);
+    } catch {}
+  }
+
+  manifests.sort((left, right) => String(left.scenario_id || "").localeCompare(String(right.scenario_id || "")));
+  return manifests;
 }
 
 function summarizeScenario(manifest) {
@@ -1705,8 +2404,17 @@ function loadDemoSceneStatus() {
   };
 }
 
+function loadThreatInjectionPlan(sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  const filePath = path.join(contractsExamplesDir, "gameplay_intelligence", safeSceneId, "threat_injection_plan.json");
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
 function buildSceneStatusFromCapture(captureStatus) {
-  const ready = captureStatus.status === "ready";
+  const ready = captureHasReadyUnrealImport(captureStatus);
+  const scenarioCount = ready ? listScenarioManifestsForScene(captureStatus.capture_id).length : 0;
+  const semanticEnvironment = ready ? loadSemanticEnvironmentFixture(captureStatus.capture_id) : null;
   const reconstructingStatuses = new Set([
     "queued_reconstruction",
     "validating_images",
@@ -1716,7 +2424,7 @@ function buildSceneStatusFromCapture(captureStatus) {
     "extracting_mesh",
     "postprocessing_mesh"
   ]);
-  const compiledStatuses = new Set(["ready_for_unreal_import", "importing_unreal", "imported_unreal"]);
+  const compiledStatuses = new Set(["ready_for_unreal_import", "importing_unreal", "imported_unreal", "ready"]);
   const sceneStatus = ready
     ? "ready"
     : ["failed", "sfm_failed"].includes(captureStatus.status)
@@ -1733,8 +2441,8 @@ function buildSceneStatusFromCapture(captureStatus) {
     source_scan_id: captureStatus.capture_id,
     unreal_level_path: captureStatus.unreal?.level_path || null,
     updated_at: captureStatus.updated_at,
-    anchor_count: 0,
-    scenario_count: ready ? demoScenarioIds.length : 0,
+    anchor_count: Array.isArray(semanticEnvironment?.anchors) ? semanticEnvironment.anchors.length : 0,
+    scenario_count: scenarioCount,
     stream: {
       status: ready ? "available" : "unavailable",
       provider: "unreal_pixel_streaming"
@@ -1745,6 +2453,13 @@ function buildSceneStatusFromCapture(captureStatus) {
         : null
     }
   };
+}
+
+function loadSemanticEnvironmentFixture(sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  const filePath = path.join(contractsExamplesDir, "semantic_environments", `${safeSceneId}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
 function runRecordForId(runId) {
@@ -1779,6 +2494,70 @@ function streamSignalingUrl() {
   url.pathname = "/signalling";
   url.search = "";
   return url.toString();
+}
+
+async function resolveRunStreamState(run) {
+  if (!workerTriggersEnabled) {
+    const ready = Date.now() - run.created_at_ms >= streamReadyDelayMs;
+    return {
+      ready,
+      status: ready ? "ready" : "launching",
+      logHint: "",
+      l4Status: null
+    };
+  }
+
+  if (run.launch?.status === "failed") {
+    return {
+      ready: false,
+      status: "failed",
+      logHint: run.launch.log_hint || "Pixel Streaming launch command failed.",
+      l4Status: run.l4_status || null
+    };
+  }
+
+  let result;
+  try {
+    result = await fetchPixelStreamingStatus(run);
+  } catch (error) {
+    return {
+      ready: false,
+      status: "launching",
+      logHint: `L4 status command errored: ${error.message}`,
+      l4Status: run.l4_status || null
+    };
+  }
+
+  const statusPayload = result.ok ? parseJsonObjectFromText(result.stdout) : null;
+  if (statusPayload) run.l4_status = statusPayload;
+
+  if (!result.ok || !statusPayload) {
+    return {
+      ready: false,
+      status: "launching",
+      logHint: l4LogHint(statusPayload, result) || `L4 status command returned no usable status: ${commandOutputHint(result)}`,
+      l4Status: statusPayload || run.l4_status || null
+    };
+  }
+
+  const l4Status = String(statusPayload.status || "").toLowerCase();
+  if (statusPayload.ready === true || l4Status === "ready") {
+    return {
+      ready: true,
+      status: "ready",
+      logHint: l4LogHint(statusPayload),
+      l4Status: statusPayload
+    };
+  }
+
+  const failedByStatus = ["failed", "error"].includes(l4Status);
+  const stoppedAfterLaunch = l4Status === "stopped" && run.launch?.status === "submitted";
+  return {
+    ready: false,
+    status: failedByStatus || stoppedAfterLaunch ? "failed" : "launching",
+    logHint: l4LogHint(statusPayload) || (stoppedAfterLaunch ? "L4 Pixel Streaming stopped after launch." : ""),
+    l4Status: statusPayload
+  };
 }
 
 function rewriteTelemetryForRun(payload, run) {
@@ -3011,8 +3790,9 @@ async function handleSubmitCapture(request, response, captureId) {
 
 async function handleCaptureStatus(request, response, captureId) {
   const safeCaptureId = validateIdentifier(captureId, "capture_id");
-  const status = await loadCaptureStatus(safeCaptureId);
+  let status = await loadCaptureStatus(safeCaptureId);
   if (!status) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+  status = await maybeStartUnrealImportHandoff(status);
   sendJson(request, response, 200, status);
 }
 
@@ -3049,29 +3829,41 @@ async function handleSceneStatus(request, response, sceneId) {
     sendJson(request, response, 200, loadDemoSceneStatus());
     return;
   }
-  const captureStatus = await loadCaptureStatus(safeSceneId);
+  let captureStatus = await loadCaptureStatus(safeSceneId);
   if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
+  captureStatus = await maybeStartUnrealImportHandoff(captureStatus);
   sendJson(request, response, 200, buildSceneStatusFromCapture(captureStatus));
 }
 
 async function handleSceneScenarios(request, response, sceneId) {
   const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  let scenarioManifests;
   if (safeSceneId !== demoSceneId) {
-    const captureStatus = await loadCaptureStatus(safeSceneId);
+    let captureStatus = await loadCaptureStatus(safeSceneId);
     if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
-    if (captureStatus.status !== "ready") {
+    captureStatus = await maybeStartUnrealImportHandoff(captureStatus);
+    if (!captureHasReadyUnrealImport(captureStatus)) {
       sendJson(request, response, 200, { scene_id: safeSceneId, scenarios: [] });
       return;
     }
+    scenarioManifests = listScenarioManifestsForScene(safeSceneId);
+  } else {
+    scenarioManifests = demoScenarioIds
+      .map((scenarioId) => loadScenarioManifest(scenarioId))
+      .filter(Boolean);
   }
-  const scenarios = demoScenarioIds
-    .map((scenarioId) => loadScenarioManifest(scenarioId))
-    .filter(Boolean)
-    .map(summarizeScenario);
+  const scenarios = scenarioManifests.map(summarizeScenario);
   sendJson(request, response, 200, {
     scene_id: safeSceneId,
     scenarios
   });
+}
+
+async function handleThreatInjectionPlan(request, response, sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  const plan = loadThreatInjectionPlan(safeSceneId);
+  if (!plan) throw new HttpError(404, `Threat injection plan for ${safeSceneId} was not found.`);
+  sendJson(request, response, 200, plan);
 }
 
 async function handleScenarioManifest(request, response, scenarioId) {
@@ -3084,29 +3876,80 @@ async function handleLaunchScenario(request, response, sceneId, scenarioId) {
   requireJsonRequest(request);
   const safeSceneId = validateIdentifier(sceneId, "scene_id");
   const safeScenarioId = validateIdentifier(scenarioId, "scenario_id");
+  const body = await readJsonBody(request).catch(() => ({}));
   const manifest = loadScenarioManifest(safeScenarioId);
-  if (!manifest) throw new HttpError(404, `Scenario ${safeScenarioId} was not found.`);
+  const selectedManifestPath = selectedScenarioManifestPathFromBody(body, safeSceneId);
+  if (!manifest && !selectedManifestPath) {
+    throw new HttpError(404, `Scenario ${safeScenarioId} was not found.`);
+  }
+  let captureStatus = null;
   if (safeSceneId !== demoSceneId) {
-    const captureStatus = await loadCaptureStatus(safeSceneId);
+    captureStatus = await loadCaptureStatus(safeSceneId);
     if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
+    captureStatus = await maybeStartUnrealImportHandoff(captureStatus);
+    if (!captureHasReadyUnrealImport(captureStatus)) {
+      throw new HttpError(409, `Scene ${safeSceneId} is ${captureStatus.status}; wait until Unreal import report and semantic environment are ready before launching Pixel Streaming.`);
+    }
   }
 
-  await readJsonBody(request).catch(() => ({}));
+  const launchContext = resolvePixelStreamingLaunchContext({
+    sceneId: safeSceneId,
+    scenarioId: safeScenarioId,
+    body,
+    captureStatus
+  });
   const runId = buildRunId(safeScenarioId);
   const run = {
     run_id: runId,
     scene_id: safeSceneId,
     scenario_id: safeScenarioId,
     created_at_ms: Date.now(),
-    status: "launching"
+    status: "launching",
+    launch_context: launchContext,
+    launch: {
+      enabled: workerTriggersEnabled,
+      status: workerTriggersEnabled ? "pending" : "mock",
+      updated_at: nowIso()
+    }
   };
   launchedRuns.set(runId, run);
 
-  triggerPixelStreamingLaunch({ sceneId: safeSceneId, scenarioId: safeScenarioId, runId }).then((result) => {
+  triggerPixelStreamingLaunch({
+    sceneId: safeSceneId,
+    scenarioId: safeScenarioId,
+    runId,
+    ...launchContext
+  }).then((result) => {
     if (result.enabled && !result.ok) {
+      run.status = "failed";
+      run.launch = {
+        enabled: true,
+        status: "failed",
+        exit_code: result.exitCode,
+        log_hint: commandOutputHint(result, "Pixel Streaming launch command failed."),
+        updated_at: nowIso()
+      };
       console.error(`Pixel Streaming launch trigger failed for ${runId}: ${result.stderr || result.stdout || result.exitCode}`);
+      return;
     }
+    const statusPayload = parseJsonObjectFromText(result.stdout);
+    run.launch = {
+      enabled: Boolean(result.enabled),
+      status: result.enabled ? "submitted" : "mock",
+      exit_code: result.exitCode,
+      log_hint: statusPayload ? l4LogHint(statusPayload) : "",
+      updated_at: nowIso()
+    };
+    if (statusPayload) run.l4_status = statusPayload;
+    if (statusPayload?.ready === true) run.status = "ready";
   }).catch((error) => {
+    run.status = workerTriggersEnabled ? "failed" : "launching";
+    run.launch = {
+      enabled: workerTriggersEnabled,
+      status: workerTriggersEnabled ? "failed" : "mock",
+      log_hint: error.message,
+      updated_at: nowIso()
+    };
     console.error(`Pixel Streaming launch trigger failed for ${runId}: ${error.message}`);
   });
 
@@ -3118,7 +3961,12 @@ async function handleLaunchScenario(request, response, sceneId, scenarioId) {
     stream: {
       status: "launching",
       embed_url: null,
-      poll_url: `/api/v1/runs/${runId}/stream`
+      poll_url: `/api/v1/runs/${runId}/stream`,
+      launch: {
+        map_path: launchContext.mapPath || null,
+        scenario_manifest_path: launchContext.scenarioManifestPath,
+        semantic_environment_path: launchContext.semanticEnvironmentPath || null
+      }
     }
   });
 }
@@ -3127,17 +3975,19 @@ async function handleRunStream(request, response, runId) {
   const safeRunId = String(runId || "").trim();
   const run = runRecordForId(safeRunId);
   if (!run) throw new HttpError(404, `Run ${safeRunId} was not found.`);
-  const ready = Date.now() - run.created_at_ms >= streamReadyDelayMs;
-  if (ready) run.status = "ready";
+  const state = await resolveRunStreamState(run);
+  run.status = state.status;
   sendJson(request, response, 200, {
     run_id: safeRunId,
-    status: ready ? "ready" : "launching",
+    status: state.status,
     stream: {
-      status: ready ? "ready" : "launching",
+      status: state.status,
       provider: "unreal_pixel_streaming",
-      embed_url: ready ? streamEmbedUrl(safeRunId) : null,
-      signaling_url: ready ? streamSignalingUrl() : null,
-      expires_at: ready ? new Date(Date.now() + streamTtlMs).toISOString() : null
+      embed_url: state.ready ? streamEmbedUrl(safeRunId) : null,
+      signaling_url: state.ready ? streamSignalingUrl() : null,
+      expires_at: state.ready ? new Date(Date.now() + streamTtlMs).toISOString() : null,
+      log_hint: state.logHint || null,
+      l4_status: state.l4Status || null
     }
   });
 }
@@ -3229,6 +4079,17 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && pathname === "/api/v1/demo/safety-park/source-images") {
+      handleSafetyParkDemoSourceImages(request, response);
+      return;
+    }
+
+    const safetyParkDemoImageMatch = pathname?.match(/^\/api\/v1\/demo\/safety-park\/source-images\/([^/]+)$/);
+    if (request.method === "GET" && safetyParkDemoImageMatch) {
+      streamSafetyParkDemoImage(request, response, safetyParkDemoImageMatch[1]);
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/api/google-sheets/calendar") {
       await handleCalendarSync(request, response);
       return;
@@ -3305,6 +4166,12 @@ const server = http.createServer(async (request, response) => {
     match = pathname?.match(/^\/api\/v1\/scenes\/([^/]+)\/scenarios$/);
     if (request.method === "GET" && match) {
       await handleSceneScenarios(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/scenes\/([^/]+)\/threat-injection-plan$/);
+    if (request.method === "GET" && match) {
+      await handleThreatInjectionPlan(request, response, match[1]);
       return;
     }
 

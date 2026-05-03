@@ -36,30 +36,34 @@ const publicSiteZoomBands = [
 ];
 const workflowStepOrder = ["01", "02", "03", "04"];
 const workflowStepNames = {
-  "01": "Intake",
-  "02": "Map",
-  "03": "Snapshot",
-  "04": "Launch"
+  "01": "Source",
+  "02": "Scene",
+  "03": "Threats",
+  "04": "Run"
 };
 const workflowStepRoutes = {
-  "01": "/intake",
-  "02": "/map",
-  "03": "/snapshot",
-  "04": "/launch"
+  "01": "/source",
+  "02": "/scene",
+  "03": "/threats",
+  "04": "/run"
 };
 const workflowRouteSteps = new Map([
   ["/", "01"],
   ["/index.html", "01"],
+  ["/source", "01"],
+  ["/scene", "02"],
+  ["/threats", "03"],
+  ["/run", "04"],
   ["/intake", "01"],
   ["/map", "02"],
   ["/snapshot", "03"],
   ["/launch", "04"]
 ]);
 const workflowStepTitles = {
-  "01": "AdaptSim | Intake",
-  "02": "AdaptSim | Map",
-  "03": "AdaptSim | Snapshot",
-  "04": "AdaptSim | Launch"
+  "01": "AdaptSim | Source",
+  "02": "AdaptSim | Scene",
+  "03": "AdaptSim | Threats",
+  "04": "AdaptSim | Run"
 };
 const stepOneLocationTaskIds = new Set(["intake", "metadata", "locate", "vision", "geoimage"]);
 const defaultSourceNote =
@@ -398,6 +402,7 @@ const selectors = {
   workflowPrevStep: "#workflow-prev-step",
   workflowNextStep: "#workflow-next-step",
   sourceAgentStatus: "#source-agent-status",
+  sourceSelectionPreview: "#source-selection-preview",
   sourceFileList: "#source-file-list",
   sourceFileCount: "#source-file-count",
   mapProvider: "#map-provider",
@@ -1512,6 +1517,62 @@ function loadState() {
   }
 }
 
+function sourceFileEventRecords() {
+  return state.sourceFiles.map((file) => ({
+    ...file,
+    blob: state.sourceFileBlobs.get(file.id) || null
+  }));
+}
+
+function simulationBridgeState() {
+  const snapshot = getSelectedSnapshot();
+  return {
+    sourceFiles: sourceFileEventRecords(),
+    selectedSnapshot: snapshot,
+    workflow: { ...state.workflow },
+    assetSession: state.generatedAssetSession
+  };
+}
+
+function dispatchAdaptSimEvent(name, detail) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+function dispatchSourceFilesChanged() {
+  dispatchAdaptSimEvent("adaptsim:source-files-changed", {
+    sourceFiles: sourceFileEventRecords()
+  });
+}
+
+function dispatchSnapshotChanged() {
+  const bridgeState = simulationBridgeState();
+  dispatchAdaptSimEvent("adaptsim:snapshot-changed", {
+    selectedSnapshot: bridgeState.selectedSnapshot,
+    workflow: bridgeState.workflow
+  });
+}
+
+function dispatchAssetSessionChanged() {
+  dispatchAdaptSimEvent("adaptsim:asset-session-changed", {
+    assetSession: state.generatedAssetSession
+  });
+}
+
+function dispatchWorkbenchBridgeState() {
+  const bridgeState = simulationBridgeState();
+  dispatchAdaptSimEvent("adaptsim:source-files-changed", {
+    sourceFiles: bridgeState.sourceFiles
+  });
+  dispatchAdaptSimEvent("adaptsim:snapshot-changed", {
+    selectedSnapshot: bridgeState.selectedSnapshot,
+    workflow: bridgeState.workflow
+  });
+  dispatchAdaptSimEvent("adaptsim:asset-session-changed", {
+    assetSession: bridgeState.assetSession
+  });
+}
+
 async function loadTrainingTaxonomy() {
   try {
     const response = await fetch(trainingVariablesUrl);
@@ -2602,15 +2663,15 @@ function buildIntakeAgentTasks(files) {
     },
     {
       id: "asset-db",
-      label: "Generated asset DB",
+      label: "Threat asset DB",
       status: "waiting",
       detail: "Waiting for Step 04 final check before starting GPT-5.5 generation."
     },
     {
       id: "trellis",
-      label: "Trellis relay",
+      label: "Trellis threat visuals",
       status: "waiting",
-      detail: "Waiting for generated static-asset candidates."
+      detail: "Waiting for generated threat-visual candidates."
     }
   ];
 }
@@ -2685,7 +2746,7 @@ function renderIntakeAgent() {
           <small>${escapeHtml(generatedSession.asset_database?.session_summary || generatedSession.generation?.error || generatedSession.trellis?.error || generatedSession.status)}</small>
         </div>
         <div>
-          <span>Assets</span>
+          <span>Threat Assets</span>
           <strong>${escapeHtml(String(generatedSession.asset_database?.asset_cards?.length ?? 0))}</strong>
           <small>${escapeHtml(generatedSession.trellis?.status || "trellis not started")}</small>
         </div>
@@ -2958,10 +3019,10 @@ function renderAssetGenerationStatus(session) {
   const generationStatus = normalize(session.generation?.status || session.status);
   if (isGeneratedAssetSessionActive(session)) {
     renderAssetGenerationLoading({
-      title: "Generating asset database",
+      title: "Generating threat asset database",
       detail: session.session_id
-        ? `GPT-5.5 session ${session.session_id} is building the local asset database.`
-        : "GPT-5.5 is building the local asset database."
+        ? `GPT-5.5 session ${session.session_id} is building the local threat asset database.`
+        : "GPT-5.5 is building the local threat asset database."
     });
     return;
   }
@@ -3004,6 +3065,38 @@ function findSnapshotAtCoordinates(lat, lon) {
 function setCoordinateInputs(lat, lon) {
   $(selectors.latInput).value = formatCoordinate(lat);
   $(selectors.lonInput).value = formatCoordinate(normalizeLongitude(lon));
+}
+
+function syncLocationInputsFromSnapshot(snapshot = getSelectedSnapshot()) {
+  const locationInput = document.querySelector(selectors.locationSearch);
+  const latInput = document.querySelector(selectors.latInput);
+  const lonInput = document.querySelector(selectors.lonInput);
+  const searchResults = document.querySelector(selectors.searchResults);
+  if (!locationInput || !latInput || !lonInput) return;
+  const snapshotId = snapshot?.id || "";
+  const dirtyForCurrentSnapshot = locationInput.dataset.locationDirty === "true" && locationInput.dataset.snapshotId === snapshotId;
+  if (dirtyForCurrentSnapshot) return;
+
+  if (!snapshot) {
+    locationInput.value = "";
+    latInput.value = "";
+    lonInput.value = "";
+    locationInput.dataset.snapshotId = "";
+    locationInput.dataset.locationDirty = "false";
+    if (searchResults) searchResults.innerHTML = "";
+    locationInput.setAttribute("aria-expanded", "false");
+    locationInput.removeAttribute("aria-busy");
+    return;
+  }
+
+  locationInput.value = snapshot.selectedLocation || "";
+  latInput.value = formatCoordinate(snapshot.lat);
+  lonInput.value = formatCoordinate(snapshot.lon);
+  locationInput.dataset.snapshotId = snapshot.id;
+  locationInput.dataset.locationDirty = "false";
+  if (searchResults) searchResults.innerHTML = "";
+  locationInput.setAttribute("aria-expanded", "false");
+  locationInput.removeAttribute("aria-busy");
 }
 
 function readCoordinateInputs() {
@@ -3289,10 +3382,38 @@ function getSourcePhotoSummary(file) {
   ].filter(Boolean).join(" | ");
 }
 
+function renderSourceSelectionPreview(files, message = "Selected for intake") {
+  const preview = document.querySelector(selectors.sourceSelectionPreview);
+  if (!preview) return;
+  const incoming = Array.from(files ?? []).filter(Boolean);
+  document.querySelector(".source-dropzone-shell")?.classList.toggle("has-pending-source-files", incoming.length > 0);
+  if (!incoming.length) {
+    preview.hidden = true;
+    preview.innerHTML = "";
+    return;
+  }
+  preview.hidden = false;
+  preview.innerHTML = `
+    <div class="source-selection-preview-head">
+      <strong>${escapeHtml(message)}</strong>
+      <span>${incoming.length} file${incoming.length === 1 ? "" : "s"}</span>
+    </div>
+    <div class="source-selection-preview-list">
+      ${incoming.slice(0, 10).map((file) => `
+        <span title="${escapeHtml(file.name || "source file")}">
+          ${escapeHtml(file.name || "source file")}
+        </span>
+      `).join("")}
+      ${incoming.length > 10 ? `<em>+${incoming.length - 10} more</em>` : ""}
+    </div>
+  `;
+}
+
 function renderSourceFiles() {
   const count = $(selectors.sourceFileCount);
   const list = $(selectors.sourceFileList);
   const selectedSnapshot = getSelectedSnapshot();
+  document.querySelector(".source-dropzone-shell")?.classList.toggle("has-source-files", state.sourceFiles.length > 0);
   count.textContent = `${state.sourceFiles.length} attached`;
 
   if (!state.sourceFiles.length) {
@@ -3300,6 +3421,7 @@ function renderSourceFiles() {
     return;
   }
 
+  renderSourceSelectionPreview([], "");
   list.innerHTML = state.sourceFiles
     .map((file) => {
       const isMapped = gpsMatchesSnapshot(file.gps, selectedSnapshot);
@@ -3698,19 +3820,19 @@ function updateGeneratedSessionTasks(session) {
   const trellisCount = session.asset_database?.trellis_candidates?.length ?? 0;
 
   if (generationStatus === "complete" || normalize(session.status) === "asset_database_ready") {
-    setIntakeAgentTask("asset-db", "complete", `${assetCount} generated asset card${assetCount === 1 ? "" : "s"} stored locally.`, "Generated asset database is ready.");
+    setIntakeAgentTask("asset-db", "complete", `${assetCount} generated threat asset card${assetCount === 1 ? "" : "s"} stored locally.`, "Threat asset database is ready.");
   } else if (generationStatus === "failed") {
-    setIntakeAgentTask("asset-db", "blocked", session.generation?.error || "Asset database generation failed.", "Generated asset database needs API review.");
+    setIntakeAgentTask("asset-db", "blocked", session.generation?.error || "Asset database generation failed.", "Threat asset database needs API review.");
   } else {
-    setIntakeAgentTask("asset-db", "running", `GPT-5.5 session ${session.session_id || "is running"}.`, "Generating the asset database.");
+    setIntakeAgentTask("asset-db", "running", `GPT-5.5 session ${session.session_id || "is running"}.`, "Generating the threat asset database.");
   }
 
   if (trellisStatus === "submitted" || trellisStatus === "queued") {
-    setIntakeAgentTask("trellis", "running", `${trellisCount} Trellis candidate${trellisCount === 1 ? "" : "s"} prepared for VM generation.`);
+    setIntakeAgentTask("trellis", "running", `${trellisCount} Trellis threat visual${trellisCount === 1 ? "" : "s"} prepared for VM generation.`);
   } else if (trellisStatus === "awaiting_vm_endpoint") {
     setIntakeAgentTask("trellis", "waiting", "Trellis request stored locally; configure TRELLIS_VM_ENDPOINT to relay to the VM.");
   } else if (trellisStatus === "skipped") {
-    setIntakeAgentTask("trellis", "skipped", "No Trellis-suitable static assets were generated.");
+    setIntakeAgentTask("trellis", "skipped", "No Trellis-suitable threat visuals were generated.");
   } else if (trellisStatus === "failed") {
     setIntakeAgentTask("trellis", "blocked", session.trellis?.error || "Trellis relay failed.");
   }
@@ -4362,7 +4484,12 @@ function setActiveWorkflowPage(stepNumber, { scroll = false, focusSelector = "",
 
 function renderWorkflowPages(steps) {
   state.workflowStepProgress = steps;
+  const routeStep = getWorkflowStepFromUrl();
   let activeStep = normalizeWorkflowStep(state.activeWorkflowStep);
+  if (routeStep !== activeStep) {
+    activeStep = routeStep;
+    state.activeWorkflowStep = routeStep;
+  }
 
   setActiveWorkflowPage(activeStep, { replaceUrl: true });
 
@@ -4408,10 +4535,16 @@ function navigateWorkflowStep(direction) {
   renderWorkflowPages(steps);
 }
 
+function getSimulationWorkflowBridgeState() {
+  return typeof window === "undefined" ? {} : window.__adaptsimSimulationState || {};
+}
+
 function renderWorkflowProgress(snapshot) {
+  const simulation = getSimulationWorkflowBridgeState();
   const hasMapReady = Boolean(state.globe?.viewer);
   const hasSnapshot = Boolean(snapshot);
-  const hasWorkflowStart = state.sourceFiles.length > 0 || hasSnapshot;
+  const hasDemoScene = Boolean(simulation.demoCheckpointSelected || simulation.sceneReady || simulation.checkpointReady);
+  const hasWorkflowStart = state.sourceFiles.length > 0 || hasSnapshot || hasDemoScene;
   const hasMapSource = hasSnapshot && state.mapConfig.activeProvider && !/loading|unavailable/i.test(state.mapConfig.activeProvider);
   const hasMapConfirmed = Boolean(state.workflow.mapConfirmed);
   const hasStep3Generated = Boolean(hasSnapshot && state.workflow.step3SnapshotGenerated);
@@ -4421,22 +4554,26 @@ function renderWorkflowProgress(snapshot) {
   const assetSessionReady = normalize(state.generatedAssetSession?.status) === "asset_database_ready"
     || normalize(state.generatedAssetSession?.generation?.status) === "complete";
   const hasStep4Acknowledged = Boolean(hasReasonedInput || state.workflow.step4Acknowledged || assetSessionStarted);
-  const canLocate = hasWorkflowStart && hasMapReady && hasMapConfirmed;
-  const canReason = hasStep3Generated && hasMapSource;
+  const canLocate = hasWorkflowStart && ((hasMapReady && hasMapConfirmed) || simulation.sceneReady);
+  const canReason = (hasStep3Generated && hasMapSource) || simulation.sceneReady;
+  const threatPackageReady = Boolean(assetSessionReady || (simulation.threatPlanReady && simulation.hasReadyScenario));
+  const runReady = Boolean(simulation.hasReadyScenario);
   const mapConfirmReadiness = getMapConfirmReadiness(snapshot);
   const stepOneLocationFixReady = hasWorkflowStart && hasStepOneLocationFix(snapshot);
   const stepOneLocationStillLoading = isStepOneLocationLoading();
   const steps = {
     "01": hasWorkflowStart
-      ? stepOneLocationFixReady
+      ? hasDemoScene
+        ? { state: "complete", label: "Demo Ready" }
+        : stepOneLocationFixReady
         ? { state: "complete", label: "GPS Ready" }
         : { state: "active", label: stepOneLocationStillLoading ? "Loading" : "Locate" }
       : { state: "active", label: "Start" },
     "02": hasWorkflowStart
       ? {
-          state: hasMapConfirmed ? "complete" : "active",
-          label: hasMapConfirmed
-            ? "Complete"
+          state: hasMapConfirmed || simulation.sceneReady ? "complete" : "active",
+          label: hasMapConfirmed || simulation.sceneReady
+            ? simulation.sceneReady ? "Scene Ready" : "Complete"
             : !hasMapReady
               ? "Loading"
               : mapConfirmReadiness.waitingForIntake
@@ -4449,11 +4586,18 @@ function renderWorkflowProgress(snapshot) {
       : { state: "locked", label: "Locked" },
     "04": canReason
       ? {
-          state: hasStep4Acknowledged ? "complete" : "active",
-          label: assetSessionReady ? "Complete" : assetSessionRunning ? "Running" : hasStep4Acknowledged ? "Queued" : "Launch"
+          state: runReady ? simulation.streamReady ? "complete" : "active" : "locked",
+          label: simulation.streamReady ? "Live" : simulation.runLaunched ? "Running" : runReady ? "Run" : "Locked"
         }
       : { state: "locked", label: "Locked" }
   };
+
+  if (canReason) {
+    steps["03"] = {
+      state: threatPackageReady ? "complete" : "active",
+      label: threatPackageReady ? "Ready" : assetSessionRunning ? "Running" : hasStep4Acknowledged ? "Queued" : "Build"
+    };
+  }
 
   document.querySelectorAll(".workflow-stage[data-step], .workflow-panel[data-step]").forEach((step) => {
     const progress = steps[step.dataset.step] ?? { state: "locked", label: "Locked" };
@@ -4509,6 +4653,7 @@ function renderApp() {
   if (state.generatedAssetSession) {
     renderAssetGenerationStatus(state.generatedAssetSession);
   }
+  dispatchWorkbenchBridgeState();
 }
 
 function renderMapControls() {
@@ -4579,6 +4724,7 @@ function saveCustomProviderFromForm() {
 }
 
 function syncControls(snapshot) {
+  syncLocationInputsFromSnapshot(snapshot);
   const hasSnapshots = state.snapshots.length > 0;
   const hasLocationPanelValues = Boolean(
     $(selectors.locationSearch).value.trim()
@@ -4587,7 +4733,10 @@ function syncControls(snapshot) {
       || state.locationResults.length
       || state.globe?.pin
   );
-  $("#clear-snapshots").disabled = !hasSnapshots && !hasLocationPanelValues;
+  const clearSnapshotsButton = document.querySelector("#clear-snapshots");
+  if (clearSnapshotsButton) {
+    clearSnapshotsButton.disabled = !hasSnapshots && !hasLocationPanelValues;
+  }
   $("#reason-note").disabled = !snapshot || !state.sourceFiles.length || isGeneratedAssetSessionActive();
   const confirmMap = $(selectors.confirmMapStep);
   if (confirmMap) {
@@ -5391,22 +5540,41 @@ function renderModelSectionDetail(snapshot, domain) {
 }
 
 async function reasonFromAnalystNote() {
-  const snapshot = getSelectedSnapshot();
+  let snapshot = getSelectedSnapshot();
+  const editedCoordinates = readCoordinateInputs();
+  const locationDirty = document.querySelector(selectors.locationSearch)?.dataset.locationDirty === "true";
   const rawNote = $(selectors.analystNote).value.trim();
   const note = clampText(rawNote, maxAnalystNoteLength);
 
+  if (locationDirty && !editedCoordinates) {
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Enter valid latitude and longitude before generating the threat database.</div>';
+    return;
+  }
+
+  if (editedCoordinates && (!snapshot || coordinateDistanceMeters(editedCoordinates.lat, editedCoordinates.lon, snapshot.lat, snapshot.lon) > 1)) {
+    const updatedSnapshot = await activateCoordinates(editedCoordinates, {
+      label: "edited Threats location",
+      source: "operator threat setup coordinates",
+      centerMap: true,
+      revealMap: false,
+      forceNew: false,
+      markStep3Complete: true
+    });
+    snapshot = updatedSnapshot || getSelectedSnapshot();
+  }
+
   if (!snapshot) {
-    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Select a location before starting asset generation.</div>';
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Confirm or enter a valid location before generating the threat database.</div>';
     return;
   }
 
   if (!state.sourceFiles.length) {
-    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Attach at least one source file in Step 01 before starting asset generation.</div>';
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Attach at least one source file in Step 01 before generating the threat database.</div>';
     return;
   }
 
   if (isGeneratedAssetSessionActive()) {
-    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">The generated asset database is already running.</div>';
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">The threat database is already generating.</div>';
     return;
   }
 
@@ -5451,12 +5619,12 @@ async function reasonFromAnalystNote() {
     <div class="reason-card">
       <strong>${escapeHtml(reasonTitle)}</strong>
       <p>${escapeHtml(reasonDetail)}</p>
-      <p>Starting traceable generated asset database production from Step 04.</p>
+      <p>Generating the threat database from location, source files, and mission context.</p>
     </div>
   `;
   $(selectors.analystNote).value = "";
   renderAssetGenerationLoading({
-    title: "Starting asset database",
+    title: "Starting threat database",
     detail: `${reasonTitle}: ${reasonDetail}`
   });
   try {
@@ -7675,8 +7843,10 @@ function attachEvents() {
   };
 
   const handleSourceFiles = async (files) => {
+    const incoming = Array.from(files ?? []);
+    renderSourceSelectionPreview(incoming, "Selected for intake");
     try {
-      await addSourceFiles(files);
+      await addSourceFiles(incoming);
     } catch (error) {
       console.error("Source intake failed", error);
       setIntakeAgentTask("intake", "blocked", error.message || "Source intake failed.");
@@ -7774,7 +7944,10 @@ function attachEvents() {
     });
   });
 
-  $(selectors.locationSearch).addEventListener("input", (event) => renderSearchResults(event.target.value));
+  $(selectors.locationSearch).addEventListener("input", (event) => {
+    event.target.dataset.locationDirty = "true";
+    renderSearchResults(event.target.value);
+  });
   $(selectors.locationSearch).addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       clearLocationSearchState();
@@ -7787,13 +7960,14 @@ function attachEvents() {
   });
   [selectors.latInput, selectors.lonInput].forEach((selector) => {
     $(selector).addEventListener("input", () => {
+      $(selectors.locationSearch).dataset.locationDirty = "true";
       state.locationPreviewSerial += 1;
       syncControls(getSelectedSnapshot());
     });
   });
-  $("#use-coordinates").addEventListener("click", resolveCoordinatesFromInputs);
+  document.querySelector("#use-coordinates")?.addEventListener("click", resolveCoordinatesFromInputs);
   $(selectors.clearWorkflow).addEventListener("click", () => resetAppToStartingPoint());
-  $("#clear-snapshots").addEventListener("click", clearSnapshots);
+  document.querySelector("#clear-snapshots")?.addEventListener("click", clearSnapshots);
   $("#reason-note").addEventListener("click", () => {
     void reasonFromAnalystNote();
   });
@@ -7993,9 +8167,39 @@ function scheduleDevAutoRefresh() {
 }
 
 let initPromise = null;
+let bridgeEventListenersAttached = false;
+
+function attachBridgeEventListeners() {
+  if (bridgeEventListenersAttached || typeof window === "undefined") return;
+  bridgeEventListenersAttached = true;
+  window.addEventListener("adaptsim:request-workbench-state", () => {
+    dispatchWorkbenchBridgeState();
+  });
+  window.addEventListener("adaptsim:add-source-files", (event) => {
+    const files = Array.from(event.detail?.files ?? []);
+    if (!files.length) return;
+    void addSourceFiles(files).catch((error) => {
+      console.error("Source intake failed", error);
+      setIntakeAgentTask("intake", "blocked", error.message || "Source intake failed.");
+      updateResolution(error.message || "Source intake failed.", "restricted");
+      renderApp();
+    });
+  });
+  window.addEventListener("adaptsim:simulation-state-changed", () => {
+    renderApp();
+  });
+  window.addEventListener("adaptsim:navigate-workflow-step", (event) => {
+    const step = normalizeWorkflowStep(event.detail?.step || "04");
+    setActiveWorkflowPage(step, { scroll: true });
+    if (state.workflowStepProgress) {
+      renderWorkflowPages(state.workflowStepProgress);
+    }
+  });
+}
 
 export function initializeAdaptSimWorkbench() {
   if (!initPromise) {
+    attachBridgeEventListeners();
     scheduleDevAutoRefresh();
     initPromise = init();
   }

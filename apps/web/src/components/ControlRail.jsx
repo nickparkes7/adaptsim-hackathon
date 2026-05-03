@@ -1,30 +1,25 @@
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+
 export function LocationStep() {
   return (
     <section className="panel workflow-panel minimized-workflow-step compact-location-panel" data-step="03">
       <div className="panel-heading compact-step-heading">
         <div>
-          <p className="eyebrow">Location</p>
-          <h2>Generate Snapshot</h2>
-        </div>
-        <div className="step-heading-actions">
-          <button id="use-coordinates" className="primary-button confirm-button" type="button" aria-label="Confirm selected location">
-            Confirm
-          </button>
-          <button id="clear-snapshots" className="quiet-button" type="button" aria-label="Clear snapshots and location inputs" disabled>
-            Clear
-          </button>
+          <h2>Location</h2>
         </div>
       </div>
 
       <label className="field">
-        <span>City, state, province, region, or country</span>
-        <input
+        <span>Confirm or adjust</span>
+        <Input
           id="location-search"
           name="location-search"
           type="search"
           autoComplete="off"
           role="combobox"
-          placeholder="Search Tokyo, Norfolk, or Kenya…"
+          placeholder="Confirm the Scene location"
           aria-controls="search-results"
           aria-expanded="false"
           aria-autocomplete="list"
@@ -35,7 +30,7 @@ export function LocationStep() {
       <div className="coord-grid">
         <label className="field">
           <span>Latitude</span>
-          <input
+          <Input
             id="lat-input"
             name="latitude"
             type="number"
@@ -49,7 +44,7 @@ export function LocationStep() {
         </label>
         <label className="field">
           <span>Longitude</span>
-          <input
+          <Input
             id="lon-input"
             name="longitude"
             type="number"
@@ -66,35 +61,32 @@ export function LocationStep() {
   );
 }
 
-export function FinalCheckStep() {
+export function FinalCheckStep({ embedded = false, step = "04", title = "Operation Context" } = {}) {
   return (
     <section
-      id="workflow-page-04"
-      className="panel workflow-panel workflow-page final-check-panel"
-      data-step="04"
-      data-workflow-page="04"
-      aria-hidden="true"
-      tabIndex={-1}
+      id={embedded ? undefined : "workflow-page-04"}
+      className={`panel workflow-panel final-check-panel${embedded ? " embedded-final-check-panel" : " workflow-page"}`}
+      data-step={step}
+      data-workflow-page={embedded ? undefined : step}
+      aria-hidden={embedded ? undefined : "true"}
+      tabIndex={embedded ? undefined : -1}
     >
       <div className="panel-heading">
         <div>
-          <h2>Create Asset Database</h2>
+          <h2>{title}</h2>
         </div>
       </div>
       <label className="field">
-        <span>Analyst note</span>
-        <textarea
+        <span>Mission context</span>
+        <Textarea
           id="analyst-note"
           name="analyst-note"
           rows="6"
           maxLength="1200"
           autoComplete="off"
-          placeholder="Add simulation-priority context…"
-        ></textarea>
+          placeholder="Objective, route, trainee role, expected decisions, constraints, required threats, assets to avoid, timing, terrain notes..."
+        />
       </label>
-      <button id="reason-note" className="primary-button full-width" type="button" disabled>
-        Launch Asset Database
-      </button>
       <div id="reasoning-output" className="reasoning-output" aria-live="polite"></div>
     </section>
   );
