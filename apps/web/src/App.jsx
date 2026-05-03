@@ -33,7 +33,7 @@ function BrandLockup() {
       >
         <div className="brand-mark" aria-hidden="true">
           <span>ADAPT</span>
-          <strong>SIM</strong>
+          <strong className="brand-mark-sim">SIM</strong>
         </div>
       </Button>
     </div>

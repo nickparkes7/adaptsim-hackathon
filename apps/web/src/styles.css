@@ -226,6 +226,10 @@ iframe {
   color: inherit;
 }
 
+.brand-mark .brand-mark-sim {
+  color: #ef4444;
+}
+
 .army-mark,
 .brand-lockup .army-mark {
   display: none;
