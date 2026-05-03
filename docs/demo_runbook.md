@@ -22,7 +22,7 @@ AdaptSim turns a scanned or place-like environment into a reusable Unreal traini
 | AAR from real telemetry | Pass | `contracts/examples/aar/horror_corridor_ambush_delay_001_live_aar.md` generated from fresh VM JSONL. |
 | Input key `1` | Pass, with trigger caveat | `AAdaptSimDemoPlayerController` logged `demo_input_received key=1` and `scenario_started` with `-AdaptSimDemoInputStart`; adversary spawn still depends on the manifest's chokepoint trigger or automation fire-all. |
 | Game-mode visual | Pass | Screenshot `contracts/examples/telemetry/horror_corridor_ambush_delay_001_visual.png` shows the bright adversary marker in the corridor; the text label is mirrored from that camera angle. |
-| Pixel Streaming | Pass in clean browser, process-managed | `PixelStreaming2` is enabled and signalling serves port `80`. On 2026-05-03, a clean browser session reached live H.264 video at `1280x720` with `Controls stream input: true` after restarting Unreal with audio transmit/receive disabled. Old tabs can remain stuck at `WEBRTC CONNECTION NEGOTIATED`; close the tab or use a cache-busting URL before retesting. |
+| Pixel Streaming | Pass in clean browser, script-managed | `PixelStreaming2` is enabled and signalling serves port `80`. `scripts/pixel-streaming/*` now provides launch, restart, stop, and JSON status commands for Control API shell-out. On 2026-05-03, a clean browser session reached live H.264 video at `1280x720` with `Controls stream input: true` after restarting Unreal with audio transmit/receive disabled. Old tabs can remain stuck at `WEBRTC CONNECTION NEGOTIATED`; close the tab or use a cache-busting URL before retesting. |
 | Frontend app | Fallback | No dedicated AdaptSim frontend repo is confirmed; use Pixel Streaming player plus checked-in artifacts/API fixture. |
 
 ## Local Setup
@@ -128,7 +128,110 @@ Open this browser URL:
 http://127.0.0.1:18080/player.html
 ```
 
-Verify the VM side if needed:
+Launch or restart the horror corridor stream from the local repo. This wrapper detects whether it is already running on the L4 VM; from a local shell it uses `gcloud compute ssh --tunnel-through-iap` and executes the same runtime controller on the VM:
+
+```bash
+cd /Users/nicholas.parkes/Repos/adaptsim-hackathon
+scripts/pixel-streaming/launch_horror_corridor.sh
+```
+
+Report stream readiness and log paths as JSON:
+
+```bash
+scripts/pixel-streaming/status.sh
+```
+
+When called through the local `gcloud` bridge, stdout is the status JSON; gcloud connection messages may still appear on stderr.
+
+The L4 runtime controller can also be called directly from a VM shell or by the Control API after SSH:
+
+```bash
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart \
+  --map /Game/AdaptSim/Maps/L_HorrorCorridor_Imported \
+  --scenario-manifest "$PROJECT/Saved/AdaptSimContractExamples/scenario_manifests/horror_corridor_ambush_delay_001.json" \
+  --semantic-environment "$PROJECT/Saved/AdaptSimContractExamples/semantic_environments/horror_corridor_imported.json"
+
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh status
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh stop
+```
+
+Granular commands are available for API orchestration:
+
+```bash
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh start-signalling
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh start-unreal --map /Game/AdaptSim/Maps/L_HorrorCorridor_Imported
+scripts/pixel-streaming/adaptsim-pixel-streaming.sh restart --no-scenario-flags
+scripts/pixel-streaming/vm_pixel_streaming.sh status
+```
+
+The scripts preserve the current demo URL behavior:
+
+```text
+http://34.139.126.187/player.html
+```
+
+They write predictable runtime files under `$HOME/adaptsim-pixelstreaming`:
+
+```text
+wilbur.pid
+wilbur.log
+unreal.pid
+unreal-pixelstreaming.log
+last-launch.json
+status.json
+```
+
+The current launch defaults intentionally use the existing no-admin firewall workaround and do not require the permanent wide-port rule:
+
+```text
+-PixelStreamingWebRTCMinPort=19302
+-PixelStreamingWebRTCMaxPort=19303
+-PixelStreamingWebRTCDisableTransmitAudio=true
+-PixelStreamingWebRTCDisableReceiveAudio=true
+```
+
+Status JSON shape for Control API shell-out:
+
+```json
+{
+  "schema_version": 1,
+  "status": "ready",
+  "ready": true,
+  "provider": "unreal_pixel_streaming",
+  "last_launch": {
+    "map": "/Game/AdaptSim/Maps/L_HorrorCorridor_Imported",
+    "scenario_manifest": "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim/Saved/AdaptSimContractExamples/scenario_manifests/horror_corridor_ambush_delay_001.json",
+    "semantic_environment": "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim/Saved/AdaptSimContractExamples/semantic_environments/horror_corridor_imported.json"
+  },
+  "urls": {
+    "player": "http://34.139.126.187/player.html",
+    "local_player": "http://127.0.0.1:80/player.html"
+  },
+  "components": {
+    "signalling": {
+      "status": "ready",
+      "pid": 1234,
+      "pid_file": "/home/nicholas.parkes/adaptsim-pixelstreaming/wilbur.pid",
+      "log_file": "/home/nicholas.parkes/adaptsim-pixelstreaming/wilbur.log",
+      "http_ready": true
+    },
+    "unreal": {
+      "status": "ready",
+      "pid": 5678,
+      "pid_file": "/home/nicholas.parkes/adaptsim-pixelstreaming/unreal.pid",
+      "log_file": "/home/nicholas.parkes/adaptsim-pixelstreaming/unreal-pixelstreaming.log"
+    }
+  },
+  "ports": {
+    "webrtc_min": 19302,
+    "webrtc_max": 19303
+  }
+}
+```
+
+Allowed top-level `status` values are `ready`, `launching`, `partial`, and `stopped`. Treat `ready: true` as "signalling process is running, the player page responds locally, and the Unreal streamer process is running"; still use a fresh browser tab to verify live WebRTC media if a stale tab was stuck.
+
+Verify the VM side manually if needed:
 
 ```bash
 curl -I http://127.0.0.1/player.html
@@ -136,54 +239,11 @@ ps -eo pid,etime,args | grep -E "PixelStreaming|dist/index.js" | grep -v grep
 tail -f "$HOME/adaptsim-pixelstreaming/wilbur.log"
 ```
 
-Current observed running shapes. Include the manifest and semantic environment flags when this stream is intended to accept keyboard `1` as the scenario start:
+Current observed running shapes produced by the scripts. Include the manifest and semantic environment flags when this stream is intended to accept keyboard `1` as the scenario start:
 
 ```text
 node ./dist/index.js --streamer_port 8888 --player_port 80 --sfu_port 8889 --serve --https_redirect --console_messages verbose --log_config --http_root www --homepage player.html --peer_options_file /home/nicholas.parkes/adaptsim-pixelstreaming/peer_options.json
 UnrealEditor AdaptSim.uproject /Game/AdaptSim/Maps/L_HorrorCorridor_Imported -game -RenderOffscreen -PixelStreamingConnectionURL=ws://127.0.0.1:8888 -PixelStreamingWebRTCMinPort=19302 -PixelStreamingWebRTCMaxPort=19303 -PixelStreamingWebRTCDisableTransmitAudio=true -PixelStreamingWebRTCDisableReceiveAudio=true -PixelStreamingEncoderCodec=H264 -AdaptSimScenarioManifest=.../horror_corridor_ambush_delay_001.json -AdaptSimSemanticEnvironment=.../horror_corridor_imported.json -AdaptSimDemoInputStart -AdaptSimDemoHoldSeconds=25
-```
-
-If the streamer is down, restart it on the VM. This command wires the stream to the selected manifest and input loop:
-
-```bash
-export PS_WEB="$UE/Engine/Plugins/Media/PixelStreaming2/Resources/WebServers/SignallingWebServer"
-mkdir -p "$HOME/adaptsim-pixelstreaming"
-cd "$PS_WEB"
-sudo -n env PATH="$PATH" node ./dist/index.js \
-  --streamer_port 8888 \
-  --player_port 80 \
-  --sfu_port 8889 \
-  --serve \
-  --https_redirect \
-  --console_messages verbose \
-  --log_config \
-  --http_root www \
-  --homepage player.html \
-  --peer_options_file "$HOME/adaptsim-pixelstreaming/peer_options.json" \
-  > "$HOME/adaptsim-pixelstreaming/wilbur.log" 2>&1 &
-echo $! > "$HOME/adaptsim-pixelstreaming/wilbur.pid"
-
-"$UE/Engine/Binaries/Linux/UnrealEditor" "$UPROJECT" /Game/AdaptSim/Maps/L_HorrorCorridor_Imported \
-  -game \
-  -RenderOffscreen \
-  -Unattended \
-  -nosplash \
-  -ForceRes \
-  -ResX=1280 \
-  -ResY=720 \
-  -AudioMixer \
-  -PixelStreamingConnectionURL=ws://127.0.0.1:8888 \
-  -PixelStreamingWebRTCMinPort=19302 \
-  -PixelStreamingWebRTCMaxPort=19303 \
-  -PixelStreamingWebRTCDisableTransmitAudio=true \
-  -PixelStreamingWebRTCDisableReceiveAudio=true \
-  -PixelStreamingEncoderCodec=H264 \
-  -AdaptSimScenarioManifest="$PROJECT/Saved/AdaptSimContractExamples/scenario_manifests/horror_corridor_ambush_delay_001.json" \
-  -AdaptSimSemanticEnvironment="$PROJECT/Saved/AdaptSimContractExamples/semantic_environments/horror_corridor_imported.json" \
-  -AdaptSimDemoInputStart \
-  -AdaptSimDemoHoldSeconds=25 \
-  > "$HOME/adaptsim-pixelstreaming/unreal-pixelstreaming.log" 2>&1 &
-echo $! > "$HOME/adaptsim-pixelstreaming/unreal.pid"
 ```
 
 Latest Integration Marshal note: one public-browser run stalled at `WEBRTC CONNECTION NEGOTIATED` when Wilbur showed public ICE candidates on `34.139.126.187:49152-49154`. Restarting Unreal with `-PixelStreamingWebRTCDisableTransmitAudio=true -PixelStreamingWebRTCDisableReceiveAudio=true` produced a clean browser pass with live H.264 video, `1280x720`, decoded frames, and `Controls stream input: true`. The successful no-audio offer still advertised `49152-49153`, so treat the `19302-19303` firewall rule as useful preflight context, not a complete proof of the actual ICE path. If a tab stays stuck after the restart, close it and open a fresh cache-busted player URL.
@@ -387,6 +447,6 @@ python3 contracts/aar_generator.py contracts/examples/telemetry/mock_hallway_del
 - One multi-count ambush spawn still reports a legacy/derived `ambush_service_alcove` anchor id in telemetry.
 - Observer scenario uses accepted fallback placement instead of strict `observation_point` placement.
 - Semantic anchors in the saved map are TargetPoint placeholders, not native `ASemanticAnchor` actors, because native placement crashed under Linux `-nullrhi`.
-- Pixel Streaming is process-managed with pid/log files, not yet a committed systemd unit or repo launcher script.
+- Pixel Streaming is repo script-managed with pid/log/status files, not yet a systemd unit.
 - Pixel Streaming media needs a routable UDP path. Future agents should run `scripts/check_pixelstreaming_webrtc_firewall.sh` before Pixel Streaming work. `OK_WORKAROUND` is acceptable for the current no-admin path, but UE 5.7 PixelStreaming2 can still advertise `49152+`; use the no-audio launch flags, close stale browser tabs, and verify live ICE candidates in `wilbur.log`. The preferred `49152-49200` firewall rule in shared VPC host project `gecko-enterprise-dev-host` is optional permanent cleanup.
 - `gcloud compute ssh` often prints `Updating project ssh metadata... failed.` even when SSH and SCP succeed.
