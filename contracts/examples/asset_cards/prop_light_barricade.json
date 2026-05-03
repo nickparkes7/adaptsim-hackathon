@@ -1,0 +1,44 @@
+{
+  "contract_type": "asset_card",
+  "schema_version": "1.0",
+  "asset_id": "prop_light_barricade",
+  "category": "static_prop",
+  "display_name": "Light Barricade",
+  "description": "Portable static obstacle used to shape trainee movement without fully sealing a route.",
+  "unreal_asset_path": "/Game/Props/BP_Light_Barricade",
+  "spawn_policy": "scenario_director_whitelist",
+  "gameplay_tags": [
+    "prop",
+    "cover",
+    "obstacle",
+    "static_prop"
+  ],
+  "capabilities": [
+    "block_path",
+    "provide_cover"
+  ],
+  "equipment": [],
+  "preferred_affordances": [
+    "hallway",
+    "chokepoint"
+  ],
+  "constraints": [
+    "requires_collision",
+    "avoid_blocking_all_exits"
+  ],
+  "behavior_profiles": [
+    "static_blocking_obstacle"
+  ],
+  "likelihood_modifiers": {
+    "near_chokepoint": 1.1,
+    "objective_area": 0.8
+  },
+  "collision_profile": "block_all",
+  "bounds_m": {
+    "x": 1.2,
+    "y": 0.35,
+    "z": 0.9
+  },
+  "ingestion_status": "prototype"
+}
+

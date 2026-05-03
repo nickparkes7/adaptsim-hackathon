@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "location_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Location M",
+          "type": "array"
+        },
+        "rotation_deg": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Deg",
+          "type": "array"
+        }
+      },
+      "required": [
+        "location_m"
+      ],
+      "title": "Transform",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/semantic_anchor.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "anchor_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Anchor Id",
+      "type": "string"
+    },
+    "anchor_type": {
+      "enum": [
+        "room",
+        "hallway",
+        "door",
+        "window",
+        "entry_point",
+        "exit",
+        "cover",
+        "concealment",
+        "chokepoint",
+        "line_of_sight",
+        "fallback_route",
+        "no_spawn_zone",
+        "objective_area",
+        "spawn_zone"
+      ],
+      "title": "Anchor Type",
+      "type": "string"
+    },
+    "contract_type": {
+      "const": "semantic_anchor",
+      "default": "semantic_anchor",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "extent_m": {
+      "anyOf": [
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extent M"
+    },
+    "linked_anchor_ids": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{2,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Linked Anchor Ids",
+      "type": "array"
+    },
+    "navmesh_reachable": {
+      "default": true,
+      "title": "Navmesh Reachable",
+      "type": "boolean"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Tags",
+      "type": "array"
+    },
+    "transform": {
+      "$ref": "#/$defs/Transform"
+    }
+  },
+  "required": [
+    "anchor_id",
+    "anchor_type",
+    "display_name",
+    "tags",
+    "transform"
+  ],
+  "title": "SemanticAnchor",
+  "type": "object"
+}

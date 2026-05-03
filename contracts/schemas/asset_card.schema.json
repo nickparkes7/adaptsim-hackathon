@@ -1,0 +1,205 @@
+{
+  "$defs": {
+    "BoundsM": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "exclusiveMinimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "exclusiveMinimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "exclusiveMinimum": 0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "title": "BoundsM",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/asset_card.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "asset_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Asset Id",
+      "type": "string"
+    },
+    "behavior_profiles": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{2,63}$",
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Behavior Profiles",
+      "type": "array"
+    },
+    "bounds_m": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BoundsM"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "capabilities": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "category": {
+      "enum": [
+        "adversary_role",
+        "static_prop",
+        "equipment",
+        "effect",
+        "objective_marker",
+        "training_marker"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "collision_profile": {
+      "enum": [
+        "none",
+        "block_all",
+        "overlap_only",
+        "pawn"
+      ],
+      "title": "Collision Profile",
+      "type": "string"
+    },
+    "constraints": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Constraints",
+      "type": "array"
+    },
+    "contract_type": {
+      "const": "asset_card",
+      "default": "asset_card",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "equipment": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 24,
+      "title": "Equipment",
+      "type": "array"
+    },
+    "gameplay_tags": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Gameplay Tags",
+      "type": "array"
+    },
+    "ingestion_status": {
+      "default": "prototype",
+      "enum": [
+        "ready",
+        "prototype",
+        "placeholder"
+      ],
+      "title": "Ingestion Status",
+      "type": "string"
+    },
+    "likelihood_modifiers": {
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{1,63}$": {
+          "type": "number"
+        }
+      },
+      "title": "Likelihood Modifiers",
+      "type": "object"
+    },
+    "preferred_affordances": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Preferred Affordances",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "spawn_policy": {
+      "enum": [
+        "never_spawn",
+        "scenario_director_whitelist"
+      ],
+      "title": "Spawn Policy",
+      "type": "string"
+    },
+    "unreal_asset_path": {
+      "anyOf": [
+        {
+          "pattern": "^/Game/.+",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Reviewed Unreal class, Blueprint, mesh, or data asset path.",
+      "title": "Unreal Asset Path"
+    }
+  },
+  "required": [
+    "asset_id",
+    "category",
+    "display_name",
+    "description",
+    "spawn_policy",
+    "gameplay_tags",
+    "collision_profile"
+  ],
+  "title": "AssetCard",
+  "type": "object"
+}

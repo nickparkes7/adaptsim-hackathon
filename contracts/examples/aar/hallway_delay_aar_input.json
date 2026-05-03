@@ -1,0 +1,116 @@
+{
+  "contract_type": "after_action_review_input",
+  "schema_version": "1.0",
+  "run_id": "run_hallway_delay_001",
+  "scenario_id": "scan_hallway_delay_001",
+  "environment_id": "scan_hallway_alpha",
+  "trainee_id": "trainee_demo_001",
+  "training_objectives": [
+    "Detect delayed contact from an occluded side room.",
+    "Move to cover and preserve route awareness after contact."
+  ],
+  "scenario_assumptions": [
+    "The side room remains occluded from the primary entry until the trainee advances.",
+    "Likelihood values are scenario sampling weights under assumptions, not calibrated intelligence truth."
+  ],
+  "telemetry_events": [
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "run_started_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:00-07:00",
+      "sim_time_s": 0.0,
+      "source": "scenario_director",
+      "event_type": "run_started",
+      "data": {
+        "operator": "hackathon_demo"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "trigger_fired_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:04.800000-07:00",
+      "sim_time_s": 4.8,
+      "source": "scenario_director",
+      "event_type": "trigger_fired",
+      "scenario_event_id": "delay_contact_001",
+      "anchor_id": "hallway_main",
+      "position_m": [
+        3.4,
+        0.1,
+        0.0
+      ],
+      "data": {
+        "trigger_type": "trainee_enters_anchor"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "perception_contact_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:08.700000-07:00",
+      "sim_time_s": 8.7,
+      "source": "adversary_ai",
+      "event_type": "perception_contact",
+      "scenario_event_id": "delay_contact_001",
+      "actor_id": "AI_Adversary_01",
+      "asset_id": "adversary_rifleman_irregular",
+      "anchor_id": "side_room_cover",
+      "position_m": [
+        6.2,
+        -2.4,
+        0.0
+      ],
+      "data": {
+        "target_actor_id": "Trainee_01",
+        "sense": "sight"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "trainee_action_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:09.100000-07:00",
+      "sim_time_s": 9.1,
+      "source": "trainee",
+      "event_type": "trainee_action",
+      "actor_id": "Trainee_01",
+      "anchor_id": "hallway_main",
+      "position_m": [
+        4.0,
+        0.0,
+        0.0
+      ],
+      "data": {
+        "action": "move_to_cover",
+        "response_latency_s": 0.4
+      }
+    }
+  ],
+  "scoring_rubric": [
+    {
+      "metric_id": "contact_detection_latency",
+      "description": "Time between adversary perception contact and trainee response.",
+      "success_condition": "Trainee takes an appropriate action within the evaluator-defined response window."
+    },
+    {
+      "metric_id": "route_awareness",
+      "description": "Whether the trainee preserved awareness of entry, exit, and cover anchors after contact.",
+      "success_condition": "AAR cites telemetry-backed movement or observation behavior tied to known anchors."
+    }
+  ],
+  "review_constraints": {
+    "do_not_infer_intent_without_telemetry": true,
+    "state_likelihood_as_scenario_based": true
+  }
+}
+

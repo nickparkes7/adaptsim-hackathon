@@ -49,8 +49,10 @@ The demo should feel like: "this hallway was scanned this morning, and now I can
 ## Proposed Pipeline
 
 ```text
-RealityScan mobile capture
--> USDZ / OBJ / GLB scene export
+Photo capture or direct scan export
+-> object storage capture bundle
+-> A100 reconstruction worker for raw photos
+-> Unreal-ready mesh artifact
 -> Unreal level import
 -> semantic tagging of rooms, doors, chokepoints, cover, exits, and spawn zones
 -> asset and intent database
@@ -66,12 +68,21 @@ RealityScan mobile capture
 
 ### 1. Reality Capture
 
-Use the RealityScan mobile app for the short-term demo.
+There are two capture paths:
 
-The output is a real-world scene mesh imported into Unreal. This replaces the previous fVDB/COLMAP/Gaussian-splat reconstruction path for now.
+- Direct mesh import from tools such as RealityScan, using USDZ, OBJ, GLB, or FBX when a mesh already exists.
+- Photo reconstruction from uploaded images, using COLMAP/GLOMAP plus fVDB Reality Capture on the A100 worker.
 
-Expected scene import work:
+The direct mesh path remains useful as a fallback and demo shortcut. The active
+photo reconstruction plan is documented in `docs/photo_reconstruction_pipeline.md`.
 
+Expected reconstruction and scene import work:
+
+- Store raw images and metadata in GCS.
+- Solve camera poses and sparse points before fVDB reconstruction.
+- Export FVDB splats to PLY/USDZ for preview/interchange.
+- Extract a triangle mesh with FVDB DLNR meshing.
+- Convert the mesh to an Unreal-friendly artifact such as GLB/FBX/OBJ.
 - Clean up scale, origin, orientation, materials, and collision.
 - Add or generate a NavMesh.
 - Add semantic anchors and volumes for tactical reasoning.
@@ -255,8 +266,11 @@ Avoid using models for:
 
 ### Capture And Scene
 
-- RealityScan mobile app.
-- USDZ, OBJ, GLB, or FBX export depending on the cleanest Unreal path.
+- Direct scan export from tools such as RealityScan when a mesh already exists.
+- Uploaded image sets stored in GCS for asynchronous reconstruction.
+- COLMAP or GLOMAP for image pose solving.
+- fVDB Reality Capture on the A100 worker for splats and mesh extraction.
+- USDZ, OBJ, GLB, or FBX depending on the cleanest Unreal import path.
 - Unreal Engine as the interactive runtime.
 
 ### Unreal Runtime
@@ -286,18 +300,22 @@ Avoid using models for:
 - Trellis/Trellis.2 or comparable 3D generation for offline static asset creation.
 - Optional local model path later for airgapped deployments.
 
-### Removed From Short-Term Demo Stack
+### Current Boundaries
 
-These are no longer part of the current demo plan:
+These are in scope for the photo reconstruction pipeline:
 
-- fVDB Reality Capture.
-- COLMAP.
-- Cosmos Reason2.
-- Cosmos Transfer2.5.
-- Cosmos Predict2.5.
-- Gaussian splat rendering as the main runtime representation.
+- COLMAP or GLOMAP for pose solving from uploaded images.
+- fVDB Reality Capture on the A100 worker.
+- FVDB splat PLY/USDZ artifacts for preview/interchange.
+- FVDB DLNR mesh extraction followed by mesh conversion for Unreal import.
 
-They may be revisited later, but they are not needed for the current RealityScan + Unreal path.
+These are not the authoritative runtime representation:
+
+- Gaussian splat rendering as the main Unreal gameplay surface.
+- Raw FVDB output without Unreal collision, NavMesh, and semantic validation.
+
+Cosmos Reason2, Cosmos Transfer2.5, and Cosmos Predict2.5 remain exploratory
+model experiments and are not required for the photo-to-Unreal reconstruction path.
 
 ## MVP Scope
 
@@ -324,6 +342,150 @@ Defer this:
 - Full doctrine-scale asset database.
 - Calibrated real-world threat prediction.
 - Full multi-agent learned behavior.
+
+## V2 Product Vision: Scene-To-Simulation Compiler
+
+The larger AdaptSim product is a scene-to-simulation compiler.
+
+The product should not claim that a model creates a complete Unreal game from scratch. Instead, AdaptSim should ship with a reusable Unreal simulation shell, then automatically compile new scene-specific inputs into that shell:
+
+- Reconstructed environment geometry.
+- Semantic environment annotations.
+- Mission and location context.
+- Asset and behavior databases.
+- Scenario manifests.
+- Training telemetry and after-action review.
+
+In this framing, Unreal is the stable runtime and AdaptSim is the compiler that turns messy real-world inputs into playable training instances.
+
+### V2 End-To-End Workflow
+
+The target user flow:
+
+1. A user opens the AdaptSim web app and creates a new training scene.
+2. The user uploads a set of images, video frames, or scan artifacts from the target environment.
+3. The frontend sends those inputs to a secure backend job system.
+4. A GPU worker reconstructs the scene using fVDB Reality Capture or a comparable reconstruction backend.
+5. The reconstruction pipeline emits a mesh, textures, metadata, camera alignment, and quality reports.
+6. A scene compiler normalizes scale, origin, materials, collision, and navigation surfaces.
+7. A semantic pass proposes rooms, doors, chokepoints, cover, exits, spawn zones, and no-spawn zones.
+8. A data extraction service reads approved military, industrial, or customer-specific source material and produces explicit asset cards, behavior profiles, constraints, and scenario templates.
+9. A scenario planner combines the semantic environment, asset database, and training objective into one or more strict scenario manifests.
+10. Unreal Editor or a commandlet imports the compiled scene package into the prebuilt AdaptSim simulation shell.
+11. The web app launches or connects to a Pixel Streaming session for that generated training instance.
+12. Telemetry from the run feeds an after-action review and can update future scenario recommendations.
+
+### Upload And Job Architecture
+
+The frontend should not stream large image sets through the main application server.
+
+A production path should use:
+
+- `POST /captures` to create a capture job and receive signed upload URLs.
+- Direct browser upload to object storage such as GCS, S3, or an on-prem equivalent.
+- Resumable or chunked upload support for large image sets and weak networks.
+- Stored metadata for capture device, EXIF, operator notes, location labels, classification markings, and access-control policy.
+- `POST /captures/{capture_id}/complete` to enqueue reconstruction.
+- Job status over polling, server-sent events, or WebSockets.
+- Immutable artifact paths for raw inputs, reconstruction outputs, semantic outputs, scenario manifests, and AAR outputs.
+
+This design keeps the web app responsive while the expensive GPU and Unreal work happens in background workers.
+
+### Automated Unreal Generation Model
+
+The automated Unreal step should be treated as content compilation, not game authoring.
+
+Prebuilt once:
+
+- AdaptSim Unreal project.
+- Import commandlets and editor Python scripts.
+- ScenarioDirector.
+- Asset whitelist and spawn registry.
+- Generic adversary classes.
+- Behavior Tree, StateTree, EQS, Smart Object, and perception components.
+- Telemetry and replay hooks.
+- Pixel Streaming launch harness.
+
+Generated per scene:
+
+- Imported mesh and materials.
+- Scene level.
+- Collision settings.
+- NavMesh bounds and validation results.
+- Lighting and camera defaults.
+- Semantic anchors and volumes.
+- Scenario manifests.
+- Spawn placements, props, and tactical affordance markers.
+
+This means a new training instance can be generated without a designer manually creating a fresh Unreal game. However, the automation depends on a well-tested Unreal shell and constrained content contracts.
+
+### Asset And Data Layer
+
+The V2 asset database should be explicit, inspectable, and source-linked.
+
+Inputs may include:
+
+- Doctrine and training documents.
+- Customer-specific operating procedures.
+- Facility documentation.
+- Asset inventories.
+- Intelligence-style summaries approved for the training context.
+- SME-authored constraints and likelihood modifiers.
+
+Model extraction can help transform these sources into structured records, but the system should preserve:
+
+- Source provenance.
+- Confidence and review state.
+- Access-control labels.
+- Schema validation.
+- Human override paths.
+- Clear separation between observed facts, training assumptions, and generated scenario hypotheses.
+
+The planner should output scenario likelihoods as assumptions for rehearsal, not calibrated real-world predictions.
+
+### Local And On-Prem Future
+
+The near-term implementation can run reconstruction and Unreal generation on a GPU VM, then stream the result to the browser.
+
+The longer-term defense or industrial deployment story should allow the same pipeline to run on local infrastructure:
+
+- On-prem GPU workstation or server.
+- Local object storage.
+- Local model endpoints.
+- Local Unreal build and Pixel Streaming stack.
+- No requirement to send sensitive imagery or documents to a third-party service.
+
+The web app can remain the operator interface even when compute moves from cloud to on-prem.
+
+### Hard Product Problems
+
+The hardest parts of V2 are not the web UI or basic Unreal import.
+
+The hardest parts are:
+
+- Reconstruction quality under bad lighting, reflective surfaces, blank walls, thin objects, and incomplete image coverage.
+- Scale, origin, and orientation consistency across captures.
+- Generating collision and navigation that are safe enough for simulation.
+- Automatically identifying meaningful tactical semantics from geometry and images.
+- Validating that generated spawn points are reachable, believable, and not visible at scenario start unless intended.
+- Converting proprietary documents into useful asset cards without hallucinated capabilities or unsupported claims.
+- Keeping model outputs explainable and reviewable.
+- Managing GPU scheduling, Pixel Streaming sessions, cold starts, and per-customer isolation.
+- Securing raw imagery, source documents, generated artifacts, telemetry, and AAR outputs.
+- Avoiding overclaims: AdaptSim can generate training hypotheses, not ground-truth intelligence predictions.
+
+### V2 Roadmap
+
+The roadmap should move from constrained automation to broader autonomy:
+
+1. Accept direct `GLB`, `OBJ`, `USD`, or RealityScan exports and compile them into playable Unreal scenes.
+2. Add robust image upload, artifact storage, and asynchronous job tracking.
+3. Add fVDB reconstruction as a background GPU worker.
+4. Add mesh postprocessing from FVDB mesh PLY to Unreal-ready GLB/FBX/OBJ artifacts.
+5. Add document extraction into validated asset cards and behavior profiles.
+6. Add automatic scenario generation with strict schema validation and Unreal feasibility checks.
+7. Add Pixel Streaming session orchestration from the web app.
+8. Add on-prem deployment mode for sensitive environments.
 
 ## Why This Wins
 

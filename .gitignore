@@ -8,4 +8,5 @@ ngc-cli/
 __pycache__/
 *.traineddata
 *.traineddata.gz
+data/**/*.zip
 .DS_Store

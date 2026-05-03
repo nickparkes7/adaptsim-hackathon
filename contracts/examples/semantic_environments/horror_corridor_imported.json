@@ -1,0 +1,423 @@
+{
+  "contract_type": "semantic_environment",
+  "schema_version": "1.0",
+  "environment_id": "horror_corridor_imported",
+  "source_scan_id": "horror_corridor_vr_room_baked",
+  "unreal_level_path": "/Game/AdaptSim/Maps/L_HorrorCorridor_Imported",
+  "coordinate_frame": "unreal_world_m",
+  "units": "meters",
+  "anchors": [
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "entry",
+      "anchor_type": "entry_point",
+      "display_name": "Entry",
+      "tags": [
+        "entry_point",
+        "hallway"
+      ],
+      "transform": {
+        "location_m": [
+          -4.2,
+          0.0,
+          0.9
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        2.0
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_center",
+        "doorway"
+      ],
+      "notes": "Entry marker for the imported horror corridor scene."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "exit",
+      "anchor_type": "exit",
+      "display_name": "Exit",
+      "tags": [
+        "exit",
+        "hallway",
+        "fallback_route"
+      ],
+      "transform": {
+        "location_m": [
+          4.2,
+          0.0,
+          0.9
+        ],
+        "rotation_deg": [
+          0.0,
+          180.0,
+          180.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        2.0
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_center",
+        "chokepoint"
+      ],
+      "notes": "Exit marker for scenario goals and retreat routes."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "hallway_center",
+      "anchor_type": "hallway",
+      "display_name": "Hallway Center",
+      "tags": [
+        "hallway",
+        "navigation",
+        "near_chokepoint"
+      ],
+      "transform": {
+        "location_m": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "rotation_deg": [
+          90.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        2.5,
+        1.2,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "entry",
+        "exit",
+        "doorway",
+        "cover",
+        "chokepoint"
+      ],
+      "notes": "Central corridor anchor for routing, triggers, and visibility tests."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "doorway",
+      "anchor_type": "door",
+      "display_name": "Doorway",
+      "tags": [
+        "door",
+        "transition",
+        "near_chokepoint"
+      ],
+      "transform": {
+        "location_m": [
+          -1.5,
+          2.4,
+          1.0
+        ],
+        "rotation_deg": [
+          90.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        0.25,
+        2.1
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "entry",
+        "hallway_center"
+      ],
+      "notes": "Doorway or threshold marker for breach and transition scenarios."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "cover",
+      "anchor_type": "cover",
+      "display_name": "Cover",
+      "tags": [
+        "cover",
+        "concealment",
+        "spawnable"
+      ],
+      "transform": {
+        "location_m": [
+          -1.2,
+          -2.4,
+          0.8
+        ],
+        "rotation_deg": [
+          35.0,
+          0.0,
+          -0.0
+        ]
+      },
+      "extent_m": [
+        1.2,
+        0.8,
+        1.0
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_center",
+        "ambush_point"
+      ],
+      "notes": "Cover affordance placeholder; verify final cover geometry visually before production use."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "ambush_point",
+      "anchor_type": "spawn_zone",
+      "display_name": "Ambush Point",
+      "tags": [
+        "spawn_zone",
+        "ambush_point",
+        "adversary",
+        "concealment"
+      ],
+      "transform": {
+        "location_m": [
+          2.4,
+          -1.4,
+          1.0
+        ],
+        "rotation_deg": [
+          -60.0,
+          180.0,
+          180.0
+        ]
+      },
+      "extent_m": [
+        1.5,
+        1.5,
+        2.0
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "cover",
+        "chokepoint",
+        "observation_point"
+      ],
+      "notes": "Adversary spawn and ambush anchor for ScenarioDirector tests."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "observation_point",
+      "anchor_type": "line_of_sight",
+      "display_name": "Observation Point",
+      "tags": [
+        "line_of_sight",
+        "observation_point"
+      ],
+      "transform": {
+        "location_m": [
+          0.0,
+          3.4,
+          1.6
+        ],
+        "rotation_deg": [
+          -90.0,
+          -10.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        2.0
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_center",
+        "ambush_point"
+      ],
+      "notes": "Observation marker for line-of-sight and AAR camera work."
+    },
+    {
+      "contract_type": "semantic_anchor",
+      "schema_version": "1.0",
+      "anchor_id": "chokepoint",
+      "anchor_type": "chokepoint",
+      "display_name": "Chokepoint",
+      "tags": [
+        "chokepoint",
+        "near_cover",
+        "near_chokepoint"
+      ],
+      "transform": {
+        "location_m": [
+          1.2,
+          0.0,
+          1.0
+        ],
+        "rotation_deg": [
+          90.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.2,
+        1.0,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_center",
+        "exit",
+        "ambush_point"
+      ],
+      "notes": "Narrow-passage marker for trainee-entered triggers and adversary placement constraints."
+    }
+  ],
+  "graph_edges": [
+    {
+      "from_anchor_id": "entry",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 4.201
+    },
+    {
+      "from_anchor_id": "entry",
+      "to_anchor_id": "doorway",
+      "relation": "connects",
+      "distance_m": 3.614
+    },
+    {
+      "from_anchor_id": "exit",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 4.201
+    },
+    {
+      "from_anchor_id": "exit",
+      "to_anchor_id": "chokepoint",
+      "relation": "connects",
+      "distance_m": 3.002
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "entry",
+      "relation": "connects",
+      "distance_m": 4.201
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "exit",
+      "relation": "connects",
+      "distance_m": 4.201
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "doorway",
+      "relation": "connects",
+      "distance_m": 2.83
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "cover",
+      "relation": "connects",
+      "distance_m": 2.691
+    },
+    {
+      "from_anchor_id": "hallway_center",
+      "to_anchor_id": "chokepoint",
+      "relation": "connects",
+      "distance_m": 1.2
+    },
+    {
+      "from_anchor_id": "doorway",
+      "to_anchor_id": "entry",
+      "relation": "connects",
+      "distance_m": 3.614
+    },
+    {
+      "from_anchor_id": "doorway",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 2.83
+    },
+    {
+      "from_anchor_id": "cover",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 2.691
+    },
+    {
+      "from_anchor_id": "cover",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": 3.742
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "cover",
+      "relation": "connects",
+      "distance_m": 3.742
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "chokepoint",
+      "relation": "connects",
+      "distance_m": 1.844
+    },
+    {
+      "from_anchor_id": "ambush_point",
+      "to_anchor_id": "observation_point",
+      "relation": "connects",
+      "distance_m": 5.4
+    },
+    {
+      "from_anchor_id": "observation_point",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 3.453
+    },
+    {
+      "from_anchor_id": "observation_point",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": 5.4
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "hallway_center",
+      "relation": "connects",
+      "distance_m": 1.2
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "exit",
+      "relation": "connects",
+      "distance_m": 3.002
+    },
+    {
+      "from_anchor_id": "chokepoint",
+      "to_anchor_id": "ambush_point",
+      "relation": "connects",
+      "distance_m": 1.844
+    }
+  ]
+}

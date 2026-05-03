@@ -1,0 +1,29 @@
+{
+  "contract_type": "behavior_profile",
+  "schema_version": "1.0",
+  "behavior_profile_id": "static_blocking_obstacle",
+  "display_name": "Static Blocking Obstacle",
+  "applies_to_categories": [
+    "static_prop"
+  ],
+  "runtime_system": "none",
+  "planner_summary": "Spawn a static prop at a legal anchor to shape movement while preserving at least one viable route.",
+  "activation_tags": [
+    "hallway",
+    "chokepoint"
+  ],
+  "permitted_actions": [
+    "spawn",
+    "block_path",
+    "provide_cover"
+  ],
+  "completion_criteria": [
+    "Prop was spawned at a valid anchor.",
+    "ScenarioDirector confirmed no exit route was fully blocked."
+  ],
+  "telemetry_markers": [
+    "prop_spawned",
+    "route_check_passed"
+  ]
+}
+

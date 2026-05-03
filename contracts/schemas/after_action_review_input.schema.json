@@ -1,0 +1,319 @@
+{
+  "$defs": {
+    "ReviewConstraints": {
+      "additionalProperties": false,
+      "properties": {
+        "do_not_infer_intent_without_telemetry": {
+          "const": true,
+          "default": true,
+          "title": "Do Not Infer Intent Without Telemetry",
+          "type": "boolean"
+        },
+        "state_likelihood_as_scenario_based": {
+          "const": true,
+          "default": true,
+          "title": "State Likelihood As Scenario Based",
+          "type": "boolean"
+        }
+      },
+      "title": "ReviewConstraints",
+      "type": "object"
+    },
+    "ScoringMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "metric_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Metric Id",
+          "type": "string"
+        },
+        "success_condition": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Success Condition",
+          "type": "string"
+        }
+      },
+      "required": [
+        "metric_id",
+        "description",
+        "success_condition"
+      ],
+      "title": "ScoringMetric",
+      "type": "object"
+    },
+    "TelemetryEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_./:-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id"
+        },
+        "anchor_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor Id"
+        },
+        "asset_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        },
+        "contract_type": {
+          "const": "telemetry_event",
+          "default": "telemetry_event",
+          "title": "Contract Type",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Data",
+          "type": "object"
+        },
+        "event_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "enum": [
+            "run_started",
+            "trigger_fired",
+            "asset_spawned",
+            "perception_contact",
+            "trainee_action",
+            "actor_state",
+            "hit_event",
+            "objective_update",
+            "run_ended"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "position_m": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position M"
+        },
+        "run_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "scenario_event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario Event Id"
+        },
+        "scenario_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Scenario Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sim_time_s": {
+          "minimum": 0,
+          "title": "Sim Time S",
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "trainee",
+            "scenario_director",
+            "adversary_ai",
+            "environment",
+            "system"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "scenario_id",
+        "timestamp",
+        "sim_time_s",
+        "source",
+        "event_type"
+      ],
+      "title": "TelemetryEvent",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/after_action_review_input.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_type": {
+      "const": "after_action_review_input",
+      "default": "after_action_review_input",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "environment_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Environment Id",
+      "type": "string"
+    },
+    "review_constraints": {
+      "$ref": "#/$defs/ReviewConstraints"
+    },
+    "run_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "scenario_assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Scenario Assumptions",
+      "type": "array"
+    },
+    "scenario_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scoring_rubric": {
+      "items": {
+        "$ref": "#/$defs/ScoringMetric"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "title": "Scoring Rubric",
+      "type": "array"
+    },
+    "telemetry_events": {
+      "items": {
+        "$ref": "#/$defs/TelemetryEvent"
+      },
+      "maxItems": 5000,
+      "minItems": 1,
+      "title": "Telemetry Events",
+      "type": "array"
+    },
+    "trainee_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Trainee Id",
+      "type": "string"
+    },
+    "training_objectives": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Training Objectives",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id",
+    "scenario_id",
+    "environment_id",
+    "trainee_id",
+    "training_objectives",
+    "scenario_assumptions",
+    "telemetry_events",
+    "scoring_rubric"
+  ],
+  "title": "AfterActionReviewInput",
+  "type": "object"
+}

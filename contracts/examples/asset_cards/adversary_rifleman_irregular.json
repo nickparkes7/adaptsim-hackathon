@@ -1,0 +1,52 @@
+{
+  "contract_type": "asset_card",
+  "schema_version": "1.0",
+  "asset_id": "adversary_rifleman_irregular",
+  "category": "adversary_role",
+  "display_name": "Irregular Rifleman",
+  "description": "Generic training adversary role for a lightly equipped actor that can observe, delay, suppress, and withdraw.",
+  "unreal_asset_path": "/Game/Actors/BP_Adversary_Rifleman",
+  "spawn_policy": "scenario_director_whitelist",
+  "gameplay_tags": [
+    "adversary",
+    "armed",
+    "human"
+  ],
+  "capabilities": [
+    "move",
+    "observe",
+    "hide",
+    "suppress",
+    "withdraw"
+  ],
+  "equipment": [
+    "rifle"
+  ],
+  "preferred_affordances": [
+    "cover",
+    "concealment",
+    "line_of_sight",
+    "fallback_route"
+  ],
+  "constraints": [
+    "requires_navmesh",
+    "spawn_out_of_initial_view"
+  ],
+  "behavior_profiles": [
+    "ambush_then_reposition",
+    "observe_and_withdraw"
+  ],
+  "likelihood_modifiers": {
+    "near_chokepoint": 1.4,
+    "exposed_open_area": 0.5,
+    "has_fallback_route": 1.2
+  },
+  "collision_profile": "pawn",
+  "bounds_m": {
+    "x": 0.6,
+    "y": 0.6,
+    "z": 1.8
+  },
+  "ingestion_status": "prototype"
+}
+

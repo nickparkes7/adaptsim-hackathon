@@ -1,0 +1,291 @@
+{
+  "$defs": {
+    "AnchorEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "distance_m": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distance M"
+        },
+        "from_anchor_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "From Anchor Id",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "contains",
+            "connects",
+            "adjacent",
+            "visible_from",
+            "route_to",
+            "near"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "to_anchor_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "To Anchor Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_anchor_id",
+        "to_anchor_id",
+        "relation"
+      ],
+      "title": "AnchorEdge",
+      "type": "object"
+    },
+    "SemanticAnchor": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "anchor_type": {
+          "enum": [
+            "room",
+            "hallway",
+            "door",
+            "window",
+            "entry_point",
+            "exit",
+            "cover",
+            "concealment",
+            "chokepoint",
+            "line_of_sight",
+            "fallback_route",
+            "no_spawn_zone",
+            "objective_area",
+            "spawn_zone"
+          ],
+          "title": "Anchor Type",
+          "type": "string"
+        },
+        "contract_type": {
+          "const": "semantic_anchor",
+          "default": "semantic_anchor",
+          "title": "Contract Type",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "extent_m": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extent M"
+        },
+        "linked_anchor_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{2,63}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Linked Anchor Ids",
+          "type": "array"
+        },
+        "navmesh_reachable": {
+          "default": true,
+          "title": "Navmesh Reachable",
+          "type": "boolean"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        }
+      },
+      "required": [
+        "anchor_id",
+        "anchor_type",
+        "display_name",
+        "tags",
+        "transform"
+      ],
+      "title": "SemanticAnchor",
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "location_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Location M",
+          "type": "array"
+        },
+        "rotation_deg": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Deg",
+          "type": "array"
+        }
+      },
+      "required": [
+        "location_m"
+      ],
+      "title": "Transform",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/semantic_environment.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "anchors": {
+      "items": {
+        "$ref": "#/$defs/SemanticAnchor"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Anchors",
+      "type": "array"
+    },
+    "contract_type": {
+      "const": "semantic_environment",
+      "default": "semantic_environment",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "coordinate_frame": {
+      "const": "unreal_world_m",
+      "default": "unreal_world_m",
+      "title": "Coordinate Frame",
+      "type": "string"
+    },
+    "environment_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Environment Id",
+      "type": "string"
+    },
+    "graph_edges": {
+      "items": {
+        "$ref": "#/$defs/AnchorEdge"
+      },
+      "maxItems": 512,
+      "title": "Graph Edges",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_scan_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Source Scan Id",
+      "type": "string"
+    },
+    "units": {
+      "const": "meters",
+      "default": "meters",
+      "title": "Units",
+      "type": "string"
+    },
+    "unreal_level_path": {
+      "pattern": "^/Game/.+",
+      "title": "Unreal Level Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "environment_id",
+    "source_scan_id",
+    "unreal_level_path",
+    "anchors"
+  ],
+  "title": "SemanticEnvironment",
+  "type": "object"
+}

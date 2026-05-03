@@ -1,0 +1,32 @@
+{
+  "contract_type": "behavior_profile",
+  "schema_version": "1.0",
+  "behavior_profile_id": "observe_and_withdraw",
+  "display_name": "Observe And Withdraw",
+  "applies_to_categories": [
+    "adversary_role"
+  ],
+  "runtime_system": "state_tree",
+  "runtime_asset_path": "/Game/AI/ST_ObserveAndWithdraw",
+  "planner_summary": "Maintain line of sight from cover, report trainee movement through telemetry, and withdraw after detection or timer expiry.",
+  "activation_tags": [
+    "line_of_sight",
+    "cover",
+    "fallback_route"
+  ],
+  "permitted_actions": [
+    "observe",
+    "hide",
+    "withdraw"
+  ],
+  "completion_criteria": [
+    "Actor maintained observation before trainee contact.",
+    "Actor attempted withdrawal when detected or after trigger timeout."
+  ],
+  "telemetry_markers": [
+    "observation_started",
+    "detected_by_trainee",
+    "withdraw_started"
+  ]
+}
+

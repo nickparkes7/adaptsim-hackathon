@@ -1,0 +1,294 @@
+{
+  "contract_type": "semantic_environment",
+  "schema_version": "1.0",
+  "environment_id": "scan_hallway_alpha",
+  "source_scan_id": "scan_hallway_alpha_raw",
+  "unreal_level_path": "/Game/Maps/L_ScannedHallwayAlpha",
+  "coordinate_frame": "unreal_world_m",
+  "units": "meters",
+  "anchors": [
+    {
+      "anchor_id": "entry_primary",
+      "anchor_type": "entry_point",
+      "display_name": "Primary Entry",
+      "tags": [
+        "entry_point",
+        "spawn_zone"
+      ],
+      "transform": {
+        "location_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        1.0,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_main"
+      ]
+    },
+    {
+      "anchor_id": "hallway_main",
+      "anchor_type": "hallway",
+      "display_name": "Main Hallway",
+      "tags": [
+        "hallway",
+        "near_chokepoint"
+      ],
+      "transform": {
+        "location_m": [
+          4.5,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        8.0,
+        1.4,
+        2.4
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "entry_primary",
+        "door_side_room",
+        "exit_rear"
+      ]
+    },
+    {
+      "anchor_id": "door_side_room",
+      "anchor_type": "door",
+      "display_name": "Side Room Door",
+      "tags": [
+        "door",
+        "chokepoint",
+        "near_chokepoint"
+      ],
+      "transform": {
+        "location_m": [
+          5.8,
+          -1.1,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          180.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        0.2,
+        2.1
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_main",
+        "side_room"
+      ]
+    },
+    {
+      "anchor_id": "side_room",
+      "anchor_type": "room",
+      "display_name": "Occluded Side Room",
+      "tags": [
+        "room",
+        "concealment",
+        "cover",
+        "fallback_route"
+      ],
+      "transform": {
+        "location_m": [
+          6.2,
+          -2.8,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        3.0,
+        2.5,
+        2.4
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "door_side_room",
+        "side_room_cover",
+        "exit_rear"
+      ]
+    },
+    {
+      "anchor_id": "side_room_cover",
+      "anchor_type": "cover",
+      "display_name": "Desk Cover",
+      "tags": [
+        "cover",
+        "concealment",
+        "line_of_sight"
+      ],
+      "transform": {
+        "location_m": [
+          6.2,
+          -2.4,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.4,
+        0.7,
+        0.8
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "side_room",
+        "hallway_main"
+      ]
+    },
+    {
+      "anchor_id": "exit_rear",
+      "anchor_type": "exit",
+      "display_name": "Rear Exit",
+      "tags": [
+        "exit",
+        "fallback_route"
+      ],
+      "transform": {
+        "location_m": [
+          9.4,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          90.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.2,
+        1.0,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_main",
+        "side_room"
+      ]
+    },
+    {
+      "anchor_id": "no_spawn_entry",
+      "anchor_type": "no_spawn_zone",
+      "display_name": "Entry No Spawn Zone",
+      "tags": [
+        "no_spawn_zone"
+      ],
+      "transform": {
+        "location_m": [
+          0.5,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        2.0,
+        1.5,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "entry_primary"
+      ]
+    },
+    {
+      "anchor_id": "objective_corner",
+      "anchor_type": "objective_area",
+      "display_name": "Objective Corner",
+      "tags": [
+        "objective_area",
+        "cover"
+      ],
+      "transform": {
+        "location_m": [
+          8.0,
+          0.8,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "extent_m": [
+        1.0,
+        0.8,
+        2.2
+      ],
+      "navmesh_reachable": true,
+      "linked_anchor_ids": [
+        "hallway_main"
+      ]
+    }
+  ],
+  "graph_edges": [
+    {
+      "from_anchor_id": "entry_primary",
+      "to_anchor_id": "hallway_main",
+      "relation": "connects",
+      "distance_m": 1.0
+    },
+    {
+      "from_anchor_id": "hallway_main",
+      "to_anchor_id": "door_side_room",
+      "relation": "adjacent",
+      "distance_m": 1.5
+    },
+    {
+      "from_anchor_id": "door_side_room",
+      "to_anchor_id": "side_room",
+      "relation": "connects",
+      "distance_m": 0.8
+    },
+    {
+      "from_anchor_id": "side_room_cover",
+      "to_anchor_id": "hallway_main",
+      "relation": "visible_from",
+      "distance_m": 4.2
+    },
+    {
+      "from_anchor_id": "side_room",
+      "to_anchor_id": "exit_rear",
+      "relation": "route_to",
+      "distance_m": 3.8
+    }
+  ]
+}
+

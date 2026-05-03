@@ -1,0 +1,174 @@
+{
+  "contract_type": "telemetry_log",
+  "schema_version": "1.0",
+  "run_id": "run_hallway_delay_001",
+  "scenario_id": "scan_hallway_delay_001",
+  "events": [
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "run_started_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:00-07:00",
+      "sim_time_s": 0.0,
+      "source": "scenario_director",
+      "event_type": "run_started",
+      "data": {
+        "operator": "hackathon_demo"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "trigger_fired_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:04.800000-07:00",
+      "sim_time_s": 4.8,
+      "source": "scenario_director",
+      "event_type": "trigger_fired",
+      "scenario_event_id": "delay_contact_001",
+      "anchor_id": "hallway_main",
+      "position_m": [
+        3.4,
+        0.1,
+        0.0
+      ],
+      "data": {
+        "trigger_type": "trainee_enters_anchor"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "asset_spawned_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:05.100000-07:00",
+      "sim_time_s": 5.1,
+      "source": "scenario_director",
+      "event_type": "asset_spawned",
+      "scenario_event_id": "delay_contact_001",
+      "actor_id": "AI_Adversary_01",
+      "asset_id": "adversary_rifleman_irregular",
+      "anchor_id": "side_room_cover",
+      "position_m": [
+        6.2,
+        -2.4,
+        0.0
+      ],
+      "data": {
+        "behavior_profile": "ambush_then_reposition"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "asset_spawned_002",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:05.200000-07:00",
+      "sim_time_s": 5.2,
+      "source": "scenario_director",
+      "event_type": "asset_spawned",
+      "scenario_event_id": "delay_contact_001",
+      "actor_id": "AI_Adversary_02",
+      "asset_id": "adversary_rifleman_irregular",
+      "anchor_id": "side_room",
+      "position_m": [
+        6.8,
+        -2.9,
+        0.0
+      ],
+      "data": {
+        "behavior_profile": "ambush_then_reposition"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "perception_contact_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:08.700000-07:00",
+      "sim_time_s": 8.7,
+      "source": "adversary_ai",
+      "event_type": "perception_contact",
+      "scenario_event_id": "delay_contact_001",
+      "actor_id": "AI_Adversary_01",
+      "asset_id": "adversary_rifleman_irregular",
+      "anchor_id": "side_room_cover",
+      "position_m": [
+        6.2,
+        -2.4,
+        0.0
+      ],
+      "data": {
+        "target_actor_id": "Trainee_01",
+        "sense": "sight"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "trainee_action_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:09.100000-07:00",
+      "sim_time_s": 9.1,
+      "source": "trainee",
+      "event_type": "trainee_action",
+      "actor_id": "Trainee_01",
+      "anchor_id": "hallway_main",
+      "position_m": [
+        4.0,
+        0.0,
+        0.0
+      ],
+      "data": {
+        "action": "move_to_cover",
+        "response_latency_s": 0.4
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "actor_state_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:20:13.600000-07:00",
+      "sim_time_s": 13.6,
+      "source": "adversary_ai",
+      "event_type": "actor_state",
+      "scenario_event_id": "delay_contact_001",
+      "actor_id": "AI_Adversary_01",
+      "asset_id": "adversary_rifleman_irregular",
+      "anchor_id": "exit_rear",
+      "position_m": [
+        8.8,
+        -0.2,
+        0.0
+      ],
+      "data": {
+        "state": "withdraw",
+        "target_anchor_id": "exit_rear"
+      }
+    },
+    {
+      "contract_type": "telemetry_event",
+      "schema_version": "1.0",
+      "event_id": "run_ended_001",
+      "run_id": "run_hallway_delay_001",
+      "scenario_id": "scan_hallway_delay_001",
+      "timestamp": "2026-05-02T09:21:02-07:00",
+      "sim_time_s": 62.0,
+      "source": "scenario_director",
+      "event_type": "run_ended",
+      "data": {
+        "outcome": "completed"
+      }
+    }
+  ]
+}
+

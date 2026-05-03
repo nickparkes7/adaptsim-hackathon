@@ -1,0 +1,78 @@
+{
+  "contract_type": "scenario_manifest",
+  "schema_version": "1.0",
+  "scenario_id": "scan_hallway_observer_002",
+  "environment_id": "scan_hallway_alpha",
+  "display_name": "Partial Obstacle With Observer",
+  "planner_id": "planner_hackathon_mvp",
+  "generated_at": "2026-05-02T09:10:00-07:00",
+  "training_objective": "Adapt to a partially obstructed hallway while detecting an observer positioned on a covered line of sight.",
+  "assumptions": [
+    "The barricade can be placed without blocking all exit routes.",
+    "The observer can reach cover and withdraw through a fallback route.",
+    "Likelihood is a scenario sampling weight under these assumptions, not an intelligence estimate."
+  ],
+  "likelihood_semantics": "scenario_likelihood_under_assumptions_not_calibrated_intelligence_truth",
+  "required_asset_ids": [
+    "prop_light_barricade",
+    "adversary_rifleman_irregular"
+  ],
+  "events": [
+    {
+      "event_id": "partial_barricade_001",
+      "event_type": "static_prop_spawn",
+      "asset_id": "prop_light_barricade",
+      "count": 1,
+      "intent": "shape_movement",
+      "required_tags": [
+        "hallway",
+        "near_chokepoint"
+      ],
+      "avoid_tags": [
+        "no_spawn_zone"
+      ],
+      "severity": 0.42,
+      "likelihood": 0.52,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "static_blocking_obstacle",
+      "trigger": {
+        "trigger_type": "on_scenario_start"
+      },
+      "rationale": "A light barricade near the hallway chokepoint forces route evaluation while preserving a passable lane.",
+      "parameters": {
+        "leave_clear_width_m": 1.1,
+        "require_route_check": true
+      }
+    },
+    {
+      "event_id": "observer_contact_001",
+      "event_type": "adversary_contact",
+      "asset_id": "adversary_rifleman_irregular",
+      "count": 1,
+      "intent": "observe_and_displace",
+      "required_tags": [
+        "line_of_sight",
+        "cover",
+        "fallback_route"
+      ],
+      "avoid_tags": [
+        "trainee_visible",
+        "no_spawn_zone"
+      ],
+      "severity": 0.62,
+      "likelihood": 0.41,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "observe_and_withdraw",
+      "trigger": {
+        "trigger_type": "timer_elapsed",
+        "delay_s": 12.0
+      },
+      "rationale": "The desk cover has a line of sight into the hallway and a route toward the rear exit, making it useful for observation and withdrawal.",
+      "max_distance_to_trainee_m": 24.0,
+      "parameters": {
+        "withdraw_when_detected": true
+      }
+    }
+  ]
+}
+

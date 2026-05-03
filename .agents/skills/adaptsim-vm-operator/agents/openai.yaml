@@ -1,0 +1,4 @@
+interface:
+  display_name: "AdaptSim VM Operator"
+  short_description: "Operate the AdaptSim Unreal and compute VMs"
+  default_prompt: "Use $adaptsim-vm-operator to choose, connect to, and verify the AdaptSim L4 runtime VM or A100 reconstruction worker."

@@ -1,0 +1,52 @@
+{
+  "contract_type": "scenario_manifest",
+  "schema_version": "1.0",
+  "scenario_id": "scan_hallway_delay_001",
+  "environment_id": "scan_hallway_alpha",
+  "display_name": "Side Room Delay Contact",
+  "planner_id": "planner_hackathon_mvp",
+  "generated_at": "2026-05-02T09:00:00-07:00",
+  "training_objective": "Detect and respond to delayed contact from an occluded side room while preserving movement discipline through the hallway.",
+  "assumptions": [
+    "The side room remains occluded from the primary entry until the trainee advances.",
+    "The NavMesh includes a viable route from the side room toward the rear exit.",
+    "Likelihood is a scenario sampling weight under these assumptions, not an intelligence estimate."
+  ],
+  "likelihood_semantics": "scenario_likelihood_under_assumptions_not_calibrated_intelligence_truth",
+  "required_asset_ids": [
+    "adversary_rifleman_irregular"
+  ],
+  "events": [
+    {
+      "event_id": "delay_contact_001",
+      "event_type": "adversary_contact",
+      "asset_id": "adversary_rifleman_irregular",
+      "count": 2,
+      "intent": "delay_and_disrupt",
+      "required_tags": [
+        "concealment",
+        "near_chokepoint",
+        "fallback_route"
+      ],
+      "avoid_tags": [
+        "trainee_visible",
+        "no_spawn_zone"
+      ],
+      "severity": 0.78,
+      "likelihood": 0.36,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "ambush_then_reposition",
+      "trigger": {
+        "trigger_type": "trainee_enters_anchor",
+        "anchor_id": "hallway_main"
+      },
+      "rationale": "The side room provides concealment near the first chokepoint, short engagement distance, and a fallback route toward the rear exit.",
+      "max_distance_to_trainee_m": 20.0,
+      "parameters": {
+        "minimum_separation_m": 8.0,
+        "reposition_after_contact_s": 6.0
+      }
+    }
+  ]
+}
+

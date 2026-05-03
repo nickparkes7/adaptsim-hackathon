@@ -1,0 +1,125 @@
+{
+  "$id": "https://adaptsim.local/contracts/behavior_profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activation_tags": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 24,
+      "title": "Activation Tags",
+      "type": "array"
+    },
+    "applies_to_categories": {
+      "items": {
+        "enum": [
+          "adversary_role",
+          "static_prop",
+          "equipment",
+          "effect",
+          "objective_marker",
+          "training_marker"
+        ],
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Applies To Categories",
+      "type": "array"
+    },
+    "behavior_profile_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Behavior Profile Id",
+      "type": "string"
+    },
+    "completion_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Completion Criteria",
+      "type": "array"
+    },
+    "contract_type": {
+      "const": "behavior_profile",
+      "default": "behavior_profile",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "permitted_actions": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Permitted Actions",
+      "type": "array"
+    },
+    "planner_summary": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Planner Summary",
+      "type": "string"
+    },
+    "runtime_asset_path": {
+      "anyOf": [
+        {
+          "pattern": "^/Game/.+",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runtime Asset Path"
+    },
+    "runtime_system": {
+      "enum": [
+        "none",
+        "state_tree",
+        "behavior_tree",
+        "smart_object",
+        "gameplay_ability"
+      ],
+      "title": "Runtime System",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "telemetry_markers": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 24,
+      "title": "Telemetry Markers",
+      "type": "array"
+    }
+  },
+  "required": [
+    "behavior_profile_id",
+    "display_name",
+    "applies_to_categories",
+    "runtime_system",
+    "planner_summary",
+    "permitted_actions",
+    "completion_criteria"
+  ],
+  "title": "BehaviorProfile",
+  "type": "object"
+}

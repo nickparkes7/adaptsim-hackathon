@@ -1,0 +1,31 @@
+{
+  "contract_type": "behavior_profile",
+  "schema_version": "1.0",
+  "behavior_profile_id": "ambush_then_reposition",
+  "display_name": "Ambush Then Reposition",
+  "applies_to_categories": [
+    "adversary_role"
+  ],
+  "runtime_system": "state_tree",
+  "runtime_asset_path": "/Game/AI/ST_AmbushThenReposition",
+  "planner_summary": "Delay detection from concealment, initiate contact when triggered, then displace toward a fallback route.",
+  "activation_tags": [
+    "concealment",
+    "near_chokepoint"
+  ],
+  "permitted_actions": [
+    "observe",
+    "suppress",
+    "withdraw"
+  ],
+  "completion_criteria": [
+    "Contact was initiated after trigger.",
+    "Actor attempted movement toward a fallback route after contact."
+  ],
+  "telemetry_markers": [
+    "contact_opened",
+    "reposition_started",
+    "fallback_reached"
+  ]
+}
+

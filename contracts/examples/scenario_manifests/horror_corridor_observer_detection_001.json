@@ -1,0 +1,79 @@
+{
+  "contract_type": "scenario_manifest",
+  "schema_version": "1.0",
+  "scenario_id": "horror_corridor_observer_detection_001",
+  "environment_id": "horror_corridor_imported",
+  "display_name": "Horror Corridor Observer Detection",
+  "planner_id": "scenario_smith",
+  "generated_at": "2026-05-02T10:00:00-07:00",
+  "training_objective": "Move through the imported horror corridor, detect an observer with partial cover, and preserve a clear path to the exit.",
+  "assumptions": [
+    "Scene Cartographer confirmed the horror corridor semantic export with entry, hallway_center, chokepoint, ambush_point, cover, observation_point, doorway, and exit anchors.",
+    "The observation_point anchor represents the current line-of-sight test point for hallway_center.",
+    "The light barricade can narrow chokepoint without blocking the route from entry to exit.",
+    "Likelihood values are scenario sampling weights under training assumptions, not calibrated intelligence estimates."
+  ],
+  "likelihood_semantics": "scenario_likelihood_under_assumptions_not_calibrated_intelligence_truth",
+  "required_asset_ids": [
+    "prop_light_barricade",
+    "adversary_rifleman_irregular"
+  ],
+  "events": [
+    {
+      "event_id": "observer_barricade_001",
+      "event_type": "static_prop_spawn",
+      "asset_id": "prop_light_barricade",
+      "count": 1,
+      "intent": "shape_detection_lane",
+      "required_tags": [
+        "hallway",
+        "near_chokepoint"
+      ],
+      "avoid_tags": [],
+      "severity": 0.35,
+      "likelihood": 0.5,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "static_blocking_obstacle",
+      "trigger": {
+        "trigger_type": "on_scenario_start"
+      },
+      "rationale": "Use chokepoint to create a partial obstruction that draws attention down hallway_center while preserving the exit route.",
+      "parameters": {
+        "anchor_hint": "chokepoint",
+        "leave_clear_width_m": 1.1,
+        "require_route_check": true
+      }
+    },
+    {
+      "event_id": "observer_detection_001",
+      "event_type": "adversary_contact",
+      "asset_id": "adversary_rifleman_irregular",
+      "count": 1,
+      "intent": "observe_and_withdraw",
+      "required_tags": [
+        "observation_point",
+        "line_of_sight",
+        "cover",
+        "fallback_route"
+      ],
+      "avoid_tags": [
+        "trainee_visible"
+      ],
+      "severity": 0.56,
+      "likelihood": 0.42,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "observe_and_withdraw",
+      "trigger": {
+        "trigger_type": "trainee_enters_anchor",
+        "anchor_id": "hallway_center"
+      },
+      "rationale": "observation_point overlooks hallway_center and links through the corridor graph to exit, making it a compact observer detection check.",
+      "max_distance_to_trainee_m": 18.0,
+      "parameters": {
+        "anchor_hint": "observation_point",
+        "withdraw_anchor_hint": "exit",
+        "withdraw_when_detected": true
+      }
+    }
+  ]
+}
