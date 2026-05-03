@@ -16,7 +16,12 @@ try {
 
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
-const rootDir = __dirname;
+const serverDir = __dirname;
+const projectRoot = path.resolve(serverDir, "..");
+const webDistDir = path.join(projectRoot, "apps/web/dist");
+const webPublicDir = path.join(projectRoot, "apps/web/public");
+const dataDir = process.env.DATA_DIR || path.join(webPublicDir, "data");
+const staticRoot = process.env.STATIC_ROOT || webDistDir;
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 32 * 1024);
 const maxVisionBodyBytes = Number(process.env.MAX_VISION_BODY_BYTES || 8 * 1024 * 1024);
 const maxCsvBytes = Number(process.env.MAX_CSV_BYTES || 2 * 1024 * 1024);
@@ -26,10 +31,10 @@ const openGeoLookupTimeoutMs = Number(process.env.OPEN_GEO_LOOKUP_TIMEOUT_MS || 
 const openGeoImageLookupEnabled = process.env.OPEN_GEO_IMAGE_LOOKUP !== "0";
 const commonsApiUrl = process.env.WIKIMEDIA_COMMONS_API_URL || "https://commons.wikimedia.org/w/api.php";
 const commonsUserAgent = process.env.COMMONS_USER_AGENT || "AdaptSim/0.1 local open-geolocation evidence prototype";
-const openPlaceEvidencePath = process.env.OPEN_PLACE_EVIDENCE_PATH || path.join(rootDir, "data/open-place-evidence.json");
+const openPlaceEvidencePath = process.env.OPEN_PLACE_EVIDENCE_PATH || path.join(dataDir, "open-place-evidence.json");
 const defaultAllowedOrigins = [
-  "http://127.0.0.1:8000",
-  "http://localhost:8000",
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
   "http://127.0.0.1:8787",
   "http://localhost:8787",
 ];
@@ -66,7 +71,14 @@ function setSecurityHeaders(response) {
 
 function isAllowedOrigin(request) {
   const origin = request.headers.origin;
-  return !origin || allowedOrigins.has(origin);
+  if (!origin) return true;
+
+  try {
+    const originUrl = new URL(origin);
+    if (originUrl.host === request.headers.host) return true;
+  } catch {}
+
+  return allowedOrigins.has(origin);
 }
 
 function setCorsHeaders(request, response) {
@@ -85,15 +97,19 @@ function sendJson(request, response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function sendFile(response, filePath) {
+function sendFile(response, filePath, { body = true } = {}) {
   const extension = path.extname(filePath).toLowerCase();
   const contentType = contentTypes[extension] || "application/octet-stream";
-  const stream = fs.createReadStream(filePath);
   setSecurityHeaders(response);
   response.writeHead(200, {
     "Content-Type": contentType,
     "Cache-Control": extension === ".html" ? "no-store" : "no-cache",
   });
+  if (!body) {
+    response.end();
+    return;
+  }
+  const stream = fs.createReadStream(filePath);
   stream.on("error", () => {
     if (!response.headersSent) {
       response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
@@ -111,16 +127,36 @@ function getPathname(urlPath) {
   }
 }
 
+function isSafePath(root, candidate) {
+  const relativeToRoot = path.relative(root, candidate);
+  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    return false;
+  }
+  return true;
+}
+
+function staticCandidate(root, pathname) {
+  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const candidate = path.resolve(root, relative);
+  return isSafePath(root, candidate) ? candidate : null;
+}
+
 function resolveStaticPath(urlPath) {
   const pathname = getPathname(urlPath);
-  if (!pathname) return null;
-  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  const candidate = path.resolve(rootDir, relative);
-  const relativeToRoot = path.relative(rootDir, candidate);
-  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
-    return null;
+  if (!pathname || pathname.startsWith("/api/")) return null;
+
+  const builtAsset = staticCandidate(staticRoot, pathname);
+  if (builtAsset && fs.existsSync(builtAsset) && fs.statSync(builtAsset).isFile()) {
+    return builtAsset;
   }
-  return candidate;
+
+  const publicAsset = staticCandidate(webPublicDir, pathname);
+  if (publicAsset && fs.existsSync(publicAsset) && fs.statSync(publicAsset).isFile()) {
+    return publicAsset;
+  }
+
+  const indexPath = path.join(staticRoot, "index.html");
+  return fs.existsSync(indexPath) ? indexPath : null;
 }
 
 function parseCsvRow(line) {
@@ -246,7 +282,7 @@ async function handleCalendarSync(request, response) {
     sourceUrl,
     {
       headers: {
-        "user-agent": "OPCEN Sheets Bridge",
+        "user-agent": "AdaptSim Sheets Bridge",
         accept: "text/csv,text/plain;q=0.9,*/*;q=0.8",
       },
     },
@@ -485,7 +521,7 @@ function isValidCoordinatePair(lat, lon) {
 function loadLocationGazetteer() {
   const entries = [];
   try {
-    const profiles = JSON.parse(fs.readFileSync(path.join(rootDir, "data/snapshot-profiles.json"), "utf8")).profiles || [];
+    const profiles = JSON.parse(fs.readFileSync(path.join(dataDir, "snapshot-profiles.json"), "utf8")).profiles || [];
     profiles.forEach((profile) => {
       entries.push({
         name: profile.country,
@@ -509,7 +545,7 @@ function loadLocationGazetteer() {
   } catch {}
 
   try {
-    const disposition = JSON.parse(fs.readFileSync(path.join(rootDir, "data/military-disposition-index.json"), "utf8"));
+    const disposition = JSON.parse(fs.readFileSync(path.join(dataDir, "military-disposition-index.json"), "utf8"));
     (disposition.entities || []).forEach((entity) => {
       entries.push({
         name: entity.name,
@@ -1445,7 +1481,7 @@ const server = http.createServer(async (request, response) => {
     const pathname = getPathname(request.url);
 
     if (request.method === "GET" && pathname === "/api/health") {
-      sendJson(request, response, 200, { ok: true, service: "opc-sheets-bridge" });
+      sendJson(request, response, 200, { ok: true, service: "adaptsim-api" });
       return;
     }
 
@@ -1459,10 +1495,10 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === "GET") {
+    if (request.method === "GET" || request.method === "HEAD") {
       const filePath = resolveStaticPath(request.url);
       if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        sendFile(response, filePath);
+        sendFile(response, filePath, { body: request.method !== "HEAD" });
         return;
       }
     }
@@ -1482,10 +1518,10 @@ server.on("clientError", (_error, socket) => {
 });
 
 server.on("error", (error) => {
-  console.error(`OPCEN server failed to start: ${error.message}`);
+  console.error(`AdaptSim API failed to start: ${error.message}`);
   process.exitCode = 1;
 });
 
 server.listen(port, host, () => {
-  console.log(`OPCEN server listening on http://${host}:${port}`);
+  console.log(`AdaptSim API listening on http://${host}:${port}`);
 });

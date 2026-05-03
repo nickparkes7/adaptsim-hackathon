@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import sharp from "sharp";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
-const evidencePath = path.join(rootDir, "data/open-place-evidence.json");
+const evidencePath = path.join(rootDir, "apps/web/public/data/open-place-evidence.json");
 const defaultPort = 8794;
 const distancePassMeters = 500;
 
@@ -181,13 +181,14 @@ async function googleStreetViewCase(place, rng, sampleIndex, apiKey) {
 }
 
 function startServer(port) {
-  const child = spawn("node", ["server.js"], {
-    cwd: rootDir,
+  const child = spawn("node", ["index.js"], {
+    cwd: path.join(rootDir, "server"),
     env: {
       ...process.env,
       PORT: String(port),
       OPENAI_VISION_ENABLED: process.env.OPENAI_VISION_ENABLED || "0",
-      OPEN_GEO_IMAGE_LOOKUP: process.env.OPEN_GEO_IMAGE_LOOKUP || "0"
+      OPEN_GEO_IMAGE_LOOKUP: process.env.OPEN_GEO_IMAGE_LOOKUP || "0",
+      DATA_DIR: process.env.DATA_DIR || path.join(rootDir, "apps/web/public/data")
     },
     stdio: ["ignore", "pipe", "pipe"]
   });

@@ -1,0 +1,155 @@
+export function ControlRail() {
+  return (
+    <aside className="control-rail" aria-label="Location and snapshot controls">
+      <div className="brand-block">
+        <div className="brand-mark" aria-hidden="true">
+          <span>Adapt</span>
+          <strong>Sim</strong>
+        </div>
+      </div>
+
+      <section className="panel workflow-panel" data-step="03">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Location</p>
+            <h2>Generate Snapshot</h2>
+          </div>
+        </div>
+
+        <label className="field">
+          <span>City, state, province, region, or country</span>
+          <input
+            id="location-search"
+            name="location-search"
+            type="search"
+            autoComplete="off"
+            role="combobox"
+            placeholder="Search Tokyo, Norfolk, or Kenya"
+            aria-controls="search-results"
+            aria-expanded="false"
+            aria-autocomplete="list"
+          />
+        </label>
+        <div id="search-results" className="search-results" role="listbox"></div>
+
+        <div className="coord-grid">
+          <label className="field">
+            <span>Latitude</span>
+            <input
+              id="lat-input"
+              name="latitude"
+              type="number"
+              min="-90"
+              max="90"
+              step="0.000001"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="35.676200"
+            />
+          </label>
+          <label className="field">
+            <span>Longitude</span>
+            <input
+              id="lon-input"
+              name="longitude"
+              type="number"
+              min="-180"
+              max="180"
+              step="0.000001"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="139.650300"
+            />
+          </label>
+        </div>
+        <div className="button-row">
+          <button id="use-coordinates" className="primary-button confirm-button" type="button">
+            Confirm
+          </button>
+          <button id="clear-snapshots" className="quiet-button" type="button" disabled>
+            Clear All
+          </button>
+        </div>
+      </section>
+
+      <section className="panel workflow-panel" data-step="04">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Human + LLM Input</p>
+            <h2>Analyst Note</h2>
+          </div>
+        </div>
+        <label className="field">
+          <span>Input text</span>
+          <textarea
+            id="analyst-note"
+            name="analyst-note"
+            rows="6"
+            maxLength="1200"
+            autoComplete="off"
+            placeholder="Add relevant and important information you want prioritized in simulation environment"
+          ></textarea>
+        </label>
+        <button id="reason-note" className="primary-button full-width" type="button" disabled>
+          Incorporate Into Simulation
+        </button>
+        <div id="reasoning-output" className="reasoning-output" aria-live="polite"></div>
+      </section>
+
+      <section className="panel workflow-panel" data-step="05">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Simulation Injection</p>
+            <h2>Action Sandbox</h2>
+          </div>
+        </div>
+        <label className="field">
+          <span>Action</span>
+          <input
+            id="action-type"
+            name="action-type"
+            type="search"
+            list="action-options"
+            autoComplete="off"
+            maxLength="120"
+            placeholder="Start typing an action"
+          />
+          <datalist id="action-options">
+            <option value="Deploy peacekeepers" />
+            <option value="Resupply or repair" />
+            <option value="Mobilize reserves" />
+            <option value="Propose cease-fire" />
+            <option value="Impose blockade" />
+            <option value="Launch strike" />
+            <option value="Humanitarian evacuation" />
+            <option value="Open negotiation channel" />
+          </datalist>
+        </label>
+        <label className="field">
+          <span>Objective</span>
+          <input
+            id="action-objective"
+            name="action-objective"
+            type="search"
+            list="objective-options"
+            autoComplete="off"
+            maxLength="180"
+            placeholder="Type a custom objective"
+          />
+          <datalist id="objective-options">
+            <option value="Stabilize border zone" />
+            <option value="Protect civilians" />
+            <option value="Restore logistics access" />
+            <option value="Monitor cease-fire compliance" />
+            <option value="Support disaster response" />
+            <option value="Reduce escalation risk" />
+          </datalist>
+        </label>
+        <button id="inject-action" className="primary-button full-width" type="button">
+          Inject Action
+        </button>
+        <div id="action-log" className="action-log" aria-live="polite"></div>
+      </section>
+    </aside>
+  );
+}

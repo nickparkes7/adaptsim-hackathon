@@ -1,6 +1,6 @@
 ---
 name: adaptsim-vm-operator
-description: "Operate, connect to, and sanity-check the AdaptSim hackathon GCP VMs for this repository only. Use when working in /Users/nicholas.parkes/Repos/adaptsim-hackathon or a VM mirror on VM startup or SSH, the default Unreal Engine linux-pixel-streaming VM, the optional A100 compute VM, CUDA or Docker GPU runtime validation, asset-generation model setup, disk or GPU monitoring, root-owned output cleanup, or VM environment debugging."
+description: "Operate, connect to, and sanity-check the AdaptSim hackathon GCP VMs for this repository only. Use when working in the AdaptSim repo or a VM mirror on VM startup or SSH, the default Unreal Engine linux-pixel-streaming VM, the optional A100 compute VM, CUDA or Docker GPU runtime validation, asset-generation model setup, disk or GPU monitoring, root-owned output cleanup, or VM environment debugging."
 ---
 
 # Adaptsim Vm Operator
@@ -14,7 +14,7 @@ Use this skill to connect to and verify the AdaptSim hackathon VMs. Default to t
 Apply this skill only to:
 
 ```text
-Local repo: /Users/nicholas.parkes/Repos/adaptsim-hackathon
+Local repo: this AdaptSim workspace
 VM root:    ~/adaptsim
 GCP project: gecko-dev-fde
 Default VM:  linux-pixel-streaming in us-east1-d

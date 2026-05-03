@@ -3818,6 +3818,29 @@ textarea:hover {
   text-transform: uppercase;
 }
 
+@media (max-width: 680px) {
+  .stage-heading {
+    flex-wrap: wrap;
+  }
+
+  .stage-heading > div {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+
+  .source-heading-actions {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .stage-heading .workflow-state-pill {
+    margin-left: auto;
+  }
+}
+
 .source-intake-stage .source-dropzone {
   border-color: rgba(111, 226, 212, 0.72);
   box-shadow:

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dbDir = path.join(rootDir, "military_disposition_db", "data");
 const exportManifestPath = path.join(rootDir, "military_disposition_db", "exports", "manifest.json");
-const outPath = path.join(rootDir, "data", "military-disposition-index.json");
+const outPath = path.join(rootDir, "apps/web/public/data", "military-disposition-index.json");
 
 async function readJson(relativePath) {
   return JSON.parse(await fs.readFile(path.join(dbDir, relativePath), "utf8"));
@@ -260,5 +260,6 @@ const payload = {
   sources: sourcesPayload.sources ?? []
 };
 
+await fs.mkdir(path.dirname(outPath), { recursive: true });
 await fs.writeFile(outPath, `${JSON.stringify(payload, null, 2)}\n`);
 console.log(`Wrote ${path.relative(rootDir, outPath)} with ${entities.length} entities and ${payload.metadata.equipmentRows} equipment rows.`);

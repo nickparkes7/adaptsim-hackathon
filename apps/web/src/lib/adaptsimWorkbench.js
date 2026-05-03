@@ -1,8 +1,8 @@
-const dataUrl = new URL("./data/snapshot-profiles.json", import.meta.url);
-const publicSitesUrl = new URL("./data/public-reference-sites.json", import.meta.url);
-const worldCapitalsUrl = new URL("./data/world-capitals.json", import.meta.url);
-const trainingVariablesUrl = new URL("./data/training-variable-taxonomy.json", import.meta.url);
-const dispositionIndexUrl = new URL("./data/military-disposition-index.json", import.meta.url);
+const dataUrl = "/data/snapshot-profiles.json";
+const publicSitesUrl = "/data/public-reference-sites.json";
+const worldCapitalsUrl = "/data/world-capitals.json";
+const trainingVariablesUrl = "/data/training-variable-taxonomy.json";
+const dispositionIndexUrl = "/data/military-disposition-index.json";
 const storageKey = "adaptsim-v1";
 const legacyStorageKey = "geo-snapshot-workbench-v1";
 const mapPrefsStorageKey = "adaptsim-map-prefs-v1";
@@ -99,13 +99,13 @@ const majorCapitalCitySeeds = [
 const devAutoRefreshIntervalMs = 1500;
 const devAutoRefreshTimeoutMs = 2500;
 const devAutoRefreshResources = [
-  "./index.html",
-  "./app.js",
-  "./styles.css",
-  "./data/snapshot-profiles.json",
-  "./data/public-reference-sites.json",
-  "./data/world-capitals.json",
-  "./data/military-disposition-index.json"
+  "/src/App.jsx",
+  "/src/lib/adaptsimWorkbench.js",
+  "/src/styles.css",
+  "/data/snapshot-profiles.json",
+  "/data/public-reference-sites.json",
+  "/data/world-capitals.json",
+  "/data/military-disposition-index.json"
 ];
 
 const defaultMapProvider = "arcgis";
@@ -6631,5 +6631,13 @@ function scheduleDevAutoRefresh() {
   window.setInterval(checkForChanges, devAutoRefreshIntervalMs);
 }
 
-scheduleDevAutoRefresh();
-init();
+let initPromise = null;
+
+export function initializeAdaptSimWorkbench() {
+  if (!initPromise) {
+    scheduleDevAutoRefresh();
+    initPromise = init();
+  }
+
+  return initPromise;
+}
