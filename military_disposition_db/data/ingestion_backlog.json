@@ -1,0 +1,206 @@
+{
+  "metadata": {
+    "title": "Equipment Inventory Ingestion Backlog and Source Map",
+    "purpose": "Guide completion of public system/platform/variant-level equipment inventories and simulation capability mappings for every indexed entity.",
+    "safety_note": "All ingestion tasks must exclude live basing, tasking, readiness rates not publicly disclosed, targeting data, exploitable vulnerabilities, classified/leaked material, software/network architecture, credentials, frequencies, and exploit paths."
+  },
+  "global_source_priority": [
+    {"rank": 1, "source_id": "MOD_OFFICIAL_PUBLIC", "use_for": "official force structure, procurement, delivery, retirement, modernization, and branch naming"},
+    {"rank": 2, "source_id": "UNROCA", "use_for": "reported conventional arms transfers and state-declared holdings where submitted"},
+    {"rank": 3, "source_id": "ATT_ANNUAL_REPORTS", "use_for": "official ATT state-party annual import/export reports and report-status coverage"},
+    {"rank": 4, "source_id": "UNODA_MILEX", "use_for": "official government-submitted military expenditure reports and nil-report status"},
+    {"rank": 5, "source_id": "NATO_DEFENCE_EXPENDITURE", "use_for": "NATO member defense spending, personnel, GDP share, and equipment expenditure fields"},
+    {"rank": 6, "source_id": "EDA_DEFENCE_DATA", "use_for": "EU defense spending, personnel, investment, R&D, and benchmark indicators"},
+    {"rank": 7, "source_id": "WORLD_BANK_WDI", "use_for": "population, GDP, energy, transport, armed-forces personnel, military expenditure, and macro denominators"},
+    {"rank": 8, "source_id": "WORLD_BANK_LPI", "use_for": "country-level logistics, infrastructure, timeliness, customs, and supply-chain modifiers"},
+    {"rank": 9, "source_id": "SIPRI_MILEX", "use_for": "budget context and cross-checking procurement affordability; not usually platform inventory counts"},
+    {"rank": 10, "source_id": "IISS_MILITARY_BALANCE", "use_for": "annual platform inventory estimates where legally accessible; store only concise derived facts"},
+    {"rank": 11, "source_id": "FLIGHTGLOBAL_WAF", "use_for": "aircraft fleets, orders, and deliveries where public/accessible"},
+    {"rank": 12, "source_id": "PUBLIC_NAVAL_REGISTER", "use_for": "ship classes, commissioned/decommissioned status, hull counts at non-live level"},
+    {"rank": 13, "source_id": "OFFICIAL_PROCUREMENT_RELEASE", "use_for": "contract/order/delivery quantities and lifecycle status"},
+    {"rank": 14, "source_id": "DSCA_MAJOR_ARMS_SALES", "use_for": "U.S. foreign military sale notifications by country, system, package, value, and date"},
+    {"rank": 15, "source_id": "DSCA_HISTORICAL_SALES", "use_for": "historical U.S. security cooperation sales totals and FMS context"},
+    {"rank": 16, "source_id": "UN_COMTRADE_HS93", "use_for": "official customs trade flows for arms/ammunition categories; only indirect evidence of inventory"},
+    {"rank": 17, "source_id": "UN_PEACEKEEPING_CONTRIBUTORS", "use_for": "monthly official military/police contribution snapshots to UN missions"},
+    {"rank": 18, "source_id": "UN_TREATY_COLLECTION", "use_for": "legal obligations, treaty participation, reservations, and international-law constraints"},
+    {"rank": 19, "source_id": "OSCE_VIENNA_DOCUMENT", "use_for": "regional transparency, notification, inspection, and military-information-exchange framework metadata"},
+    {"rank": 20, "source_id": "IAEA_SAFEGUARDS", "use_for": "nuclear safeguards and non-proliferation legal context at non-sensitive abstraction"},
+    {"rank": 21, "source_id": "NGA_WORLD_PORT_INDEX", "use_for": "public port and maritime infrastructure context for logistics modeling"},
+    {"rank": 22, "source_id": "NGA_GEONET_NAMES", "use_for": "standardized foreign geographic names and feature aliases"},
+    {"rank": 23, "source_id": "COPERNICUS_GLOBAL_LAND_COVER", "use_for": "terrain and land-cover modifiers for geography/environment categories"},
+    {"rank": 24, "source_id": "NASA_SRTM", "use_for": "global elevation and slope-derived movement constraints"},
+    {"rank": 25, "source_id": "WIKIDATA_SPARQL", "use_for": "structured public entity/equipment alias discovery and crosswalks"},
+    {"rank": 26, "source_id": "DBPEDIA_SPARQL", "use_for": "structured public encyclopedia-derived discovery and alias enrichment"},
+    {"rank": 27, "source_id": "CIA_WORLD_FACTBOOK", "use_for": "high-level military organization and public country context, not detailed inventory"},
+    {"rank": 28, "source_id": "WIKIPEDIA_LOW_CONF", "use_for": "low-confidence seed pointers only; replace during review"}
+  ],
+  "source_discovery_batches": [
+    {
+      "batch_id": "official_global_reporting",
+      "source_ids": ["UNROCA", "UNODA_MILEX", "ATT_ANNUAL_REPORTS", "UN_COMTRADE_HS93", "UN_PEACEKEEPING_CONTRIBUTORS", "UN_TREATY_COLLECTION", "IAEA_SAFEGUARDS"],
+      "covers": "Global or near-global official reporting for arms transfers, expenditure, peacekeeping contributions, treaty/legal posture, and nuclear safeguards context.",
+      "maps_to": ["equipment_inventory", "profile_variable_value", "entity_context_enrichment", "entity_category_coverage", "political_legal", "mobilization", "economic_industrial"],
+      "limitations": "Many instruments are voluntary, incomplete, delayed, aggregated, or not platform-inventory sources. Treat them as official evidence with coverage gaps, not exhaustive truth.",
+      "next_ingestion_step": "Implement per-source harvesters that preserve report year, submitting state, reporting status, category code, and original source URL or document locator."
+    },
+    {
+      "batch_id": "official_regional_defence_data",
+      "source_ids": ["NATO_DEFENCE_EXPENDITURE", "EDA_DEFENCE_DATA", "EU_COARM_ARMS_EXPORTS", "OSCE_VIENNA_DOCUMENT"],
+      "covers": "Regional alliance/agency data for defense spending, personnel, investment, exports, and military-transparency frameworks.",
+      "maps_to": ["profile_variable_value", "entity_context_enrichment", "entity_category_coverage", "political_legal", "economic_industrial", "personnel"],
+      "limitations": "Regional membership limits coverage. Do not project NATO/EDA definitions onto non-members without a separate source.",
+      "next_ingestion_step": "Create NATO/EDA parsers for published spreadsheets/PDF tables and attach definition/version notes to every normalized row."
+    },
+    {
+      "batch_id": "official_procurement_and_registers",
+      "source_ids": ["OFFICIAL_PROCUREMENT_RELEASE", "PUBLIC_NAVAL_REGISTER", "DSCA_MAJOR_ARMS_SALES", "DSCA_HISTORICAL_SALES", "US_STATE_ARMS_SALES_NOTIFICATIONS", "USASPENDING_API", "SAM_GOV_CONTRACT_AWARDS"],
+      "covers": "Official national procurement, delivery, contract, foreign military sales, naval-register, and lifecycle records.",
+      "maps_to": ["equipment_inventory", "software_system_inventory", "asset_capability_map", "economic_industrial"],
+      "limitations": "National publication styles differ; contract awards and sale notifications are not proof of fielded inventory until delivery/acceptance is separately sourced.",
+      "next_ingestion_step": "Build source adapters that produce review queues with system name, customer country, quantity, value, lifecycle event, date, and row-level locator."
+    },
+    {
+      "batch_id": "geospatial_environmental_logistics",
+      "source_ids": ["NGA_WORLD_PORT_INDEX", "NGA_GEONET_NAMES", "WORLD_BANK_LPI", "COPERNICUS_GLOBAL_LAND_COVER", "NASA_SRTM"],
+      "covers": "Ports, geographic names, logistics-performance indicators, land cover, elevation, slope, and other non-operational geography modifiers.",
+      "maps_to": ["entity_context_enrichment", "geographic_environmental", "logistics_sustainment", "scenario_overlay"],
+      "limitations": "These are terrain and infrastructure context sources, not live military route, basing, depot, or targeting datasets.",
+      "next_ingestion_step": "Add derived geography tables only after deciding the simulation resolution; store product version, tile/query, date, and transformation method."
+    },
+    {
+      "batch_id": "structured_public_encyclopedias",
+      "source_ids": ["WIKIDATA_SPARQL", "DBPEDIA_SPARQL", "WIKIPEDIA_PUBLIC_INDEX", "WIKIPEDIA_LOW_CONF", "LOC_COUNTRY_STUDIES"],
+      "covers": "Public encyclopedic graph and archive sources for aliases, entity links, historical context, equipment pages, and source discovery.",
+      "maps_to": ["entity_public_reference", "entity_context_enrichment", "equipment_inventory", "software_system_inventory"],
+      "limitations": "Use as discovery/staging and alias normalization unless a row is verified by a primary or stronger secondary source.",
+      "next_ingestion_step": "Generate alias/crosswalk tables for countries, armed services, equipment systems, manufacturers, and variant labels."
+    },
+    {
+      "batch_id": "high_quality_research_and_reference",
+      "source_ids": ["SIPRI_MILEX", "IISS_MILITARY_BALANCE", "FLIGHTGLOBAL_WAF"],
+      "covers": "Established research/reference sources that are often more complete for platform inventories and longitudinal military spending than official public reporting alone.",
+      "maps_to": ["equipment_inventory", "profile_variable_value", "entity_category_coverage"],
+      "limitations": "Some sources are licensed or subscription-based; store only compliant concise derived facts and cite accessible pages or licensed references.",
+      "next_ingestion_step": "Use these as reconciliation and completeness checks after official-source ingestion."
+    }
+  ],
+  "category_ingestion_order": [
+    "combat_aircraft",
+    "naval_combatant",
+    "submarine",
+    "tank",
+    "ifv_apc_mrap",
+    "artillery",
+    "mlrs",
+    "sam_gbad",
+    "tactical_missile",
+    "helicopter",
+    "transport_aircraft",
+    "uav",
+    "radar_sensor",
+    "ew_system",
+    "logistics_vehicle",
+    "crew_served_weapons",
+    "small_arms_family",
+    "amphibious_vessel",
+    "auxiliary_vessel",
+    "coast_guard_security_asset",
+    "nuclear_delivery_system",
+    "public_software_and_c4isr_programs",
+    "asset_capability_mappings",
+    "injection_action_templates"
+  ],
+  "capability_ingestion_order": [
+    "map equipment rows to safe capability definitions",
+    "add public software and data-link program families",
+    "map software rows to C2, ISR, logistics, EW, cyber-defense, or training capabilities",
+    "add entity-level capabilities such as reserve law, alliance interoperability, strategic lift, and public nuclear deterrence",
+    "add injection action templates only when preconditions and failure modes can be represented abstractly"
+  ],
+  "coverage_batches": [
+    {
+      "batch_id": "seed_major_powers",
+      "entities": ["USA", "CHN", "RUS", "IND", "GBR", "FRA"],
+      "priority": "high",
+      "first_pass_goal": "Top-level inventories for air, naval, armor, artillery, GBAD, missiles, and nuclear delivery systems where public.",
+      "status": "seeded_partial"
+    },
+    {
+      "batch_id": "active_conflict_and_flashpoints",
+      "entities": ["UKR", "IRN", "ISR", "TWN", "PRK", "KOR"],
+      "priority": "high",
+      "first_pass_goal": "Date-bound, non-live inventories with conservative confidence and explicit nulls for active/readiness counts.",
+      "status": "seeded_partial_for_subset"
+    },
+    {
+      "batch_id": "nato_eu_non_seed",
+      "entity_filter": "UN member states with NATO/EU defense reporting not already seeded",
+      "priority": "medium",
+      "first_pass_goal": "Official annual defense reports, budget annexes, air force public summaries, naval registers.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "indo_pacific_middle_powers",
+      "entities": ["JPN", "AUS", "IDN", "VNM", "THA", "PHL", "SGP", "MYS", "NZL"],
+      "priority": "medium",
+      "first_pass_goal": "Aircraft, ships, armored vehicles, artillery/MLRS, GBAD, and coast guard militarized assets.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "middle_east_north_africa",
+      "entity_filter": "MENA entities excluding already seeded Iran and Israel",
+      "priority": "medium",
+      "first_pass_goal": "Major land/air/naval systems and public procurement deliveries.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "latin_america_caribbean",
+      "entity_filter": "Americas excluding USA",
+      "priority": "medium",
+      "first_pass_goal": "Air/naval fleets, armored vehicles, militarized coast guard/security assets.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "sub_saharan_africa",
+      "entity_filter": "Sub-Saharan African UN member states plus Somaliland where tracked",
+      "priority": "medium",
+      "first_pass_goal": "Sparse public inventories, prioritizing official statements, UNROCA, and reputable public summaries.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "disputed_partial_entities",
+      "entities": ["XKX", "ESH_SADR", "SOMALILAND", "TRNC", "ABKHAZIA", "SOUTH_OSSETIA", "TRANSNISTRIA"],
+      "priority": "medium",
+      "first_pass_goal": "Only public, high-level equipment families; avoid sponsor-state live disposition assumptions.",
+      "status": "not_started"
+    },
+    {
+      "batch_id": "small_states_and_no_regular_military",
+      "entity_filter": "Entities with no regular armed forces or very small security forces",
+      "priority": "low",
+      "first_pass_goal": "Mark public military data availability and security/coast guard assets where militarized.",
+      "status": "not_started"
+    }
+  ],
+  "row_acceptance_checks": [
+    "equipment_id is stable and unique",
+    "entity_id exists in data/entities.json",
+    "category is one of the schema categories",
+    "system_name is populated",
+    "source_id exists in data/sources.json",
+    "as_of_date is populated",
+    "confidence is low, medium, or high",
+    "estimate_type is reported, estimated_range, qualitative_assessment, model_parameter, or unknown",
+    "unknown counts are null, not zero or string values",
+    "notes do not include live basing, tasking, vulnerabilities, or targeting detail"
+  ],
+  "capability_acceptance_checks": [
+    "capability_id is stable and unique",
+    "capability definition uses abstract effect inputs and outputs",
+    "software rows avoid architecture, network, credential, frequency, vulnerability, and exploit details",
+    "asset_capability_map rows cite source_id, as_of_date, confidence, and estimate_type",
+    "capability_level is ordinal, not a fabricated precision score",
+    "effect parameters do not include targeting data, route planning, live readiness, or weapon employment instructions",
+    "injection action templates include safety_boundary and preconditions"
+  ]
+}

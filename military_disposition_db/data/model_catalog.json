@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "title": "Simulation Model Areas, Variables, and Processes",
+    "safety_note": "Variables are intentionally abstract and public-source oriented. Operationally sensitive details should be excluded or represented as coarse scenario assumptions."
+  },
+  "model_areas": [
+    {"model_area_id": "orbat", "name": "ORBAT", "description": "Hierarchy, force composition, public equipment categories, non-sensitive basing/infrastructure, reserves and mobilization."},
+    {"model_area_id": "c4i", "name": "C4I", "description": "Command hierarchy, high-level decision latency, communications resilience, C2 degradation, and intelligence cycle."},
+    {"model_area_id": "logistics_sustainment", "name": "Logistics & Sustainment", "description": "Supply classes, public/high-level stockpile or depot indicators, transport capacity, maintenance, and medical support."},
+    {"model_area_id": "personnel_morale", "name": "Personnel & Morale", "description": "Manning, training, experience, morale drivers, fatigue/rest, discipline, and desertion risk."},
+    {"model_area_id": "geography_environment", "name": "Geographic & Environmental Constraints", "description": "Terrain, infrastructure, weather and seasons, climate, and disease constraints."},
+    {"model_area_id": "combat_power", "name": "Combat Power & Engagement Modeling", "description": "System-class sensor/weapon envelopes, firepower/protection, attrition parameters, and abstract superiority zones."},
+    {"model_area_id": "doctrine_behavior", "name": "Doctrinal Behavior", "description": "Offensive/defensive doctrine, ROE, operational art, and strategic guidance."},
+    {"model_area_id": "mobilization_movement", "name": "Mobilization & Strategic Movement", "description": "Mobilization stages, movement rates, prepositioned stocks, and time-distance factors."},
+    {"model_area_id": "economic_industrial", "name": "Economic & Industrial Interface", "description": "Defense industry, manpower pool, fuel/energy dependency, budget, and reconstitution cost."},
+    {"model_area_id": "political_legal", "name": "Political & Legal Constraints", "description": "Casualty tolerance, LOAC/targeting restrictions, alliances, and nuclear/red-line policies."},
+    {"model_area_id": "intelligence_deception", "name": "Intelligence & Deception", "description": "Public intel estimates, fog-of-war model, deception means, SIGINT/EW at high level."},
+    {"model_area_id": "injection_interface", "name": "Injection Interface", "description": "Action types, order propagation delay, friction/miscommunication, and preconditions."},
+    {"model_area_id": "metrics_logging", "name": "Metrics & Logging", "description": "Loss-exchange ratios, op tempo, logistics consumption, readiness decay, and reconstitution time."}
+  ],
+  "variables": [
+    {"variable_id": "force_structure_summary", "model_area_id": "orbat", "name": "Force structure summary", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "equipment_inventory_coverage", "model_area_id": "orbat", "name": "Equipment inventory coverage", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low", "safety_notes": "Pointer to equipment_inventory completeness by category; do not duplicate platform rows here."},
+    {"variable_id": "active_personnel_range", "model_area_id": "orbat", "name": "Active personnel range", "value_type": "range", "unit": "personnel", "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "reserve_mobilization_summary", "model_area_id": "orbat", "name": "Reserve and mobilization summary", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "public_infrastructure_summary", "model_area_id": "orbat", "name": "Public infrastructure summary", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "c2_command_model", "model_area_id": "c4i", "name": "Command model", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "decision_latency_days", "model_area_id": "c4i", "name": "Strategic decision latency", "value_type": "range", "unit": "days", "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "communications_resilience", "model_area_id": "c4i", "name": "Communications resilience", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "logistics_depth", "model_area_id": "logistics_sustainment", "name": "Logistics depth", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "strategic_transport_capacity", "model_area_id": "logistics_sustainment", "name": "Strategic transport capacity", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "maintenance_complexity", "model_area_id": "logistics_sustainment", "name": "Maintenance complexity", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "training_experience", "model_area_id": "personnel_morale", "name": "Training and experience", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "morale_driver_summary", "model_area_id": "personnel_morale", "name": "Morale driver summary", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "terrain_constraint_profile", "model_area_id": "geography_environment", "name": "Terrain constraint profile", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "infrastructure_constraint_profile", "model_area_id": "geography_environment", "name": "Infrastructure constraint profile", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "system_class_capabilities", "model_area_id": "combat_power", "name": "System-class capability summary", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "attrition_parameter_defaults", "model_area_id": "combat_power", "name": "Attrition parameter defaults", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "doctrine_posture", "model_area_id": "doctrine_behavior", "name": "Doctrine posture", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "mobilization_stage_model", "model_area_id": "mobilization_movement", "name": "Mobilization stage model", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "movement_rate_modifier", "model_area_id": "mobilization_movement", "name": "Strategic movement rate modifier", "value_type": "range", "unit": "dimensionless", "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "defense_budget_latest", "model_area_id": "economic_industrial", "name": "Latest defense budget/expenditure", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "industrial_reconstitution_capacity", "model_area_id": "economic_industrial", "name": "Industrial reconstitution capacity", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "alliance_commitments", "model_area_id": "political_legal", "name": "Alliance commitments", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "nuclear_policy_public", "model_area_id": "political_legal", "name": "Public nuclear/red-line policy", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_low"},
+    {"variable_id": "fog_of_war_default", "model_area_id": "intelligence_deception", "name": "Fog-of-war default", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "ew_sigint_summary", "model_area_id": "intelligence_deception", "name": "EW/SIGINT high-level summary", "value_type": "ordinal", "unit": null, "allowed_sensitivity_max": "public_low_to_moderate"},
+    {"variable_id": "order_delay_model", "model_area_id": "injection_interface", "name": "Order propagation delay model", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "action_preconditions", "model_area_id": "injection_interface", "name": "Action preconditions", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "readiness_decay_model", "model_area_id": "metrics_logging", "name": "Readiness decay model", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"},
+    {"variable_id": "reconstitution_time_model", "model_area_id": "metrics_logging", "name": "Reconstitution time model", "value_type": "json", "unit": null, "allowed_sensitivity_max": "public_moderate"}
+  ],
+  "processes": [
+    {"process_id": "orders_propagate", "model_area_id": "injection_interface", "name": "Order propagation", "purpose": "Convert player/policy actions into delayed, friction-affected force tasks.", "inputs": ["action_type", "command_model", "communications_resilience", "fatigue"], "outputs": ["effective_order_time", "miscommunication_probability"], "safety_boundary": "Use abstract delays only; do not model exploitable command-network paths."},
+    {"process_id": "logistics_consume", "model_area_id": "metrics_logging", "name": "Logistics consumption", "purpose": "Estimate supply drawdown from op tempo and force composition.", "inputs": ["force_size", "op_tempo", "terrain", "weather"], "outputs": ["supply_consumption_index", "readiness_modifier"], "safety_boundary": "Avoid exact depot inventories, routes, or live stockpile locations."},
+    {"process_id": "readiness_decay", "model_area_id": "metrics_logging", "name": "Readiness decay", "purpose": "Apply fatigue, maintenance, casualty, and supply penalties over time.", "inputs": ["op_tempo", "maintenance_complexity", "morale", "logistics_depth"], "outputs": ["readiness_index"], "safety_boundary": "Use coarse model parameters and source notes."},
+    {"process_id": "reconstitute_force", "model_area_id": "economic_industrial", "name": "Force reconstitution", "purpose": "Estimate replacement and repair time under public industrial and budget constraints.", "inputs": ["industrial_capacity", "budget", "equipment_complexity", "sanctions"], "outputs": ["reconstitution_time_range"], "safety_boundary": "No supplier vulnerability mapping or procurement exploit details."},
+    {"process_id": "resolve_engagement", "model_area_id": "combat_power", "name": "Engagement resolution", "purpose": "Use abstract combat power, terrain, training, and superiority modifiers to estimate losses and displacement.", "inputs": ["combat_power_index", "terrain", "training", "superiority_zone", "fog_of_war"], "outputs": ["loss_exchange_ratio_range", "position_change"], "safety_boundary": "Do not include targeting data, live positions, or weapon employment instructions."}
+  ]
+}

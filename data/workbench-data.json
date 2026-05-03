@@ -1,0 +1,269 @@
+{
+  "summary": "This workspace is organized for executive planning and operational decision-making: clear health metrics up top, driver analysis in the middle, and risk/action guidance on the right.",
+  "filters": {
+    "quarter": ["Q1", "Q2", "Q3", "Q4"],
+    "year": ["2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033", "2034", "2035"],
+    "scenario": ["Base case", "Conservative", "Stretch"],
+    "region": [
+      "All regions",
+      "MARMC - Norfolk, Virginia",
+      "SERMC - Mayport, Florida",
+      "SWRMC - San Diego, California",
+      "FDRMC - Naples, Italy",
+      "FDRMC Rota - Rota, Spain",
+      "FDRMC Bahrain - Manama, Bahrain",
+      "SRF-JRMC - Yokosuka, Japan",
+      "SRF-JRMC Sasebo - Sasebo, Japan",
+      "SRF-JRMC Singapore - Singapore"
+    ]
+  },
+  "resources": [
+    {
+      "id": "resource-sops",
+      "label": "SOPs",
+      "path": "/Users/mackenzie.lloyd/Documents/New project",
+      "note": "Replace with your SOP folder path or Drive URL."
+    },
+    {
+      "id": "resource-guidance",
+      "label": "Guiding Documentation",
+      "path": "/Users/mackenzie.lloyd/Documents/New project",
+      "note": "Operating standards, playbooks, and reference material."
+    },
+    {
+      "id": "resource-planning",
+      "label": "Planning Docs",
+      "path": "/Users/mackenzie.lloyd/Documents/New project",
+      "note": "Forecast templates, scenario workbooks, and review packs."
+    }
+  ],
+  "pages": [
+    {
+      "id": "overview",
+      "label": "Overview",
+      "short": "Executive health",
+      "description": "A top-level command center for demand, service health, projected risk, and immediate executive actions.",
+      "status": "On track with risks",
+      "owner": "VP Operations",
+      "updated": "Updated today",
+      "kpis": [
+        { "label": "Demand", "value": 52, "format": "number", "note": "Current week intake" },
+        { "label": "Throughput", "value": 47, "format": "number", "note": "Current week completions" },
+        { "label": "SLA attainment", "value": 0.91, "format": "percent", "note": "Response and resolution combined" },
+        { "label": "Forecast variance", "value": -0.08, "format": "signedPercent", "note": "Plan vs current projection" }
+      ],
+      "modules": ["execSummary", "throughputTrend", "backlogRisk", "actionAgenda"]
+    },
+    {
+      "id": "demandPlan",
+      "label": "Demand & Capacity",
+      "short": "Supply versus demand",
+      "description": "Review demand, staffing, productivity, and capacity levers together so the plan explains both the workload and the ability to absorb it.",
+      "status": "Needs integrated review",
+      "owner": "Demand + Capacity Planning",
+      "updated": "Updated yesterday",
+      "kpis": [
+        { "label": "Planned demand", "value": 1180, "format": "number", "note": "Monthly plan" },
+        { "label": "Projected demand", "value": 1268, "format": "number", "note": "Current projection" },
+        { "label": "Available capacity", "value": 1125, "format": "number", "note": "Projected completions" },
+        { "label": "Capacity gap", "value": -143, "format": "signedNumber", "note": "Against projected demand" }
+      ],
+      "modules": ["demandDrivers", "regionalVariance", "eventCalendar", "capacityCoverage", "staffingLevers", "productivityAssumptions"]
+    },
+    {
+      "id": "forecastScenarios",
+      "label": "Forecast Scenarios",
+      "short": "What-if planning",
+      "description": "Scenario planning should make assumptions visible and compare the service-level consequences of each case.",
+      "status": "Scenario review",
+      "owner": "Finance + Ops",
+      "updated": "Updated today",
+      "kpis": [
+        { "label": "Base case backlog", "value": 93, "format": "number", "note": "Projected month-end" },
+        { "label": "Best case backlog", "value": 78, "format": "number", "note": "With enablement + triage" },
+        { "label": "Worst case backlog", "value": 107, "format": "number", "note": "Seasonal spike view" },
+        { "label": "Confidence", "value": "Moderate", "format": "text", "note": "Based on current assumptions" }
+      ],
+      "modules": ["scenarioCompare", "forecastVariance", "templateLibrary"]
+    },
+    {
+      "id": "fieldFeedback",
+      "label": "Field Feedback",
+      "short": "Voice of the field",
+      "description": "This page connects raw field comments to quantified themes, hotspots, and planning implications.",
+      "status": "Emerging issues",
+      "owner": "Field Excellence",
+      "updated": "Updated today",
+      "kpis": [
+        { "label": "Feedback records", "value": 63, "format": "number", "note": "This month" },
+        { "label": "Critical themes", "value": 3, "format": "number", "note": "Above risk threshold" },
+        { "label": "Average sentiment", "value": 2.7, "format": "decimal", "note": "1 to 5 scale" },
+        { "label": "LLM triage coverage", "value": 0.82, "format": "percent", "note": "Tagged into known themes" }
+      ],
+      "modules": ["feedbackHealth", "feedbackSearch", "feedbackTable", "feedbackInsights"]
+    }
+  ],
+  "modules": {
+    "execSummary": { "id": "execSummary", "title": "Executive Snapshot", "kind": "Summary", "description": "A compact view of the health of the operating system.", "type": "execSummary", "layout": { "w": 2, "h": 340 } },
+    "throughputTrend": { "id": "throughputTrend", "title": "Demand Versus Throughput", "kind": "Trend", "description": "Whether the business is keeping up with what is arriving.", "type": "throughputTrend", "layout": { "w": 1, "h": 340 } },
+    "backlogRisk": { "id": "backlogRisk", "title": "Backlog Risk", "kind": "Queue health", "description": "Aging and backlog pressure are usually the earliest operational warning signs.", "type": "backlogRisk", "layout": { "w": 1, "h": 340 } },
+    "actionAgenda": { "id": "actionAgenda", "title": "Executive Action Agenda", "kind": "Next actions", "description": "A leader should leave this page knowing what decisions or interventions are needed.", "type": "actionAgenda", "layout": { "w": 2, "h": 320 } },
+    "demandDrivers": { "id": "demandDrivers", "title": "Demand Drivers", "kind": "Driver table", "description": "A plan should explain what is changing demand, not just report totals.", "type": "demandDrivers", "layout": { "w": 2, "h": 360 } },
+    "regionalVariance": { "id": "regionalVariance", "title": "Regional Variance", "kind": "Variance view", "description": "Where the demand plan is drifting from reality by region.", "type": "regionalVariance", "layout": { "w": 1, "h": 340 } },
+    "eventCalendar": { "id": "eventCalendar", "title": "Event and Seasonality Drivers", "kind": "Planning events", "description": "Planning should surface known events and seasonality assumptions.", "type": "eventCalendar", "layout": { "w": 1, "h": 340 } },
+    "capacityCoverage": { "id": "capacityCoverage", "title": "Capacity Coverage", "kind": "Supply view", "description": "How capacity stacks up against current demand and service commitments.", "type": "capacityCoverage", "layout": { "w": 2, "h": 360 } },
+    "staffingLevers": { "id": "staffingLevers", "title": "Staffing Levers", "kind": "Interventions", "description": "The practical ways to change service capacity.", "type": "staffingLevers", "layout": { "w": 1, "h": 320 } },
+    "productivityAssumptions": { "id": "productivityAssumptions", "title": "Productivity Assumptions", "kind": "Assumptions", "description": "What the plan believes about output and ramp time.", "type": "productivityAssumptions", "layout": { "w": 1, "h": 320 } },
+    "scenarioCompare": { "id": "scenarioCompare", "title": "Scenario Comparison", "kind": "What-if", "description": "Compare the outcomes of the cases leadership is deciding between.", "type": "scenarioCompare", "layout": { "w": 2, "h": 380 } },
+    "forecastVariance": { "id": "forecastVariance", "title": "Forecast Variance Drivers", "kind": "Variance", "description": "Explain why the forecast moved from the prior view or approved plan.", "type": "forecastVariance", "layout": { "w": 1, "h": 340 } },
+    "templateLibrary": { "id": "templateLibrary", "title": "Template Library", "kind": "Planning assets", "description": "Current planning artifacts to normalize and automate over time.", "type": "templateLibrary", "layout": { "w": 1, "h": 340 } },
+    "feedbackHealth": { "id": "feedbackHealth", "title": "Repository Health", "kind": "Voice of field", "description": "How much field input is being captured and how severe the signals look.", "type": "feedbackHealth", "layout": { "w": 2, "h": 320 } },
+    "feedbackSearch": { "id": "feedbackSearch", "title": "Search and Intake", "kind": "Search", "description": "Search by region, site, channel, or theme to isolate signals quickly.", "type": "feedbackSearch", "layout": { "w": 1, "h": 300 } },
+    "feedbackTable": { "id": "feedbackTable", "title": "Feedback Log", "kind": "Repository", "description": "A structured record of field comments and issue tags.", "type": "feedbackTable", "layout": { "w": 2, "h": 380 } },
+    "feedbackInsights": { "id": "feedbackInsights", "title": "Theme Rollup", "kind": "Aggregation", "description": "A preview of the grouped findings an internal LLM can help produce.", "type": "feedbackInsights", "layout": { "w": 1, "h": 340 } },
+    "assumptionLedger": { "id": "assumptionLedger", "title": "Assumption Ledger", "kind": "Control record", "description": "Planning assumptions should be explicit, owned, and traceable.", "type": "assumptionLedger", "layout": { "w": 2, "h": 360 } },
+    "riskDependencies": { "id": "riskDependencies", "title": "Risks and Dependencies", "kind": "Risk register", "description": "Conditions outside the model that still influence the plan.", "type": "riskDependencies", "layout": { "w": 1, "h": 340 } },
+    "workflowStatus": { "id": "workflowStatus", "title": "Approval Workflow", "kind": "Workflow", "description": "The live status of the planning cycle through review and approval.", "type": "workflowStatus", "layout": { "w": 1, "h": 340 } },
+    "versionTimeline": { "id": "versionTimeline", "title": "Version Timeline", "kind": "Audit trail", "description": "What changed and when the planning package moved.", "type": "versionTimeline", "layout": { "w": 1, "h": 340 } },
+    "decisionLog": { "id": "decisionLog", "title": "Decision Log", "kind": "Record", "description": "Key choices that shaped the plan and their rationale.", "type": "decisionLog", "layout": { "w": 2, "h": 340 } }
+  },
+  "overview": {
+    "weeks": [
+      { "label": "W1", "incoming": 41, "completed": 35 },
+      { "label": "W2", "incoming": 38, "completed": 39 },
+      { "label": "W3", "incoming": 45, "completed": 41 },
+      { "label": "W4", "incoming": 43, "completed": 40 },
+      { "label": "W5", "incoming": 49, "completed": 44 },
+      { "label": "W6", "incoming": 52, "completed": 47 }
+    ],
+    "aging": [
+      { "key": "lt2", "label": "<2d", "value": 24 },
+      { "key": "d2to7", "label": "2-7d", "value": 46 },
+      { "key": "gt7", "label": ">7d", "value": 14 }
+    ],
+    "summary": [
+      { "label": "Open backlog", "value": 84, "format": "number", "note": "+6 vs last week" },
+      { "label": "Escalation rate", "value": 0.08, "format": "percent", "note": "Hidden quality pressure" },
+      { "label": "First-pass yield", "value": 0.86, "format": "percent", "note": "Closed without rework" },
+      { "label": "Forecasted month-end backlog", "value": 93, "format": "number", "note": "Base case projection" }
+    ],
+    "actions": [
+      { "level": "high", "title": "Protect analyst capacity", "body": "Freeze noncritical project work for two weeks to keep service throughput aligned to demand." },
+      { "level": "high", "title": "Triage aging queue daily", "body": "Assign executive visibility to work older than 7 days until the queue returns to target." },
+      { "level": "medium", "title": "Clarify escalation policy", "body": "The same policy ambiguity is driving both resolution misses and repeat feedback themes." }
+    ]
+  },
+  "demand": {
+    "drivers": [
+      { "driver": "Seasonal volume uplift", "assumption": "+9%", "confidence": "Medium", "impact": "High" },
+      { "driver": "West region rollout activity", "assumption": "+54 requests", "confidence": "High", "impact": "High" },
+      { "driver": "Policy exception volume", "assumption": "+12 requests", "confidence": "Medium", "impact": "Medium" },
+      { "driver": "Manual intake backlog conversion", "assumption": "+22 requests", "confidence": "Low", "impact": "Medium" }
+    ],
+    "regionalVariance": [
+      { "region": "West", "planned": 310, "projected": 352, "variance": "+14%" },
+      { "region": "Central", "planned": 295, "projected": 304, "variance": "+3%" },
+      { "region": "East", "planned": 298, "projected": 291, "variance": "-2%" }
+    ],
+    "events": [
+      { "title": "West rollout wave 2", "body": "Expected to drive both demand and training support volume for 3 weeks." },
+      { "title": "Peak season kickoff", "body": "Historical uplift has ranged from 7% to 11% during this same period." },
+      { "title": "Policy update release", "body": "Could lower escalation rate if field guidance lands before the spike." }
+    ]
+  },
+  "capacity": {
+    "coverage": [
+      { "team": "Field operations", "staffedCapacity": 620, "requiredCapacity": 688, "gap": "-68" },
+      { "team": "Escalations", "staffedCapacity": 185, "requiredCapacity": 201, "gap": "-16" },
+      { "team": "Enablement", "staffedCapacity": 120, "requiredCapacity": 104, "gap": "+16" },
+      { "team": "Planning support", "staffedCapacity": 200, "requiredCapacity": 195, "gap": "+5" }
+    ],
+    "levers": [
+      { "title": "Overtime block", "body": "Adds 42 completions of near-term capacity but raises burnout risk.", "level": "medium" },
+      { "title": "Temporary cross-training", "body": "Shifts 18 completions from enablement into field support within 2 weeks.", "level": "good" },
+      { "title": "Contractor extension", "body": "Covers seasonal spike but requires procurement signoff this week.", "level": "high" }
+    ],
+    "assumptions": [
+      { "label": "Productivity per analyst per week", "value": "11.8 completions" },
+      { "label": "Escalation penalty", "value": "1.6x handling time" },
+      { "label": "Training ramp", "value": "6 weeks to steady-state" },
+      { "label": "Shrinkage factor", "value": "13%" }
+    ]
+  },
+  "forecast": {
+    "scenarios": [
+      { "level": "steady", "label": "Base case", "name": "Current staffing, modest demand growth", "description": "Assumes intake rises gradually and routing remains stable.", "demandChange": "+4%", "capacityChange": "0%", "backlogProjection": "93", "slaRisk": "Moderate" },
+      { "level": "medium", "label": "Stretch case", "name": "Seasonal spike plus policy exceptions", "description": "Demand rises faster than expected and exception load increases.", "demandChange": "+12%", "capacityChange": "+2%", "backlogProjection": "107", "slaRisk": "High" },
+      { "level": "good", "label": "Improvement case", "name": "Targeted enablement plus triage", "description": "Routing and enablement reduce rework while preserving service pace.", "demandChange": "+4%", "capacityChange": "+5%", "backlogProjection": "78", "slaRisk": "Low" }
+    ],
+    "varianceDrivers": [
+      { "title": "West region demand spike", "body": "Forecast moved upward after rollout support demand exceeded prior assumptions." },
+      { "title": "Escalation complexity mix", "body": "Handling time rose as more issues required policy interpretation." },
+      { "title": "Ramp timing", "body": "Two new hires reached target output later than the plan assumed." }
+    ],
+    "templates": [
+      { "name": "Quarterly capacity plan", "purpose": "Align expected demand, staffing, and service commitments." },
+      { "name": "Site launch readiness", "purpose": "Forecast support load and training needs during rollout periods." },
+      { "name": "Monthly business review", "purpose": "Explain what happened, what changed, and what to expect next." }
+    ]
+  },
+  "feedback": {
+    "prompt": "This module should ultimately ingest field notes, surveys, emails, implementation issues, and escalation reviews into a common schema.",
+    "aggregationNote": "Use LLMs to help cluster and summarize comments, but keep a governed taxonomy and human-reviewed definitions for the operating record.",
+    "entries": [
+      { "site": "Phoenix", "region": "West", "channel": "Field visit", "theme": "Training gap", "summary": "Supervisors say the onboarding packet is too static and misses edge-case handling.", "sentiment": 2.6, "tags": ["enablement", "onboarding", "consistency"] },
+      { "site": "Dallas", "region": "Central", "channel": "Survey", "theme": "System latency", "summary": "Users report the intake tool is slow during peak morning usage and they fall back to manual tracking.", "sentiment": 2.1, "tags": ["tooling", "latency", "manual-workaround"] },
+      { "site": "Portland", "region": "West", "channel": "Escalation review", "theme": "Policy ambiguity", "summary": "Repeated requests are being escalated because policy exceptions are not clearly documented.", "sentiment": 2.8, "tags": ["policy", "escalation", "exceptions"] },
+      { "site": "Atlanta", "region": "East", "channel": "Field visit", "theme": "Training gap", "summary": "New leads want role-based job aids instead of generic reference material.", "sentiment": 3.1, "tags": ["enablement", "role-clarity", "adoption"] },
+      { "site": "Chicago", "region": "Central", "channel": "Survey", "theme": "Demand volatility", "summary": "The weekly staffing plan does not reflect local seasonality, causing preventable overtime.", "sentiment": 2.9, "tags": ["forecasting", "staffing", "seasonality"] },
+      { "site": "Raleigh", "region": "East", "channel": "Implementation retro", "theme": "System latency", "summary": "Teams are delaying updates until the end of shift because the tool slows down when too many records are open.", "sentiment": 2.4, "tags": ["tooling", "workflow", "adoption"] }
+    ]
+  },
+  "assumptions": {
+    "ledger": [
+      { "label": "Seasonality uplift in peak month", "owner": "Demand Planning", "value": "+9%", "status": "Approved" },
+      { "label": "Productivity per analyst per week", "owner": "Capacity Planning", "value": "11.8 completions", "status": "Approved" },
+      { "label": "Escalation penalty", "owner": "Service Excellence", "value": "1.6x handling time", "status": "Needs review" },
+      { "label": "Training ramp for new hires", "owner": "Enablement", "value": "6 weeks", "status": "Approved" }
+    ],
+    "risks": [
+      { "title": "Policy update timing", "body": "If documentation slips, escalation volume remains above plan for another month." },
+      { "title": "West rollout change fatigue", "body": "Adoption pressure could increase manual workarounds and distort demand signal quality." },
+      { "title": "Contractor procurement lag", "body": "A 2-week delay would remove the primary mitigation in the stretch case." }
+    ]
+  },
+  "approvals": {
+    "workflow": [
+      { "title": "Operations review", "body": "Completed with comments", "level": "good" },
+      { "title": "Finance review", "body": "Pending scenario reconciliation", "level": "medium" },
+      { "title": "Executive signoff", "body": "Awaiting demand and capacity alignment", "level": "high" }
+    ],
+    "versions": [
+      { "title": "v12", "body": "Adjusted West demand assumptions and contractor extension timing." },
+      { "title": "v11", "body": "Added field feedback theme weighting to forecast commentary." },
+      { "title": "v10", "body": "Reset staffing utilization assumptions after prior month actuals." }
+    ],
+    "decisions": [
+      { "title": "Protect field analyst capacity", "body": "Approved. Defer noncritical project assignments for two weeks." },
+      { "title": "Fund temporary cross-training", "body": "Approved pending schedule release from enablement." },
+      { "title": "Adopt improvement case as operating target", "body": "Open. Requires clearer dependency mitigation before executive approval." }
+    ]
+  },
+  "insights": {
+    "alerts": [
+      { "title": "Backlog risk remains elevated", "body": "Base case still projects month-end backlog growth unless demand is triaged or capacity is protected." },
+      { "title": "West region demand moved sharply", "body": "Regional variance now exceeds the tolerance band used in the approved plan." },
+      { "title": "Resolution SLA is the leading indicator", "body": "Response remains healthy, but resolution misses point to structural friction." }
+    ],
+    "themes": [
+      { "title": "Training gap", "body": "Repeated across West and East sites with adoption and consistency implications." },
+      { "title": "System latency", "body": "Driving manual workarounds and reducing confidence in intake data quality." },
+      { "title": "Policy ambiguity", "body": "Increasing escalations and weakening first-pass resolution." }
+    ],
+    "actions": [
+      { "title": "Finalize critical assumptions", "body": "Move the escalation penalty and contractor timing assumptions to approved or mitigated status." },
+      { "title": "Link feedback themes to forecast drivers", "body": "Use field signals to explain why variance is growing, not just that it exists." },
+      { "title": "Separate strategic from operational demand", "body": "Keep the service plan from being distorted by one-off change activity." }
+    ]
+  }
+}

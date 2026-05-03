@@ -1,0 +1,404 @@
+{
+  "metadata": {
+    "title": "Public Source Registry",
+    "source_policy": "Use public, reputable, non-operational sources. Prefer official government/intergovernmental publications, established research institutes, and transparent datasets. Cite every assertion-bearing profile record."
+  },
+  "sources": [
+    {
+      "source_id": "UN_MEMBER_STATES",
+      "title": "Member States",
+      "publisher": "United Nations",
+      "url": "https://www.un.org/en/about-us/member-states",
+      "source_type": "official_index",
+      "recency_note": "Consult at each index refresh.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "UN_OBSERVER_STATES",
+      "title": "Non-Member States",
+      "publisher": "United Nations",
+      "url": "https://www.un.org/en/about-us/non-member-states",
+      "source_type": "official_index",
+      "recency_note": "Consult at each index refresh.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "RESTCOUNTRIES",
+      "title": "REST Countries API",
+      "publisher": "REST Countries project",
+      "url": "https://restcountries.com/",
+      "source_type": "public_country_metadata_api",
+      "recency_note": "Used only for basic country metadata; cross-check UN status with UN pages.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "CIA_WORLD_FACTBOOK",
+      "title": "The World Factbook",
+      "publisher": "U.S. Central Intelligence Agency",
+      "url": "https://www.cia.gov/stories/story/spotlighting-the-world-factbook-as-we-bid-a-fond-farewell/",
+      "source_type": "public_country_reference",
+      "recency_note": "CIA announced the World Factbook sunset on 2026-02-04; use final/archived/date-stamped pages where possible and record access/as-of dates.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "FACTBOOK_JSON_CC0",
+      "title": "factbook.json World Factbook country profiles",
+      "publisher": "factbook.json public-domain project",
+      "url": "https://github.com/factbook/factbook.json",
+      "source_type": "public_factbook_json_archive",
+      "recency_note": "Public-domain JSON mirror/cache of CIA World Factbook country profiles; use as archived structured factbook context, not as live CIA API.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "SIPRI_MILEX",
+      "title": "SIPRI Military Expenditure Database",
+      "publisher": "Stockholm International Peace Research Institute",
+      "url": "https://www.sipri.org/databases/milex",
+      "source_type": "research_dataset",
+      "recency_note": "Annual updates; keep expenditure year separate from profile as_of_date.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "IISS_MILITARY_BALANCE",
+      "title": "The Military Balance",
+      "publisher": "International Institute for Strategic Studies",
+      "url": "https://www.iiss.org/publications/the-military-balance/",
+      "source_type": "research_reference",
+      "recency_note": "Annual reference; may require subscription. Store only derived, cited, non-infringing summaries.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "UNROCA",
+      "title": "United Nations Register of Conventional Arms",
+      "publisher": "United Nations Office for Disarmament Affairs",
+      "url": "https://www.unroca.org/",
+      "source_type": "official_arms_transfer_reporting",
+      "recency_note": "Use for reported imports/exports and holdings where states submit data; coverage is uneven.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "FLIGHTGLOBAL_WAF",
+      "title": "World Air Forces directory and public summaries",
+      "publisher": "FlightGlobal",
+      "url": "https://www.flightglobal.com/reports/world-air-forces-directory",
+      "source_type": "public_air_order_of_battle_reference",
+      "recency_note": "Use only accessible public summaries or licensed data with compliant derived facts.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "OFFICIAL_PROCUREMENT_RELEASE",
+      "title": "Official procurement, delivery, and service-entry releases",
+      "publisher": "Country-specific governments, defense ministries, and prime contractors",
+      "url": "https://www.defense.gov/News/Contracts/",
+      "source_type": "official_or_prime_contractor_public_release_family",
+      "recency_note": "Store country/system-specific URL in row-level source_locator.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "PUBLIC_NAVAL_REGISTER",
+      "title": "Public naval vessel registers and official fleet pages",
+      "publisher": "Country-specific navies and public registers",
+      "url": "https://www.nvr.navy.mil/",
+      "source_type": "official_or_public_naval_register_family",
+      "recency_note": "Use for commissioned/decommissioned vessel classes and hull-level public facts; avoid live tasking or location.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "WIKIPEDIA_LOW_CONF",
+      "title": "Wikipedia equipment and country military pages",
+      "publisher": "Wikimedia Foundation / volunteer editors",
+      "url": "https://www.wikipedia.org/",
+      "source_type": "low_confidence_convenience_reference",
+      "recency_note": "Use only as a convenience pointer or low-confidence seed; replace with primary/secondary reputable sources during ingestion.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "WIKIPEDIA_PUBLIC_INDEX",
+      "title": "Wikipedia public country and military topic indexes",
+      "publisher": "Wikimedia Foundation / volunteer editors",
+      "url": "https://www.wikipedia.org/",
+      "source_type": "public_reference_index",
+      "recency_note": "Use for public source discovery and low-confidence context only; prefer primary/established references for final assertions.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "WORLD_BANK_WDI",
+      "title": "World Development Indicators",
+      "publisher": "World Bank",
+      "url": "https://databank.worldbank.org/source/world-development-indicators",
+      "source_type": "public_economic_dataset",
+      "recency_note": "Use for population, GDP, transport, energy, and macroeconomic denominators.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "NATO_MEMBERS",
+      "title": "NATO Member Countries",
+      "publisher": "North Atlantic Treaty Organization",
+      "url": "https://www.nato.int/cps/en/natohq/topics_52044.htm",
+      "source_type": "official_alliance_index",
+      "recency_note": "Consult for alliance membership and Article 5 context.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "MOD_OFFICIAL_PUBLIC",
+      "title": "National defense ministry / armed forces official public releases",
+      "publisher": "Country-specific official sources",
+      "url": "https://www.gov.uk/government/organisations/ministry-of-defence",
+      "source_type": "official_public_release_family",
+      "recency_note": "Use country-specific URL in source_notes when this family source is cited.",
+      "public_sensitivity": "public_low_to_moderate"
+    },
+    {
+      "source_id": "UNODA_MILEX",
+      "title": "United Nations Report on Military Expenditures",
+      "publisher": "United Nations Office for Disarmament Affairs",
+      "url": "https://disarmament.unoda.org/en/our-work/cross-cutting-issues/military-confidence-building-measures/military-expenditure",
+      "source_type": "official_military_expenditure_reporting",
+      "recency_note": "Government-submitted annual military spending reports; coverage is voluntary and uneven, but rows are official state reports.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "ATT_ANNUAL_REPORTS",
+      "title": "Arms Trade Treaty Annual Reports",
+      "publisher": "Arms Trade Treaty Secretariat",
+      "url": "https://thearmstradetreaty.org/annual-reports.html",
+      "source_type": "official_arms_transfer_reporting",
+      "recency_note": "Use public annual reports and XLSX exports for declared imports/exports; note if a report is restricted or absent.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "UN_COMTRADE_HS93",
+      "title": "UN Comtrade HS 93 Arms and Ammunition Trade Records",
+      "publisher": "United Nations Statistics Division",
+      "url": "https://data.un.org/Data.aspx?d=ComTrade&f=_l1Code%3A93",
+      "source_type": "official_customs_trade_dataset",
+      "recency_note": "Use for customs trade flows in arms and ammunition categories; do not treat HS codes as exact military inventory.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "NATO_DEFENCE_EXPENDITURE",
+      "title": "Allied Defence Spending Data from 1949 to Present",
+      "publisher": "North Atlantic Treaty Organization",
+      "url": "https://www.nato.int/en/what-we-do/introduction-to-nato/defence-expenditures-and-natos-5-commitment",
+      "source_type": "official_alliance_defence_spending_dataset",
+      "recency_note": "Annual NATO compendium in PDF/Excel with financial, personnel, and economic data for member countries.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "EDA_DEFENCE_DATA",
+      "title": "Defence Data Portal",
+      "publisher": "European Defence Agency",
+      "url": "https://eda.europa.eu/publications-and-data/defence-data",
+      "source_type": "official_regional_defence_spending_and_personnel_dataset",
+      "recency_note": "Annual EDA data supplied by EU Member State Ministries of Defence; use for EU spending, personnel, investment, R&D, and benchmark fields.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "OSCE_VIENNA_DOCUMENT",
+      "title": "Vienna Document confidence- and security-building measures",
+      "publisher": "Organization for Security and Co-operation in Europe",
+      "url": "https://www.osce.org/forum-for-security-cooperation/107432",
+      "source_type": "official_regional_military_transparency_framework",
+      "recency_note": "Use for public framework, notification, inspection, and annual exchange process metadata; public data availability varies by participating State.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "UN_PEACEKEEPING_CONTRIBUTORS",
+      "title": "Troop and Police Contributors",
+      "publisher": "United Nations Peacekeeping",
+      "url": "https://peacekeeping.un.org/en/troop-and-police-contributors",
+      "source_type": "official_monthly_deployment_contribution_dataset",
+      "recency_note": "Monthly official country contribution reports for UN peacekeeping and special political missions; use as dated public snapshots only.",
+      "public_sensitivity": "public_low_to_moderate"
+    },
+    {
+      "source_id": "UN_TREATY_COLLECTION",
+      "title": "United Nations Treaty Collection",
+      "publisher": "United Nations",
+      "url": "https://treaties.un.org/",
+      "source_type": "official_treaty_database",
+      "recency_note": "Use for treaty signature, ratification, accession, reservation, and depositary status relevant to legal and political constraints.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "IAEA_SAFEGUARDS",
+      "title": "Safeguards Agreements and Legal Framework",
+      "publisher": "International Atomic Energy Agency",
+      "url": "https://www.iaea.org/topics/safeguards-agreements",
+      "source_type": "official_nuclear_safeguards_reference",
+      "recency_note": "Use for safeguards agreement and non-proliferation legal context; avoid facility-level operational details.",
+      "public_sensitivity": "public_low_to_moderate"
+    },
+    {
+      "source_id": "DSCA_MAJOR_ARMS_SALES",
+      "title": "Major Arms Sales notifications",
+      "publisher": "U.S. Defense Security Cooperation Agency",
+      "url": "https://www.dsca.mil/press-media/major-arms-sales",
+      "source_type": "official_foreign_military_sales_notification",
+      "recency_note": "Use for country, system, package, estimated value, and notification date; post-February 2026 notices may move to U.S. State Department pages.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "DSCA_HISTORICAL_SALES",
+      "title": "DSCA Historical Sales Book",
+      "publisher": "U.S. Defense Security Cooperation Agency",
+      "url": "https://www.dsca.mil/resources/dsca-historical-sales-book",
+      "source_type": "official_foreign_military_sales_historical_dataset",
+      "recency_note": "Use for country/program historical foreign military sales totals and long-run security cooperation context.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "US_STATE_ARMS_SALES_NOTIFICATIONS",
+      "title": "Arms Sales Congressional Notifications",
+      "publisher": "U.S. Department of State",
+      "url": "https://www.state.gov/arms-sales-congressional-notifications/",
+      "source_type": "official_foreign_military_sales_notification",
+      "recency_note": "Use for U.S. arms-sale congressional notifications where State Department becomes the publication endpoint; record the DSCA/State transition in row notes.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "USASPENDING_API",
+      "title": "USAspending API",
+      "publisher": "U.S. Department of the Treasury",
+      "url": "https://api.usaspending.gov/",
+      "source_type": "official_public_spending_api",
+      "recency_note": "Use for U.S. federal award and contract data; filter defense rows carefully and cite API query parameters in source_locator.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "SAM_GOV_CONTRACT_AWARDS",
+      "title": "SAM.gov Contract Awards API",
+      "publisher": "U.S. General Services Administration",
+      "url": "https://open.gsa.gov/api/contract-awards/",
+      "source_type": "official_public_procurement_api",
+      "recency_note": "Use for public U.S. contract award records and procurement cross-checks; record query filters and award identifiers.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "NGA_WORLD_PORT_INDEX",
+      "title": "World Port Index",
+      "publisher": "U.S. National Geospatial-Intelligence Agency",
+      "url": "https://msi.nga.mil/Publications/WPI",
+      "source_type": "official_public_maritime_infrastructure_dataset",
+      "recency_note": "Use for public port locations, facilities, services, and maritime infrastructure context; do not infer military tasking.",
+      "public_sensitivity": "public_low_to_moderate"
+    },
+    {
+      "source_id": "NGA_GEONET_NAMES",
+      "title": "Geographic Names Server",
+      "publisher": "U.S. National Geospatial-Intelligence Agency / U.S. Board on Geographic Names",
+      "url": "https://geonames.nga.mil/geonames/GNSHome/index.html",
+      "source_type": "official_public_geographic_names_dataset",
+      "recency_note": "Use for standardized foreign geographic names, variants, and approximate feature locations; coordinates are finding aids.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "WORLD_BANK_LPI",
+      "title": "Logistics Performance Index",
+      "publisher": "World Bank",
+      "url": "https://lpi.worldbank.org/",
+      "source_type": "official_logistics_performance_dataset",
+      "recency_note": "Use for country-level logistics, customs, infrastructure, tracking, timeliness, and trade-lane context; not a military logistics inventory.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "COPERNICUS_GLOBAL_LAND_COVER",
+      "title": "Global Dynamic Land Cover",
+      "publisher": "Copernicus Land Monitoring Service",
+      "url": "https://land.copernicus.eu/en/products/global-dynamic-land-cover",
+      "source_type": "official_public_land_cover_dataset",
+      "recency_note": "Use for terrain and land-cover modifiers in simulation geography layers; keep derived military movement assumptions separate.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "NASA_SRTM",
+      "title": "Shuttle Radar Topography Mission global elevation data",
+      "publisher": "NASA Earthdata",
+      "url": "https://www.earthdata.nasa.gov/news/blog/global-digital-elevation-models-now-available-aster-gdem-srtm",
+      "source_type": "official_public_elevation_dataset",
+      "recency_note": "Use for global elevation, slope, and terrain constraints; cite product/version and processing assumptions in derived rows.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "IMF_GFS",
+      "title": "Government Finance Statistics",
+      "publisher": "International Monetary Fund",
+      "url": "https://data.imf.org/Datasets/QGFS",
+      "source_type": "official_government_finance_dataset",
+      "recency_note": "Use for COFOG defense and public finance series where available; reconcile definitions with NATO, SIPRI, and national budgets.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "OECD_COFOG",
+      "title": "Government expenditure by function (COFOG)",
+      "publisher": "Organisation for Economic Co-operation and Development",
+      "url": "https://www.oecd.org/en/publications/government-at-a-glance-2025_0efd0bcd-en/full-report/government-expenditure-by-function-cofog_d2b167d4",
+      "source_type": "official_government_function_expenditure_dataset",
+      "recency_note": "Use for OECD and partner government expenditure by function, including defense; align year and COFOG definitions explicitly.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "EU_COARM_ARMS_EXPORTS",
+      "title": "EU annual arms export public database and reports",
+      "publisher": "European External Action Service",
+      "url": "https://www.eeas.europa.eu/eeas/coarm-online-system-exchange-platform-field-arms-export-control_en",
+      "source_type": "official_regional_arms_export_reporting",
+      "recency_note": "Use for EU arms export licenses, denials, and annual public reporting where available; member-state coverage and granularity vary.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "ITC_TRADE_MAP",
+      "title": "Trade Map",
+      "publisher": "International Trade Centre",
+      "url": "https://www.intracen.org/resources/tools/trade-map",
+      "source_type": "official_international_trade_dataset",
+      "recency_note": "Use for trade indicators and mirror/direct trade flows where licensing permits; weapons-specific analysis should be cross-checked with UN Comtrade and ATT/UNROCA.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "WIKIDATA_SPARQL",
+      "title": "Wikidata Query Service",
+      "publisher": "Wikimedia Foundation / Wikidata community",
+      "url": "https://query.wikidata.org/",
+      "source_type": "structured_public_encyclopedia_graph",
+      "recency_note": "Use as a structured public index for entity linking, equipment aliases, manufacturers, and country relationships; upgrade factual assertions to stronger sources.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "DBPEDIA_SPARQL",
+      "title": "DBpedia SPARQL endpoint",
+      "publisher": "DBpedia Association",
+      "url": "https://www.dbpedia.org/resources/sparql/",
+      "source_type": "structured_public_encyclopedia_graph",
+      "recency_note": "Use as a structured encyclopedia-derived index and alias source; prefer primary or established secondary sources for final inventory assertions.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "LOC_COUNTRY_STUDIES",
+      "title": "Country Studies",
+      "publisher": "Library of Congress",
+      "url": "https://www.loc.gov/collections/country-studies/",
+      "source_type": "official_public_country_reference_archive",
+      "recency_note": "Use for historical institutional, geographic, and country context where currentness is not required; do not use as live equipment inventory.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "CURATED_ENTITY_STATUS",
+      "title": "Curated disputed and partially recognized entity status list",
+      "publisher": "Project maintainers",
+      "url": "README.md",
+      "source_type": "curated_project_metadata",
+      "recency_note": "Must be reviewed manually against UN, ISO, and reputable area studies sources.",
+      "public_sensitivity": "public_low"
+    },
+    {
+      "source_id": "PROJECT_SCHEMA",
+      "title": "AdaptSim public schema and generated coverage metadata",
+      "publisher": "Project maintainers",
+      "url": "README.md",
+      "source_type": "curated_project_schema",
+      "recency_note": "Used only for schema/category/action definitions and generated coverage rows; factual military assertions require external source IDs.",
+      "public_sensitivity": "public_low"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "adaptsim",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "backend": "node server.js",
+    "start": "node server.js",
+    "ingest-equipment": "python3 military_disposition_db/scripts/generate_public_references.py && python3 military_disposition_db/scripts/generate_entity_enrichment.py && python3 military_disposition_db/scripts/ingest_wikipedia_equipment.py && python3 military_disposition_db/scripts/generate_coverage_matrix.py",
+    "enrich-db": "python3 military_disposition_db/scripts/generate_public_references.py && python3 military_disposition_db/scripts/generate_entity_enrichment.py",
+    "generate-db-coverage": "python3 military_disposition_db/scripts/generate_coverage_matrix.py",
+    "build-disposition-index": "node scripts/build-disposition-index.mjs",
+    "export-db": "python3 military_disposition_db/scripts/export_database.py",
+    "check": "node --check app.js && node --check server.js && node --check scripts/check-photo-geolocation.mjs",
+    "check:geo": "node scripts/check-photo-geolocation.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.34.5",
+    "tesseract.js": "^7.0.0"
+  }
+}

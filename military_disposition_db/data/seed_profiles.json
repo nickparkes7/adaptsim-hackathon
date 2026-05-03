@@ -1,0 +1,215 @@
+{
+  "metadata": {
+    "title": "Representative Public Seed Profiles",
+    "scope": "Small validation sample only. Values are high-level qualitative or broad public ranges and should be refreshed before analytical use.",
+    "safety_note": "No exact live troop locations, targeting data, exploitable vulnerabilities, or operationally sensitive real-time dispositions are included."
+  },
+  "profiles": [
+    {
+      "profile_id": "USA_2026_PUBLIC_SEED",
+      "entity_id": "USA",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Global power-projection military with joint force structure, major alliance commitments, large defense budget, advanced C4I, and substantial strategic transport and sustainment capacity.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "NATO_MEMBERS", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Use CIA World Factbook for public country/military descriptors, SIPRI for expenditure time series, NATO for alliance status, and U.S. DoD public releases for force posture summaries.",
+      "variables": {
+        "force_structure_summary": {"label": "joint_global_force", "components": ["army", "navy", "air_force", "marine_corps", "space_force", "coast_guard"], "notes": "Service list only; no unit locations."},
+        "c2_command_model": {"ordinal": "centralized_with_joint_delegation", "notes": "Public institutional description."},
+        "logistics_depth": {"ordinal": "very_high", "notes": "Global sustainment and transport capacity at country level."},
+        "strategic_transport_capacity": {"ordinal": "very_high"},
+        "training_experience": {"ordinal": "high"},
+        "doctrine_posture": {"label": "joint_expeditionary_and_alliance_enabled"},
+        "alliance_commitments": {"memberships": ["NATO"], "other": "Multiple bilateral and multilateral security commitments."},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public nuclear posture only."}
+      }
+    },
+    {
+      "profile_id": "CHN_2026_PUBLIC_SEED",
+      "entity_id": "CHN",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Large, modernizing military with strong regional anti-access capabilities, growing blue-water naval reach, centralized party-state command, and major domestic defense-industrial capacity.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Use CIA World Factbook and public defense white papers/official releases; record any country-specific official URL when extending.",
+      "variables": {
+        "force_structure_summary": {"label": "large_joint_force", "components": ["ground_force", "navy", "air_force", "rocket_force", "strategic_support_or_equivalent_public_functions"], "notes": "High-level public service/function categories only."},
+        "c2_command_model": {"ordinal": "centralized_party_state"},
+        "communications_resilience": {"ordinal": "high", "notes": "Coarse public assessment."},
+        "logistics_depth": {"ordinal": "high_regional"},
+        "strategic_transport_capacity": {"ordinal": "medium_to_high"},
+        "industrial_reconstitution_capacity": {"ordinal": "very_high"},
+        "doctrine_posture": {"label": "active_defense_and_regional_denial"},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public policy summary only; do not encode targeting assumptions."}
+      }
+    },
+    {
+      "profile_id": "RUS_2026_PUBLIC_SEED",
+      "entity_id": "RUS",
+      "as_of_date": "2026-05-02",
+      "confidence": "low",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Large nuclear-armed military with extensive ground, aerospace, naval, missile, and internal security components; current readiness and losses are conflict-sensitive and require date-bound sourcing.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Refresh with dated public sources before use; avoid live operational disposition or tactical loss claims.",
+      "variables": {
+        "force_structure_summary": {"label": "large_multi_service_force", "notes": "Conflict-era values must be separately dated."},
+        "c2_command_model": {"ordinal": "centralized"},
+        "logistics_depth": {"ordinal": "medium_to_high", "notes": "High uncertainty under wartime conditions."},
+        "training_experience": {"ordinal": "mixed", "notes": "Public reporting varies by formation and date; keep sparse."},
+        "doctrine_posture": {"label": "mass_fires_integrated_with_strategic_deterrence"},
+        "industrial_reconstitution_capacity": {"ordinal": "medium_to_high", "notes": "Sanctions and wartime production assumptions require source-specific overlays."},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public doctrine/red-line statements only."}
+      }
+    },
+    {
+      "profile_id": "IND_2026_PUBLIC_SEED",
+      "entity_id": "IND",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Large military with major land-force commitments, growing maritime and aerospace capabilities, nuclear deterrent, and expanding domestic defense industry.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Use official Indian defense ministry releases and budget documents for extension.",
+      "variables": {
+        "force_structure_summary": {"label": "large_tri_service_force"},
+        "logistics_depth": {"ordinal": "medium_to_high"},
+        "strategic_transport_capacity": {"ordinal": "medium"},
+        "training_experience": {"ordinal": "medium_to_high"},
+        "terrain_constraint_profile": {"major_constraints": ["mountain", "desert", "littoral", "jungle_or_high_rainfall_regions"]},
+        "doctrine_posture": {"label": "territorial_defense_with_regional_power_projection"},
+        "industrial_reconstitution_capacity": {"ordinal": "medium_to_high"},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public deterrence posture only."}
+      }
+    },
+    {
+      "profile_id": "GBR_2026_PUBLIC_SEED",
+      "entity_id": "GBR",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "NATO nuclear-armed military with expeditionary professional forces, advanced maritime/air capabilities, and strong alliance integration.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "NATO_MEMBERS", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Use UK Ministry of Defence public documents for detailed public force-structure updates.",
+      "variables": {
+        "force_structure_summary": {"label": "professional_joint_force", "components": ["army", "royal_navy", "royal_air_force", "strategic_forces_public"]},
+        "logistics_depth": {"ordinal": "high_but_size_limited"},
+        "strategic_transport_capacity": {"ordinal": "medium_to_high"},
+        "training_experience": {"ordinal": "high"},
+        "doctrine_posture": {"label": "expeditionary_alliance_integrated"},
+        "alliance_commitments": {"memberships": ["NATO"]},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public deterrent policy only."}
+      }
+    },
+    {
+      "profile_id": "FRA_2026_PUBLIC_SEED",
+      "entity_id": "FRA",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "NATO/EU nuclear-armed military with expeditionary capabilities, overseas commitments, advanced aerospace/naval industry, and independent strategic deterrent.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "NATO_MEMBERS", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Use French defense ministry and public military programming documents for extension.",
+      "variables": {
+        "force_structure_summary": {"label": "professional_joint_force"},
+        "logistics_depth": {"ordinal": "high_but_size_limited"},
+        "strategic_transport_capacity": {"ordinal": "medium_to_high"},
+        "training_experience": {"ordinal": "high"},
+        "doctrine_posture": {"label": "expeditionary_and_strategic_autonomy"},
+        "alliance_commitments": {"memberships": ["NATO", "EU_common_security_context"]},
+        "industrial_reconstitution_capacity": {"ordinal": "high"},
+        "nuclear_policy_public": {"status": "nuclear_weapon_state", "notes": "Public deterrent policy only."}
+      }
+    },
+    {
+      "profile_id": "IRN_2026_PUBLIC_SEED",
+      "entity_id": "IRN",
+      "as_of_date": "2026-05-02",
+      "confidence": "low",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Regional military with regular and parallel revolutionary-guard structures, missile/drone emphasis, layered internal security roles, sanctions-shaped logistics, and high uncertainty in many capability estimates.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX"],
+      "source_notes": "Use public institute assessments and official statements carefully; keep proxy or live regional activity out of baseline records unless high-level and dated.",
+      "variables": {
+        "force_structure_summary": {"label": "dual_regular_and_revolutionary_guard_structure"},
+        "c2_command_model": {"ordinal": "centralized_with_parallel_chains"},
+        "logistics_depth": {"ordinal": "medium", "notes": "Sanctions and domestic substitution assumptions require source-specific evidence."},
+        "system_class_capabilities": {"emphasis": ["ballistic_missiles", "uncrewed_systems", "littoral_denial"], "notes": "System-class only."},
+        "doctrine_posture": {"label": "deterrence_denial_and_asymmetric_regional_posture"},
+        "industrial_reconstitution_capacity": {"ordinal": "medium"},
+        "nuclear_policy_public": {"status": "non_nuclear_weapon_state", "notes": "Model nuclear-policy variables only from public legal/diplomatic sources."}
+      }
+    },
+    {
+      "profile_id": "ISR_2026_PUBLIC_SEED",
+      "entity_id": "ISR",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Highly trained regional military with reserve-heavy mobilization model, advanced air/C4I/intelligence capabilities, active border and internal security pressures, and dense political-legal constraints.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Conflict-era values must be dated; exclude live force locations and tactical readiness details.",
+      "variables": {
+        "force_structure_summary": {"label": "active_reserve_integrated_force"},
+        "reserve_mobilization_summary": {"label": "reserve_heavy", "notes": "Use only public mobilization descriptions."},
+        "c2_command_model": {"ordinal": "centralized_with_fast_operational_cycle"},
+        "logistics_depth": {"ordinal": "medium_to_high_regional"},
+        "training_experience": {"ordinal": "high"},
+        "doctrine_posture": {"label": "rapid_mobilization_active_defense_and_precision_emphasis"},
+        "nuclear_policy_public": {"status": "undeclared_or_ambiguous_public_status", "notes": "Do not infer force details."}
+      }
+    },
+    {
+      "profile_id": "UKR_2026_PUBLIC_SEED",
+      "entity_id": "UKR",
+      "as_of_date": "2026-05-02",
+      "confidence": "low",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Wartime military with large mobilized force structure, extensive partner support, rapidly adapted doctrine and uncrewed systems use, and high uncertainty in personnel, inventory, readiness, and attrition variables.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC"],
+      "source_notes": "Treat all conflict-related values as date-bound; do not include live positions, targeting, tactical force availability, or sensitive aid flow details.",
+      "variables": {
+        "force_structure_summary": {"label": "wartime_mobilized_joint_force", "notes": "Use broad categories only."},
+        "c2_command_model": {"ordinal": "distributed_under_wartime_pressure"},
+        "communications_resilience": {"ordinal": "medium_to_high", "notes": "High uncertainty; public high-level only."},
+        "logistics_depth": {"ordinal": "externally_supported_high_variance"},
+        "training_experience": {"ordinal": "mixed_to_high_wartime"},
+        "morale_driver_summary": {"drivers": ["defense_of_homeland", "attrition_fatigue", "partner_support"], "notes": "Qualitative only."},
+        "doctrine_posture": {"label": "adaptive_defense_counteroffensive_and_partner_interoperability"},
+        "industrial_reconstitution_capacity": {"ordinal": "medium_with_partner_dependency"}
+      }
+    },
+    {
+      "profile_id": "TWN_2026_PUBLIC_SEED",
+      "entity_id": "TWN",
+      "as_of_date": "2026-05-02",
+      "confidence": "medium",
+      "public_sensitivity": "public_low_to_moderate",
+      "estimate_type": "qualitative_assessment",
+      "summary": "Self-governing entity with public defense data, reserve and civil-defense emphasis, island geography, high-end air/naval/missile threats in scenario context, and strong dependence on political assumptions.",
+      "sources": ["CIA_WORLD_FACTBOOK", "SIPRI_MILEX", "MOD_OFFICIAL_PUBLIC", "CURATED_ENTITY_STATUS"],
+      "source_notes": "Use Taiwan Ministry of National Defense public reports for extension; keep sovereignty/status distinct from military variables.",
+      "variables": {
+        "force_structure_summary": {"label": "tri_service_island_defense_force"},
+        "reserve_mobilization_summary": {"label": "reserve_and_civil_defense_emphasis"},
+        "terrain_constraint_profile": {"major_constraints": ["island", "mountainous_interior", "dense_urban_corridors", "limited_landing_areas_public_high_level"]},
+        "logistics_depth": {"ordinal": "medium_highly_scenario_dependent"},
+        "strategic_transport_capacity": {"ordinal": "low_to_medium"},
+        "doctrine_posture": {"label": "defensive_denial_resilience"},
+        "alliance_commitments": {"memberships": [], "other": "Security relationships and support assumptions must be scenario overlays, not baseline facts."},
+        "nuclear_policy_public": {"status": "non_nuclear_weapon_state"}
+      }
+    }
+  ]
+}

@@ -3,6 +3,8 @@
 .env.local
 *.log
 node_modules/
+*.traineddata
+*.traineddata.gz
 __pycache__/
 *.pyc
 .venv/
@@ -11,3 +13,5 @@ venv/
 .vscode/
 dist/
 build/
+military_disposition_db/exports/
+ngc-cli/

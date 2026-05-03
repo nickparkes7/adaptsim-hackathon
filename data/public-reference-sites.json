@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "updated": "2026-05-02",
+  "sourceNote": "Static and dynamic public-reference locations with Wikipedia/Wikidata links. Markers are contextual references only; they do not describe live force posture, readiness, vulnerabilities, targeting, restricted access points, stockpiles, or current movement.",
+  "sites": [
+    { "id": "usa-pentagon", "countryIso3": "USA", "name": "The Pentagon", "type": "headquarters", "lat": 38.8719, "lon": -77.0563, "pageTitle": "The Pentagon" },
+    { "id": "usa-norfolk", "countryIso3": "USA", "name": "Naval Station Norfolk", "type": "naval", "lat": 36.9466, "lon": -76.3139, "pageTitle": "Naval Station Norfolk" },
+    { "id": "usa-pendleton", "countryIso3": "USA", "name": "Marine Corps Base Camp Pendleton", "type": "training", "lat": 33.3013, "lon": -117.3557, "pageTitle": "Marine Corps Base Camp Pendleton" },
+    { "id": "usa-edwards", "countryIso3": "USA", "name": "Edwards Air Force Base", "type": "air", "lat": 34.9054, "lon": -117.8837, "pageTitle": "Edwards Air Force Base" },
+    { "id": "usa-naval-academy", "countryIso3": "USA", "name": "United States Naval Academy", "type": "academy", "lat": 38.9822, "lon": -76.4835, "pageTitle": "United States Naval Academy" },
+
+    { "id": "gbr-portsmouth", "countryIso3": "GBR", "name": "HMNB Portsmouth", "type": "naval", "lat": 50.8129, "lon": -1.1102, "pageTitle": "HMNB Portsmouth" },
+    { "id": "gbr-sandhurst", "countryIso3": "GBR", "name": "Royal Military Academy Sandhurst", "type": "academy", "lat": 51.34, "lon": -0.75, "pageTitle": "Royal Military Academy Sandhurst" },
+    { "id": "gbr-brize-norton", "countryIso3": "GBR", "name": "RAF Brize Norton", "type": "air", "lat": 51.75, "lon": -1.58, "pageTitle": "RAF Brize Norton" },
+    { "id": "gbr-clyde", "countryIso3": "GBR", "name": "HMNB Clyde", "type": "naval", "lat": 56.07, "lon": -4.82, "pageTitle": "HMNB Clyde" },
+
+    { "id": "fra-balard", "countryIso3": "FRA", "name": "Hexagone Balard", "type": "headquarters", "lat": 48.835, "lon": 2.279, "pageTitle": "Hexagone Balard" },
+    { "id": "fra-toulon", "countryIso3": "FRA", "name": "Toulon Arsenal", "type": "naval", "lat": 43.118, "lon": 5.93, "pageTitle": "Toulon Arsenal" },
+    { "id": "fra-brest", "countryIso3": "FRA", "name": "Brest Arsenal", "type": "naval", "lat": 48.38, "lon": -4.49, "pageTitle": "Brest Arsenal" },
+    { "id": "fra-saint-cyr", "countryIso3": "FRA", "name": "Saint-Cyr Military Academy", "type": "academy", "lat": 48.11, "lon": -2.13, "pageTitle": "École spéciale militaire de Saint-Cyr" },
+
+    { "id": "deu-ramstein", "countryIso3": "DEU", "name": "Ramstein Air Base", "type": "air", "lat": 49.4369, "lon": 7.6003, "pageTitle": "Ramstein Air Base" },
+    { "id": "deu-wilhelmshaven", "countryIso3": "DEU", "name": "Wilhelmshaven Naval Base", "type": "naval", "lat": 53.52, "lon": 8.14, "pageTitle": "Wilhelmshaven Naval Base" },
+    { "id": "deu-staff-college", "countryIso3": "DEU", "name": "Bundeswehr Command and Staff College", "type": "academy", "lat": 53.57, "lon": 9.98, "pageTitle": "Bundeswehr Command and Staff College" },
+    { "id": "deu-university-munich", "countryIso3": "DEU", "name": "Bundeswehr University Munich", "type": "academy", "lat": 48.08, "lon": 11.64, "pageTitle": "Bundeswehr University Munich" },
+
+    { "id": "pol-general-staff", "countryIso3": "POL", "name": "General Staff of the Polish Armed Forces", "type": "headquarters", "lat": 52.219, "lon": 21.018, "pageTitle": "General Staff of the Polish Armed Forces" },
+    { "id": "pol-naval-academy", "countryIso3": "POL", "name": "Polish Naval Academy", "type": "academy", "lat": 54.518, "lon": 18.547, "pageTitle": "Polish Naval Academy" },
+    { "id": "pol-drawsko", "countryIso3": "POL", "name": "Drawsko Training Area", "type": "training", "lat": 53.53, "lon": 15.83, "pageTitle": "Drawsko Training Area" },
+
+    { "id": "jpn-mod", "countryIso3": "JPN", "name": "Ministry of Defense", "type": "headquarters", "lat": 35.693, "lon": 139.729, "pageTitle": "Ministry of Defense (Japan)" },
+    { "id": "jpn-yokosuka", "countryIso3": "JPN", "name": "United States Fleet Activities Yokosuka", "type": "naval", "lat": 35.293, "lon": 139.667, "pageTitle": "United States Fleet Activities Yokosuka" },
+    { "id": "jpn-hamamatsu", "countryIso3": "JPN", "name": "Hamamatsu Air Base", "type": "air", "lat": 34.75, "lon": 137.7, "pageTitle": "Hamamatsu Air Base" },
+    { "id": "jpn-defense-academy", "countryIso3": "JPN", "name": "National Defense Academy of Japan", "type": "academy", "lat": 35.257, "lon": 139.724, "pageTitle": "National Defense Academy of Japan" },
+
+    { "id": "aus-russell", "countryIso3": "AUS", "name": "Russell Offices", "type": "headquarters", "lat": -35.297, "lon": 149.15, "pageTitle": "Russell Offices" },
+    { "id": "aus-stirling", "countryIso3": "AUS", "name": "HMAS Stirling", "type": "naval", "lat": -32.23, "lon": 115.68, "pageTitle": "HMAS Stirling" },
+    { "id": "aus-amberley", "countryIso3": "AUS", "name": "RAAF Base Amberley", "type": "air", "lat": -27.64, "lon": 152.71, "pageTitle": "RAAF Base Amberley" },
+    { "id": "aus-duntroon", "countryIso3": "AUS", "name": "Royal Military College, Duntroon", "type": "academy", "lat": -35.303, "lon": 149.164, "pageTitle": "Royal Military College, Duntroon" },
+
+    { "id": "aze-baku-kala", "countryIso3": "AZE", "name": "Baku Kala Air Base", "type": "air", "lat": 40.40638889, "lon": 50.2, "pageTitle": "Baku Kala Air Base" },
+    { "id": "aze-sitalchay", "countryIso3": "AZE", "name": "Sitalchay Military Airbase", "type": "air", "lat": 40.78388889, "lon": 49.40055556, "pageTitle": "Sitalchay Military Airbase" },
+    { "id": "aze-kurdamir", "countryIso3": "AZE", "name": "Kurdamir Air Base", "type": "air", "lat": 40.27333333, "lon": 48.16333333, "pageTitle": "Kurdamir Air Base" },
+    { "id": "aze-battle-baku", "countryIso3": "AZE", "name": "Battle of Baku", "type": "history", "lat": 40.45, "lon": 49.783, "pageTitle": "Battle of Baku" },
+    { "id": "aze-battle-kurdamir", "countryIso3": "AZE", "name": "Battle of Kurdamir", "type": "history", "lat": 40.33833, "lon": 48.16083, "pageTitle": "Battle of Kurdamir" },
+
+    { "id": "ind-south-block", "countryIso3": "IND", "name": "South Block", "type": "headquarters", "lat": 28.614, "lon": 77.199, "pageTitle": "South Block" },
+    { "id": "ind-naval-academy", "countryIso3": "IND", "name": "Indian Naval Academy", "type": "academy", "lat": 12.02, "lon": 75.22, "pageTitle": "Indian Naval Academy" },
+    { "id": "ind-nda", "countryIso3": "IND", "name": "National Defence Academy", "type": "academy", "lat": 18.451, "lon": 73.746, "pageTitle": "National Defence Academy (India)" },
+    { "id": "ind-hindon", "countryIso3": "IND", "name": "Hindon Air Force Station", "type": "air", "lat": 28.707, "lon": 77.36, "pageTitle": "Hindon Air Force Station" },
+
+    { "id": "bra-ministry", "countryIso3": "BRA", "name": "Ministry of Defence", "type": "headquarters", "lat": -15.799, "lon": -47.861, "pageTitle": "Ministry of Defence (Brazil)" },
+    { "id": "bra-aman", "countryIso3": "BRA", "name": "Academia Militar das Agulhas Negras", "type": "academy", "lat": -22.466, "lon": -44.447, "pageTitle": "Academia Militar das Agulhas Negras" },
+    { "id": "bra-anapolis", "countryIso3": "BRA", "name": "Anápolis Air Force Base", "type": "air", "lat": -16.23, "lon": -48.96, "pageTitle": "Anápolis Air Force Base" },
+    { "id": "bra-naval-school", "countryIso3": "BRA", "name": "Escola Naval", "type": "academy", "lat": -22.908, "lon": -43.164, "pageTitle": "Escola Naval" },
+
+    { "id": "zaf-army-college", "countryIso3": "ZAF", "name": "South African Army College", "type": "academy", "lat": -25.75, "lon": 28.22, "pageTitle": "South African Army College" },
+    { "id": "zaf-simons-town", "countryIso3": "ZAF", "name": "Naval Base Simon's Town", "type": "naval", "lat": -34.192, "lon": 18.433, "pageTitle": "Naval Base Simon's Town" },
+    { "id": "zaf-waterkloof", "countryIso3": "ZAF", "name": "Air Force Base Waterkloof", "type": "air", "lat": -25.829, "lon": 28.222, "pageTitle": "Air Force Base Waterkloof" },
+    { "id": "zaf-military-academy", "countryIso3": "ZAF", "name": "South African Military Academy", "type": "academy", "lat": -33.012, "lon": 17.944, "pageTitle": "South African Military Academy" }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "title": "AdaptSim open place evidence",
+    "description": "Small, sourced known-place records used to turn readable image clues into location candidates when photo GPS is absent.",
+    "generatedAt": "2026-05-03",
+    "caution": "Use these records as evidence for simulation placement, not as live operational intelligence."
+  },
+  "places": [
+    {
+      "id": "somalia-mogadishu-guest-house",
+      "name": "Mogadishu Guest House and Restaurant",
+      "aliases": [
+        "Mogadishu Guest House",
+        "Mogadishu Guest House & Restaurant",
+        "Mogadishu Guest House and Restaurant",
+        "Mogadishu Guest House 2",
+        "Guest House 2 Liido Street"
+      ],
+      "category": "guest house restaurant cafeteria hotel resort",
+      "address": "Guest House 2, Liido Street",
+      "city": "Mogadishu",
+      "country": "Somalia",
+      "lat": 2.03777,
+      "lon": 45.35672,
+      "sources": [
+        {
+          "title": "WorldPlaces - Mogadishu Guest House",
+          "url": "https://somalia.worldplaces.me/cafeterias-in-mogadishu/57207920-mogadishu-guest-house.html",
+          "note": "Lists Mogadishu Guest House GPS coordinates 2.03777, 45.35672 and nearby Lido/Liido Beach landmarks."
+        },
+        {
+          "title": "Info-clipper - MOGADISHU GUEST HOUSE AND RESTAURANT",
+          "url": "https://www.info-clipper.com/en/company/somalia/mogadishu-guest-house-and-restaurant.sod9a52zd.html",
+          "note": "Lists company name, city Mogadishu, country Somalia, and address Guest House 2, Liido Street."
+        },
+        {
+          "title": "WorldPlaces - Lido Beach, Mogadishu, Somalia",
+          "url": "https://somalia.worldplaces.me/view-place/61766605-lido-beach-mogadishu-somalia.html",
+          "note": "Lists Lido Beach GPS coordinates 2.03763, 45.35851 and Mogadishu Guest House nearby at roughly 193m."
+        }
+      ]
+    },
+    {
+      "id": "somalia-mogadishu-lido-beach",
+      "name": "Lido Beach, Mogadishu",
+      "aliases": [
+        "Lido Beach",
+        "Liido Beach",
+        "Xeebta Liido",
+        "Lido Beach Mogadishu",
+        "Liido Street"
+      ],
+      "category": "beach neighborhood landmark",
+      "address": "Lido Beach",
+      "city": "Mogadishu",
+      "country": "Somalia",
+      "lat": 2.03763,
+      "lon": 45.35851,
+      "sources": [
+        {
+          "title": "WorldPlaces - Lido Beach, Mogadishu, Somalia",
+          "url": "https://somalia.worldplaces.me/view-place/61766605-lido-beach-mogadishu-somalia.html",
+          "note": "Lists Lido Beach GPS coordinates and nearby places including Mogadishu Guest House."
+        }
+      ]
+    }
+  ]
+}

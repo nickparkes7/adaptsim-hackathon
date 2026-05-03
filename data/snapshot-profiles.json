@@ -1,0 +1,529 @@
+{
+  "version": 1,
+  "updated": "2026-05-02",
+  "sourceNote": "Prototype baseline. Values are static, public, country-level, rounded, and intentionally exclude live unit disposition, readiness, vulnerabilities, targetable sites, or tactical routing.",
+  "profiles": [
+    {
+      "id": "united-states",
+      "country": "United States",
+      "iso3": "USA",
+      "region": "North America",
+      "aliases": ["usa", "us", "united states of america", "america"],
+      "center": { "lat": 39.8283, "lon": -98.5795 },
+      "bbox": { "minLat": 24.3963, "maxLat": 49.3844, "minLon": -124.8489, "maxLon": -66.8854 },
+      "locations": [
+        { "label": "Washington, DC", "lat": 38.9072, "lon": -77.0369 },
+        { "label": "San Diego, California", "lat": 32.7157, "lon": -117.1611 },
+        { "label": "Norfolk, Virginia", "lat": 36.8508, "lon": -76.2859 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air Force", "Marine Corps", "Space Force", "Coast Guard"],
+      "forceDisposition": [
+        "Broad posture: global expeditionary force with major air, naval, land, space, cyber, and logistics components.",
+        "App boundary: does not model live base-level disposition or readiness."
+      ],
+      "hardware": [
+        "Main battle tanks: M1 Abrams family",
+        "Infantry fighting vehicles and APCs: Bradley, Stryker, AMPV families",
+        "Tactical vehicles and trucks: JLTV, HMMWV, FMTV, HEMTT families",
+        "Fixed-wing aircraft: F-35, F-22, F-15, F-16, F/A-18, B-1, B-2, B-52, C-17, C-130 families",
+        "Rotary-wing aircraft: AH-64, UH-60, CH-47, CH-53 families",
+        "Naval platforms: aircraft carriers, submarines, cruisers, destroyers, amphibious ships, support ships"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 1.3 million; reserve component: approx. 0.8 million.",
+        "Land hierarchy: theater, corps, division, brigade combat team, battalion, company, platoon.",
+        "Joint command structure runs through civilian leadership, Department of Defense, combatant commands, service components, and operational task forces."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: 155 mm howitzers, HIMARS, MLRS",
+        "Air defense: Patriot, THAAD, NASAMS, Avenger, shipborne Aegis systems",
+        "Air-launched and naval fires: precision-guided bombs, cruise missiles, anti-ship missiles",
+        "Small arms: M4/M16 family, M17/M18 pistols, machine guns, sniper systems",
+        "Counter-UAS and electronic warfare: layered kinetic, sensor, and EW systems"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as service components, combatant command allocation, brigade/wing/strike group equivalents, and support echelons.",
+        "c4i": "Highly networked joint C2 with satellite, tactical data links, secure voice/data, and cyber/space dependencies.",
+        "logisticsSustainment": "Large strategic lift, sealift, aerial refueling, depot, prepositioning, and contractor-enabled sustainment base.",
+        "personnelMorale": "Professional volunteer force; model experience by occupational specialty, deployment tempo, training pipeline, and retention stress.",
+        "geographyEnvironment": "Continental scale, two-ocean access, extensive rail/road/port/airfield infrastructure, Arctic and Pacific distance challenges.",
+        "combatPowerModeling": "Use aggregated air, maritime, land, cyber, and space superiority modifiers rather than target-level effects.",
+        "doctrineBehavior": "Joint maneuver, precision fires, combined arms, power projection, alliance integration, and mission command.",
+        "mobilizationStrategicMovement": "Model reserve activation, sealift/airlift queues, prepositioned stocks, and theater reception capacity.",
+        "economicIndustrialInterface": "Large but constrained defense industrial base; production surge depends on munitions, shipbuilding, electronics, and workforce capacity.",
+        "politicalLegalConstraints": "Civilian control, congressional authorization/funding, LOAC, alliance commitments, nuclear escalation controls.",
+        "intelligenceDeception": "Broad ISR ecosystem with space, airborne, cyber, signals, human, and open-source inputs; include fog and deception.",
+        "injectionInterface": "Permit movement, support, mobilization, ROE, and diplomatic actions; restrict strike actions to abstract escalation markers.",
+        "metricsLogging": "Track readiness, tempo, loss-exchange abstractions, logistics consumption, sortie generation, reconstitution time, and political cost."
+      }
+    },
+    {
+      "id": "united-kingdom",
+      "country": "United Kingdom",
+      "iso3": "GBR",
+      "region": "Europe",
+      "aliases": ["uk", "great britain", "britain", "england"],
+      "center": { "lat": 55.3781, "lon": -3.436 },
+      "bbox": { "minLat": 49.9, "maxLat": 60.86, "minLon": -8.65, "maxLon": 1.77 },
+      "locations": [
+        { "label": "London", "lat": 51.5072, "lon": -0.1276 },
+        { "label": "Portsmouth", "lat": 50.8198, "lon": -1.088 },
+        { "label": "Glasgow", "lat": 55.8642, "lon": -4.2518 }
+      ],
+      "militaryForces": ["British Army", "Royal Navy", "Royal Air Force", "Strategic Command", "Royal Marines"],
+      "forceDisposition": [
+        "Broad posture: NATO-aligned expeditionary force with maritime, air, special operations, cyber, and nuclear deterrence roles.",
+        "App boundary: no live force tracking or base-level readiness."
+      ],
+      "hardware": [
+        "Armored vehicles: Challenger 2/3 program, Warrior legacy, Ajax program, Boxer, Mastiff/Ridgeback families",
+        "Aircraft: F-35B, Typhoon, A400M, C-17, Voyager, Chinook, Apache, Wildcat, Merlin",
+        "Naval platforms: aircraft carriers, destroyers, frigates, submarines, patrol vessels, support ships",
+        "Ground mobility: MAN support vehicles, Land Rover and protected mobility families"
+      ],
+      "personnelFormations": [
+        "Total regular personnel: approx. 140 thousand across services; reserves add additional surge capacity.",
+        "Army formations include division, brigade, regiment/battalion, company/squadron, platoon/troop levels.",
+        "Joint control through civilian leadership, Ministry of Defence, service chiefs, Strategic Command, and operational headquarters."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: AS90 legacy, L118 light gun, GMLRS",
+        "Air defense: Sky Sabre, shipborne Sea Viper, short-range systems",
+        "Naval and air weapons: Spear family, Storm Shadow, Brimstone, Meteor, Sea Ceptor",
+        "Small arms: L85 family, Glock pistols, GPMG, sniper systems",
+        "Counter-UAS: layered sensors, EW, and short-range defeat systems"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as deployable brigades, carrier/escort groups, air wings, commando units, and joint enabling forces.",
+        "c4i": "NATO-interoperable C2 with national strategic command, joint headquarters, secure communications, and cyber dependencies.",
+        "logisticsSustainment": "Expeditionary sustainment depends on sealift, airlift, allied bases, ammunition stocks, and contractor support.",
+        "personnelMorale": "Professional force; model tempo, recruiting/retention, specialist shortages, and training cycle quality.",
+        "geographyEnvironment": "Island geography, dense infrastructure, Atlantic/North Sea approaches, and overseas access dependencies.",
+        "combatPowerModeling": "Model as high-end but capacity-constrained joint force with maritime and air enablers.",
+        "doctrineBehavior": "NATO joint doctrine, expeditionary entry, maritime task groups, and coalition command integration.",
+        "mobilizationStrategicMovement": "Reserve call-out, sealift, airlift, and allied theater access are core timing constraints.",
+        "economicIndustrialInterface": "Advanced aerospace, naval, missile, and electronics base with stockpile and production-rate constraints.",
+        "politicalLegalConstraints": "Parliamentary oversight, LOAC, NATO obligations, UN mandates, and nuclear deterrence policy.",
+        "intelligenceDeception": "National and alliance ISR, signals intelligence, cyber, open-source, and deception/fog-of-war layers.",
+        "injectionInterface": "Support peacekeeping, mobilization, ROE, and maritime control actions; keep strike effects abstract.",
+        "metricsLogging": "Track deployment readiness, sortie rate, ship availability, munitions consumption, sustainment days, and political cost."
+      }
+    },
+    {
+      "id": "france",
+      "country": "France",
+      "iso3": "FRA",
+      "region": "Europe",
+      "aliases": ["french republic", "paris"],
+      "center": { "lat": 46.2276, "lon": 2.2137 },
+      "bbox": { "minLat": 41.3, "maxLat": 51.1, "minLon": -5.2, "maxLon": 9.6 },
+      "locations": [
+        { "label": "Paris", "lat": 48.8566, "lon": 2.3522 },
+        { "label": "Toulon", "lat": 43.1242, "lon": 5.928 },
+        { "label": "Brest", "lat": 48.3904, "lon": -4.4861 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air and Space Force", "National Gendarmerie", "Strategic forces"],
+      "forceDisposition": [
+        "Broad posture: NATO/EU-capable force with overseas territories, expeditionary operations, maritime security, and nuclear deterrence.",
+        "App boundary: country-level posture only."
+      ],
+      "hardware": [
+        "Armored vehicles: Leclerc, VBCI, Griffon, Jaguar, Serval, AMX-10RC legacy",
+        "Aircraft: Rafale, Mirage 2000 legacy, A400M, C-130, A330 MRTT, Tiger, NH90, Caracal",
+        "Naval platforms: aircraft carrier, nuclear submarines, frigates, amphibious ships, patrol vessels",
+        "Ground mobility: VLRA, Sherpa, logistics trucks, protected patrol vehicles"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 200 thousand across armed forces; gendarmerie adds internal security mass.",
+        "Army formations include division-level command, brigades, regiments, companies, platoons, and specialist detachments.",
+        "Command through President, Ministry for the Armed Forces, defense staff, service chiefs, and joint theater commands."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: CAESAR, LRU rocket artillery, mortars",
+        "Air defense: SAMP/T, Mistral, naval Aster systems",
+        "Air/naval strike: SCALP-EG, Exocet, AASM, MdCN naval cruise missiles",
+        "Small arms: FAMAS legacy, HK416F, machine guns, sniper systems",
+        "Counter-UAS/EW: sensor, EW, and short-range defeat programs"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as joint theater commands, brigades/regiments, air wings, naval task groups, and strategic forces.",
+        "c4i": "National joint C2 with NATO interoperability, space/cyber dependencies, and expeditionary communications.",
+        "logisticsSustainment": "Airlift, sealift, overseas bases, depot maintenance, fuel/ammunition stocks, and allied access affect duration.",
+        "personnelMorale": "Professional force; model training quality, rotation tempo, overseas commitments, and specialist availability.",
+        "geographyEnvironment": "Metropolitan European core plus overseas territories, Mediterranean/Atlantic access, and Sahel/Indo-Pacific reach.",
+        "combatPowerModeling": "Model balanced high-end air/land/maritime force with independent deterrence and expeditionary limits.",
+        "doctrineBehavior": "Combined arms, expeditionary intervention, autonomous strategic decision-making, and alliance operations.",
+        "mobilizationStrategicMovement": "Reserve activation, strategic air/sealift, overseas staging, and port/airbase reception gates.",
+        "economicIndustrialInterface": "Strong aerospace, armored vehicle, naval, missile, and nuclear industrial base with production-rate limits.",
+        "politicalLegalConstraints": "Civilian executive control, parliamentary scrutiny, LOAC, NATO/EU obligations, and nuclear policy.",
+        "intelligenceDeception": "National ISR, space, cyber, signals, human, open-source, and deception layers.",
+        "injectionInterface": "Support expeditionary movement, peacekeeping, maritime security, mobilization, and abstract strike markers.",
+        "metricsLogging": "Track deployable battalions, air sorties, naval availability, sustainment days, munitions stocks, and public support."
+      }
+    },
+    {
+      "id": "germany",
+      "country": "Germany",
+      "iso3": "DEU",
+      "region": "Europe",
+      "aliases": ["deutschland", "berlin"],
+      "center": { "lat": 51.1657, "lon": 10.4515 },
+      "bbox": { "minLat": 47.2, "maxLat": 55.1, "minLon": 5.8, "maxLon": 15.1 },
+      "locations": [
+        { "label": "Berlin", "lat": 52.52, "lon": 13.405 },
+        { "label": "Hamburg", "lat": 53.5511, "lon": 9.9937 },
+        { "label": "Munich", "lat": 48.1351, "lon": 11.582 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air Force", "Joint Support Service", "Cyber and Information Domain Service", "Medical Service"],
+      "forceDisposition": [
+        "Broad posture: NATO central European force focused on collective defense, air defense, logistics, and alliance reinforcement.",
+        "App boundary: no current readiness or unit movement inference."
+      ],
+      "hardware": [
+        "Armored vehicles: Leopard 2, Puma, Boxer, Marder legacy, Fuchs, Eagle",
+        "Aircraft: Eurofighter, Tornado legacy, A400M, CH-53 legacy, NH90, Tiger",
+        "Naval platforms: frigates, corvettes, submarines, mine warfare vessels, support ships",
+        "Ground mobility: HX trucks, protected transport, logistics and engineering vehicles"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 180 thousand; reserves provide mobilization depth.",
+        "Land structure includes divisions, brigades, battalions, companies, platoons, and multinational corps links.",
+        "Command through federal civilian leadership, Ministry of Defence, inspector general, services, and NATO-integrated commands."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: PzH 2000, MARS II, mortars",
+        "Air defense: Patriot, IRIS-T SLM, naval and short-range systems",
+        "Air/naval weapons: Taurus, Meteor, IRIS-T, Harpoon legacy",
+        "Small arms: G36/G95 transition, MG3/MG5, G22/G29 sniper systems",
+        "Counter-UAS/EW: air-defense, sensor, and EW integration programs"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as NATO-assigned divisions/brigades, air wings, naval flotillas, logistics hubs, and territorial command.",
+        "c4i": "NATO-integrated command networks with national cyber/information service, secure comms, and interoperability requirements.",
+        "logisticsSustainment": "Central European rail/road/port role, host-nation support, ammunition/fuel stocks, and maintenance capacity are key.",
+        "personnelMorale": "Professional force; model readiness reforms, retention, reserve integration, and training throughput.",
+        "geographyEnvironment": "Dense transport infrastructure, central NATO transit role, North/Baltic Sea access, and winter weather factors.",
+        "combatPowerModeling": "Model as high-quality but modernization-constrained force with strong alliance logistics relevance.",
+        "doctrineBehavior": "NATO collective defense, armored maneuver, air defense, host-nation support, and multinational command.",
+        "mobilizationStrategicMovement": "Reserve activation, rail movement, reception/staging/onward movement, and allied reinforcement corridors.",
+        "economicIndustrialInterface": "Major armored vehicle, submarine, electronics, air defense, and munitions industrial base with ramp constraints.",
+        "politicalLegalConstraints": "Parliamentary approval, constitutional constraints, LOAC, NATO/EU obligations, and coalition politics.",
+        "intelligenceDeception": "National/alliance ISR, cyber, signals, open-source, and deception/fog layers.",
+        "injectionInterface": "Support reinforcement, air defense, logistics, mobilization, and ROE actions; strike remains abstract.",
+        "metricsLogging": "Track brigade readiness, rail throughput, stockpile burn, maintenance recovery, air-defense coverage, and approval latency."
+      }
+    },
+    {
+      "id": "poland",
+      "country": "Poland",
+      "iso3": "POL",
+      "region": "Europe",
+      "aliases": ["warsaw", "polska"],
+      "center": { "lat": 51.9194, "lon": 19.1451 },
+      "bbox": { "minLat": 49.0, "maxLat": 54.9, "minLon": 14.1, "maxLon": 24.2 },
+      "locations": [
+        { "label": "Warsaw", "lat": 52.2297, "lon": 21.0122 },
+        { "label": "Gdansk", "lat": 54.352, "lon": 18.6466 },
+        { "label": "Rzeszow", "lat": 50.0413, "lon": 21.999 }
+      ],
+      "militaryForces": ["Land Forces", "Air Force", "Navy", "Special Forces", "Territorial Defence Forces"],
+      "forceDisposition": [
+        "Broad posture: NATO eastern-flank defense, territorial defense expansion, air defense modernization, and allied reinforcement reception.",
+        "App boundary: no current border deployments or live staging details."
+      ],
+      "hardware": [
+        "Armored vehicles: Leopard 2, K2, M1 Abrams, PT-91/T-72 legacy, Rosomak, Borsuk program",
+        "Aircraft: F-16, FA-50, F-35 program, C-130, M-346, Mi-17/W-3 legacy helicopters",
+        "Naval platforms: frigates, corvettes, mine warfare and patrol vessels",
+        "Ground mobility: Jelcz trucks, protected vehicles, engineering and logistics fleets"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 200 thousand target-range with ongoing expansion; territorial defense adds distributed manpower.",
+        "Land hierarchy includes divisions, brigades, battalions, companies, platoons, and territorial units.",
+        "Command through civilian leadership, Ministry of National Defence, general command, operational command, and service components."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: Krab, K9, HIMARS/Homar, Langusta, mortars",
+        "Air defense: Patriot/Wisla, Narew, Poprad, Piorun, naval/short-range systems",
+        "Air/ground weapons: JASSM, anti-tank guided missiles, loitering munitions programs",
+        "Small arms: Grot, Beryl legacy, machine guns, sniper systems",
+        "Counter-UAS/EW: short-range air defense, sensors, EW, and kinetic defeat layers"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as divisions, brigades, territorial defense units, air wings, naval groups, and allied reception nodes.",
+        "c4i": "NATO-interoperable command systems with national operational command, territorial links, and secure communications.",
+        "logisticsSustainment": "Eastern-flank sustainment depends on rail/road throughput, ammunition, fuel, maintenance, and allied reception capacity.",
+        "personnelMorale": "Model expansion stress, reserve/territorial training levels, national defense motivation, and specialist shortages.",
+        "geographyEnvironment": "Flat and forested areas, urban corridors, river crossings, Baltic access, winter/mud seasons, and border transit routes.",
+        "combatPowerModeling": "Model armored mass growth, air defense depth, artillery density, and allied reinforcement effects.",
+        "doctrineBehavior": "NATO collective defense, territorial defense, armored maneuver, defense in depth, and allied integration.",
+        "mobilizationStrategicMovement": "Reserve and territorial activation, rail/road movement, and allied staging/reception timing.",
+        "economicIndustrialInterface": "Growing munitions, armored vehicle, air defense, drone, and maintenance industrial capacity with import dependencies.",
+        "politicalLegalConstraints": "Civilian control, NATO obligations, LOAC, border security law, and escalation sensitivity.",
+        "intelligenceDeception": "National/alliance ISR, open-source, cyber, signals, and deception/fog layers.",
+        "injectionInterface": "Support reinforcement, mobilization, air defense, humanitarian support, and ROE actions; strike remains abstract.",
+        "metricsLogging": "Track mobilization speed, rail throughput, air-defense coverage, artillery ammunition burn, maintenance backlog, and allied arrivals."
+      }
+    },
+    {
+      "id": "japan",
+      "country": "Japan",
+      "iso3": "JPN",
+      "region": "Indo-Pacific",
+      "aliases": ["tokyo", "japanese self-defense forces", "japan self defense forces"],
+      "center": { "lat": 36.2048, "lon": 138.2529 },
+      "bbox": { "minLat": 30.0, "maxLat": 45.8, "minLon": 129.0, "maxLon": 146.0 },
+      "locations": [
+        { "label": "Tokyo", "lat": 35.6762, "lon": 139.6503 },
+        { "label": "Yokosuka", "lat": 35.2813, "lon": 139.6722 },
+        { "label": "Sasebo", "lat": 33.1799, "lon": 129.7151 }
+      ],
+      "militaryForces": ["Ground Self-Defense Force", "Maritime Self-Defense Force", "Air Self-Defense Force"],
+      "forceDisposition": [
+        "Broad posture: defensive island-chain, maritime security, air defense, ballistic missile defense, disaster response, and alliance integration.",
+        "App boundary: no live ship, aircraft, or unit placement."
+      ],
+      "hardware": [
+        "Armored vehicles: Type 10, Type 90, Type 16 maneuver combat vehicle, Type 89, Komatsu LAV",
+        "Aircraft: F-35, F-15J, F-2, C-2, KC-46A program, P-1, E-2D, CH-47, UH-60",
+        "Naval platforms: destroyers, helicopter destroyers, submarines, mine warfare vessels, patrol and support ships",
+        "Ground mobility: Type 73 trucks, high-mobility vehicles, engineering and logistics fleets"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 240 thousand across self-defense forces.",
+        "Ground formations include armies, divisions/brigades, regiments/battalions, companies, platoons, and island defense units.",
+        "Command through civilian leadership, Ministry of Defense, Joint Staff, and service chiefs."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: Type 19 wheeled howitzer, FH70, MLRS legacy, mortars",
+        "Air defense: Patriot, Aegis destroyers, Type 03/11/81 systems, short-range systems",
+        "Maritime/air weapons: ASM families, Type 12 upgrade program, torpedoes, anti-submarine systems",
+        "Small arms: Howa rifles, machine guns, sniper systems",
+        "Counter-UAS/EW: air-defense, electronic warfare, and sensor integration programs"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as regional armies, maritime escort flotillas, air wings, island defense units, and joint task forces.",
+        "c4i": "Highly integrated national and alliance C2, air/missile defense networks, maritime surveillance, and cyber/space dependencies.",
+        "logisticsSustainment": "Island logistics, sealift, airlift, fuel, munitions, port/airfield resilience, and repair capacity drive endurance.",
+        "personnelMorale": "Professional volunteer force; model recruitment pressure, disaster response tempo, specialist training, and reserve limits.",
+        "geographyEnvironment": "Archipelago, maritime chokepoints, mountainous terrain, dense urban zones, typhoon and earthquake risk.",
+        "combatPowerModeling": "Model layered maritime surveillance, air defense, ASW, island defense, and alliance reinforcement effects.",
+        "doctrineBehavior": "Defensive joint operations, sea/air denial, ballistic missile defense, amphibious island defense, and disaster response.",
+        "mobilizationStrategicMovement": "Reserve call-up, inter-island lift, port/airfield throughput, and alliance reception gates.",
+        "economicIndustrialInterface": "Advanced shipbuilding, electronics, missiles, aerospace maintenance, and vehicle production with import dependencies.",
+        "politicalLegalConstraints": "Civilian control, constitutional and statutory constraints, LOAC, alliance commitments, and escalation controls.",
+        "intelligenceDeception": "Maritime patrol, radar, signals, space/open-source inputs, alliance ISR, and deception/fog layers.",
+        "injectionInterface": "Support maritime patrol, evacuation, disaster relief, air defense, and mobilization; strike remains abstract.",
+        "metricsLogging": "Track air-defense coverage, sortie generation, ship availability, port throughput, missile inventory burn, and civilian disruption."
+      }
+    },
+    {
+      "id": "australia",
+      "country": "Australia",
+      "iso3": "AUS",
+      "region": "Indo-Pacific",
+      "aliases": ["canberra", "australian defence force", "adf"],
+      "center": { "lat": -25.2744, "lon": 133.7751 },
+      "bbox": { "minLat": -43.7, "maxLat": -10.6, "minLon": 112.9, "maxLon": 153.7 },
+      "locations": [
+        { "label": "Canberra", "lat": -35.2809, "lon": 149.13 },
+        { "label": "Darwin", "lat": -12.4634, "lon": 130.8456 },
+        { "label": "Sydney", "lat": -33.8688, "lon": 151.2093 }
+      ],
+      "militaryForces": ["Army", "Royal Australian Navy", "Royal Australian Air Force", "Joint capabilities"],
+      "forceDisposition": [
+        "Broad posture: continental defense, Indo-Pacific maritime security, alliance interoperability, northern approaches, and expeditionary support.",
+        "App boundary: no current deployment inference."
+      ],
+      "hardware": [
+        "Armored vehicles: M1A1/M1A2 transition, Boxer, Bushmaster, Hawkei, ASLAV legacy",
+        "Aircraft: F-35A, F/A-18F, EA-18G, P-8A, C-17, C-130J, KC-30A, E-7A, MRH-90 legacy, CH-47",
+        "Naval platforms: destroyers, frigates, submarines, amphibious ships, patrol vessels, support ships",
+        "Ground mobility: Rheinmetall trucks, protected mobility, engineering and logistics fleets"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 60 thousand; reserves add additional capacity.",
+        "Army formations include division-level command, brigades, battalions/regiments, companies/squadrons, platoons/troops.",
+        "Command through civilian leadership, Department of Defence, Chief of Defence Force, service chiefs, and joint operations command."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: M777, HIMARS acquisition path, mortars",
+        "Air defense: NASAMS, naval Aegis/ESSM layers, short-range systems",
+        "Air/naval weapons: JASSM-ER acquisition path, LRASM, Harpoon legacy, Standard Missile family",
+        "Small arms: EF88/F90, machine guns, sniper systems",
+        "Counter-UAS/EW: layered sensors, EW, and short-range defeat programs"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as brigades, maritime task groups, air wings, northern base nodes, and joint enablers.",
+        "c4i": "Joint/alliance C2, wide-area surveillance, secure comms, satellite links, cyber dependencies, and northern network resilience.",
+        "logisticsSustainment": "Long distances, fuel, munitions, ports, airfields, maintenance, and allied supply chains dominate endurance.",
+        "personnelMorale": "Professional force; model retention, specialist availability, training areas, and deployment tempo.",
+        "geographyEnvironment": "Continental distances, northern tropical conditions, desert interior, maritime approaches, cyclones, and port scarcity.",
+        "combatPowerModeling": "Model maritime surveillance, long-range strike abstractions, airbase resilience, sea control, and alliance support.",
+        "doctrineBehavior": "Joint archipelagic and maritime defense, coalition operations, expeditionary support, and northern approaches focus.",
+        "mobilizationStrategicMovement": "Reserve activation, interstate movement, sea/airlift, northern staging, and port/airfield throughput.",
+        "economicIndustrialInterface": "Shipbuilding, armored vehicle, munitions, aerospace maintenance, and import-dependent high-end systems.",
+        "politicalLegalConstraints": "Civilian control, parliamentary scrutiny, LOAC, alliance commitments, and regional diplomacy.",
+        "intelligenceDeception": "Wide-area surveillance, signals, space, cyber, maritime patrol, open-source, and deception/fog layers.",
+        "injectionInterface": "Support patrol, reinforcement, logistics, peacekeeping, disaster relief, and mobilization; strike remains abstract.",
+        "metricsLogging": "Track distance-time, fuel burn, port throughput, aircraft generation, ship availability, munitions stocks, and diplomatic cost."
+      }
+    },
+    {
+      "id": "india",
+      "country": "India",
+      "iso3": "IND",
+      "region": "South Asia",
+      "aliases": ["bharat", "new delhi", "delhi"],
+      "center": { "lat": 20.5937, "lon": 78.9629 },
+      "bbox": { "minLat": 6.7, "maxLat": 35.7, "minLon": 68.1, "maxLon": 97.4 },
+      "locations": [
+        { "label": "New Delhi", "lat": 28.6139, "lon": 77.209 },
+        { "label": "Mumbai", "lat": 19.076, "lon": 72.8777 },
+        { "label": "Chennai", "lat": 13.0827, "lon": 80.2707 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air Force", "Coast Guard", "Strategic Forces Command"],
+      "forceDisposition": [
+        "Broad posture: continental border defense, Indian Ocean maritime security, air defense, nuclear deterrence, and internal security support.",
+        "App boundary: no live border posture or tactical deployment modeling."
+      ],
+      "hardware": [
+        "Armored vehicles: T-90, T-72, Arjun, BMP-2, wheeled and protected vehicles",
+        "Aircraft: Su-30MKI, Rafale, Mirage 2000, MiG-29, Tejas, C-17, C-130J, P-8I, Apache, Chinook, Dhruv",
+        "Naval platforms: aircraft carriers, destroyers, frigates, submarines, corvettes, patrol and support vessels",
+        "Ground mobility: Ashok Leyland/Tata logistics fleets, engineering vehicles, motorcycles, light utility vehicles"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 1.4 million; reserves and paramilitary forces add significant manpower.",
+        "Army structure includes commands, corps, divisions, brigades, battalions/regiments, companies, platoons.",
+        "Command through civilian leadership, Ministry of Defence, Chiefs of Staff Committee/Chief of Defence Staff, services, and theater commands under reform."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: K9 Vajra, M777, Dhanush, Pinaka, Smerch, Grad, mortars",
+        "Air defense: Akash, S-400, Barak-8, Spyder, QRSAM programs, shipborne systems",
+        "Air/naval weapons: BrahMos, Astra, anti-ship missiles, guided bombs, torpedoes",
+        "Small arms: INSAS legacy, AK-203 program, machine guns, sniper systems",
+        "Counter-UAS/EW: layered air defense, EW, radar, and drone defeat programs"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as regional commands, corps/divisions, air commands, naval commands, strategic forces, and paramilitary interface.",
+        "c4i": "Large joint C2 modernization with service networks, secure communications, ISR, cyber, and theaterization dependencies.",
+        "logisticsSustainment": "Mountain, desert, jungle, and maritime logistics; fuel, ammunition, rail/road, ports, airlift, and maintenance capacity.",
+        "personnelMorale": "Large professional force; model altitude acclimatization, training variance, rotation tempo, and family/home-front pressures.",
+        "geographyEnvironment": "Himalayan altitude, deserts, jungles, dense cities, long coastline, monsoon, heat, and disease factors.",
+        "combatPowerModeling": "Model mass, artillery, air defense, mountain logistics, maritime reach, and nuclear escalation constraints.",
+        "doctrineBehavior": "Combined arms, mountain defense, limited-war concepts, maritime sea control, and strategic deterrence.",
+        "mobilizationStrategicMovement": "Rail/road mobilization, airlift, mountain stocking, port throughput, and reserve/paramilitary integration.",
+        "economicIndustrialInterface": "Large defense industrial base with public/private production, import dependencies, shipbuilding, missiles, and aerospace.",
+        "politicalLegalConstraints": "Civilian control, LOAC, border agreements, nuclear policy, alliance/nonalignment sensitivities, and domestic politics.",
+        "intelligenceDeception": "Border surveillance, space, air, signals, cyber, human, open-source, and deception/fog layers.",
+        "injectionInterface": "Support mobilization, border posture, peacekeeping, logistics, ROE, and disaster relief; strike remains abstract.",
+        "metricsLogging": "Track mountain supply days, rail throughput, ammunition burn, sortie generation, readiness, casualties, and escalation risk."
+      }
+    },
+    {
+      "id": "brazil",
+      "country": "Brazil",
+      "iso3": "BRA",
+      "region": "South America",
+      "aliases": ["brasil", "brasilia", "rio de janeiro", "sao paulo"],
+      "center": { "lat": -14.235, "lon": -51.9253 },
+      "bbox": { "minLat": -33.8, "maxLat": 5.3, "minLon": -73.9, "maxLon": -34.8 },
+      "locations": [
+        { "label": "Brasilia", "lat": -15.7939, "lon": -47.8828 },
+        { "label": "Rio de Janeiro", "lat": -22.9068, "lon": -43.1729 },
+        { "label": "Manaus", "lat": -3.119, "lon": -60.0217 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air Force"],
+      "forceDisposition": [
+        "Broad posture: territorial defense, Amazon security, maritime protection, peacekeeping experience, and internal support missions.",
+        "App boundary: no current internal security or border deployment details."
+      ],
+      "hardware": [
+        "Armored vehicles: Leopard 1A5, M60 legacy, Guarani, Cascavel/Urutu legacy",
+        "Aircraft: F-5EM legacy, Gripen E/F program, A-29 Super Tucano, KC-390, C-130 legacy, H-36/H-60/H-225 helicopters",
+        "Naval platforms: frigates, corvettes, submarines, amphibious and patrol vessels, support ships",
+        "Ground mobility: Astros support vehicles, Agrale/Mercedes trucks, light utility and riverine craft"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 360 thousand across services.",
+        "Army structure includes military commands, divisions/brigades, battalions/regiments, companies, platoons, and jungle units.",
+        "Command through civilian leadership, Ministry of Defense, joint staff, service commands, and regional military commands."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: Astros II, 155 mm and 105 mm artillery, mortars",
+        "Air defense: RBS 70, Gepard legacy, short-range and point-defense systems",
+        "Air/naval weapons: MAR-1 legacy, MANSUP program, torpedoes, guided/unguided air weapons",
+        "Small arms: IA2, FAL legacy, machine guns, sniper systems",
+        "Counter-UAS/EW: sensor, air defense, and EW capabilities in development"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as regional commands, jungle brigades, mechanized units, air groups, naval districts, and riverine forces.",
+        "c4i": "National joint C2 with regional commands, Amazon surveillance systems, secure comms, and air/maritime monitoring.",
+        "logisticsSustainment": "Amazon distance, river transport, roads, airlift, fuel, medical evacuation, and maintenance capacity drive feasibility.",
+        "personnelMorale": "Model conscript/professional mix, jungle training, internal mission fatigue, leadership quality, and regional familiarity.",
+        "geographyEnvironment": "Amazon jungle, river networks, mountains, savanna, large coastline, heat, humidity, disease, and urban density.",
+        "combatPowerModeling": "Model terrain friction, riverine mobility, airlift scarcity, jungle proficiency, and maritime patrol coverage.",
+        "doctrineBehavior": "Territorial defense, jungle operations, internal support, peacekeeping, and maritime resource protection.",
+        "mobilizationStrategicMovement": "Regional movement by road/river/air, reserve call-up, port throughput, and fuel availability.",
+        "economicIndustrialInterface": "Aerospace, armored vehicle, rocket artillery, shipbuilding, and ammunition capacity with budget constraints.",
+        "politicalLegalConstraints": "Civilian control, constitutional domestic-use limits, LOAC, regional diplomacy, and environmental/legal constraints.",
+        "intelligenceDeception": "Amazon surveillance, air/maritime patrol, signals, human, open-source, and fog/deception layers.",
+        "injectionInterface": "Support peacekeeping, disaster relief, border monitoring, logistics, and maritime patrol; strike remains abstract.",
+        "metricsLogging": "Track river/road movement rates, fuel, aircraft availability, jungle attrition, medical evacuation time, and public legitimacy."
+      }
+    },
+    {
+      "id": "south-africa",
+      "country": "South Africa",
+      "iso3": "ZAF",
+      "region": "Africa",
+      "aliases": ["pretoria", "cape town", "johannesburg", "rsa"],
+      "center": { "lat": -30.5595, "lon": 22.9375 },
+      "bbox": { "minLat": -34.9, "maxLat": -22.1, "minLon": 16.4, "maxLon": 32.9 },
+      "locations": [
+        { "label": "Pretoria", "lat": -25.7479, "lon": 28.2293 },
+        { "label": "Cape Town", "lat": -33.9249, "lon": 18.4241 },
+        { "label": "Durban", "lat": -29.8587, "lon": 31.0218 }
+      ],
+      "militaryForces": ["Army", "Navy", "Air Force", "Military Health Service"],
+      "forceDisposition": [
+        "Broad posture: territorial defense, regional peace support, maritime patrol, border support, and domestic disaster assistance.",
+        "App boundary: no live readiness or internal security deployment modeling."
+      ],
+      "hardware": [
+        "Armored vehicles: Olifant, Rooikat, Ratel legacy, Badger program, Casspir/Mamba protected vehicles",
+        "Aircraft: Gripen, Hawk, C-130, Oryx, Rooivalk, A109",
+        "Naval platforms: frigates, submarines, offshore patrol and support vessels",
+        "Ground mobility: Samil trucks, protected mobility, engineering and logistics vehicles"
+      ],
+      "personnelFormations": [
+        "Total active personnel: approx. 70 thousand across services.",
+        "Army structure includes divisions/brigades, battalions/regiments, companies/squadrons, platoons/troops.",
+        "Command through civilian leadership, Department of Defence, SANDF command, service chiefs, and joint operations."
+      ],
+      "weaponsSystems": [
+        "Artillery and rockets: G5/G6 artillery, Valkiri legacy rockets, mortars",
+        "Air defense: Umkhonto naval system, short-range/legacy ground systems",
+        "Air/naval weapons: A-Darter program, anti-ship/torpedo systems, guided/unguided air weapons",
+        "Small arms: R4/R5, machine guns, sniper systems",
+        "Counter-UAS/EW: limited layered capability; model as developing sensor/EW/short-range response"
+      ],
+      "model": {
+        "orderOfBattle": "Represent as deployable brigades, battalions, air squadrons, naval groups, medical service, and regional mission detachments.",
+        "c4i": "Joint operations command with service networks, secure communications, regional mission interoperability, and maintenance constraints.",
+        "logisticsSustainment": "Budget, maintenance, spare parts, road/rail/port access, airlift, medical support, and regional distance constrain operations.",
+        "personnelMorale": "Professional force; model pay, retention, maintenance frustration, peacekeeping tempo, and leadership quality.",
+        "geographyEnvironment": "Large coastline, interior plateau, deserts, urban corridors, regional distance, heat, and infrastructure variance.",
+        "combatPowerModeling": "Model limited high-end availability, regional peace support capability, mobility, and sustainment constraints.",
+        "doctrineBehavior": "Territorial defense, peace support, border support, maritime patrol, and combined-arms legacy doctrine.",
+        "mobilizationStrategicMovement": "Reserve activation, road/rail movement, port/airfield throughput, and regional deployment staging.",
+        "economicIndustrialInterface": "Defense industrial strengths in vehicles, artillery, missiles, and electronics, constrained by budgets and orders.",
+        "politicalLegalConstraints": "Civilian control, domestic mission law, AU/SADC/UN mandates, LOAC, and public legitimacy.",
+        "intelligenceDeception": "Air/maritime patrol, signals, human, open-source, and regional information-sharing layers.",
+        "injectionInterface": "Support peacekeeping, humanitarian relief, border support, logistics, and maritime patrol; strike remains abstract.",
+        "metricsLogging": "Track vehicle availability, maintenance backlog, deployment days, casualty evacuation, budget burn, and mission mandate compliance."
+      }
+    }
+  ]
+}
