@@ -1,6 +1,6 @@
 export function OutputPanels() {
   return (
-    <details id="workspace-output" className="workspace-output-disclosure" aria-label="Detailed output panels">
+    <details id="workspace-output" className="workspace-output-disclosure" aria-label="Detailed output panels" open>
       <summary className="workspace-output-summary" aria-label="Toggle detailed output panels" title="Toggle lower panels">
         <span className="workspace-output-toggle" aria-hidden="true">
           <span className="output-open">+</span>

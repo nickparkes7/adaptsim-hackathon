@@ -68,6 +68,7 @@
     },
     "category": {
       "enum": [
+        "threat_vector",
         "adversary_role",
         "static_prop",
         "equipment",

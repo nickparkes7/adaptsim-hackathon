@@ -15,6 +15,7 @@
     "applies_to_categories": {
       "items": {
         "enum": [
+          "threat_vector",
           "adversary_role",
           "static_prop",
           "equipment",

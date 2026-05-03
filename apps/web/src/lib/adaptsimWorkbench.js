@@ -26,6 +26,7 @@ const publicSiteMarkerLimit = 500;
 const publicSiteFetchTimeoutMs = 4500;
 const countryBorderFetchTimeoutMs = 5500;
 const wikidataFacilityLimit = 500;
+const sourcePhotoAggregationRadiusMeters = 10000;
 const publicSiteZoomBands = [
   { id: "city", maxHeightMeters: 18000, radiusKm: 45, maxSites: 18, label: "city" },
   { id: "metro", maxHeightMeters: 65000, radiusKm: 130, maxSites: 36, label: "metro" },
@@ -33,6 +34,33 @@ const publicSiteZoomBands = [
   { id: "theater", maxHeightMeters: 900000, radiusKm: 950, maxSites: 115, label: "theater" },
   { id: "country", maxHeightMeters: Number.POSITIVE_INFINITY, radiusKm: Number.POSITIVE_INFINITY, maxSites: publicSiteMarkerLimit, label: "country" }
 ];
+const workflowStepOrder = ["01", "02", "03", "04"];
+const workflowStepNames = {
+  "01": "Intake",
+  "02": "Map",
+  "03": "Snapshot",
+  "04": "Launch"
+};
+const workflowStepRoutes = {
+  "01": "/intake",
+  "02": "/map",
+  "03": "/snapshot",
+  "04": "/launch"
+};
+const workflowRouteSteps = new Map([
+  ["/", "01"],
+  ["/index.html", "01"],
+  ["/intake", "01"],
+  ["/map", "02"],
+  ["/snapshot", "03"],
+  ["/launch", "04"]
+]);
+const workflowStepTitles = {
+  "01": "AdaptSim | Intake",
+  "02": "AdaptSim | Map",
+  "03": "AdaptSim | Snapshot",
+  "04": "AdaptSim | Launch"
+};
 const stepOneLocationTaskIds = new Set(["intake", "metadata", "locate", "vision", "geoimage"]);
 const defaultSourceNote =
   "Static public, country-level baseline. No live unit disposition, vulnerabilities, targets, tactical routing, or readiness inference.";
@@ -329,6 +357,8 @@ const state = {
     step3SnapshotGenerated: false,
     step4Acknowledged: false
   },
+  activeWorkflowStep: "01",
+  workflowStepProgress: null,
   intakeAgent: {
     status: "idle",
     current: "Waiting for source input.",
@@ -343,6 +373,8 @@ const state = {
   siteHoverTimer: null,
   siteHoverSerial: 0,
   pinnedPublicSiteId: "",
+  sourcePhotoHoverTimer: null,
+  pinnedSourcePhotoId: "",
   mapSnapTimer: 0,
   globe: null,
   mapConfig: {
@@ -359,6 +391,12 @@ const selectors = {
   sourceDropzone: "#source-dropzone",
   sourceFileInput: "#source-file-input",
   clearWorkflow: "#clear-workflow",
+  workflowShell: "#main-workspace",
+  workflowPages: "[data-workflow-page]",
+  workflowHome: "[data-workflow-home-step]",
+  workflowNavSteps: "[data-workflow-nav-step]",
+  workflowPrevStep: "#workflow-prev-step",
+  workflowNextStep: "#workflow-next-step",
   sourceAgentStatus: "#source-agent-status",
   sourceFileList: "#source-file-list",
   sourceFileCount: "#source-file-count",
@@ -384,6 +422,7 @@ const selectors = {
   zoomOutMap: "#zoom-out-map",
   countryHover: "#country-hover",
   publicSiteHover: "#public-site-hover",
+  sourcePhotoHover: "#source-photo-hover",
   siteLegend: "#site-legend",
   siteLegendItems: "#site-legend-items",
   mapScale: "#map-scale",
@@ -2488,7 +2527,8 @@ async function resolveCoordinatesFromInputs() {
 }
 
 function updateResolution(message, className = "neutral") {
-  const target = $(selectors.resolutionStatus);
+  const target = document.querySelector(selectors.resolutionStatus);
+  if (!target) return;
   target.className = `status-pill ${sanitizeStatusClass(className)}`;
   target.textContent = message;
 }
@@ -2507,10 +2547,12 @@ function buildIntakeAgentTasks(files) {
     {
       id: "metadata",
       label: "Metadata + EXIF",
-      status: "complete",
+      status: gpsCount || !imageCount ? "complete" : "running",
       detail: gpsCount
         ? `${gpsCount} coordinate fix${gpsCount === 1 ? "" : "es"} found.`
-        : "No embedded GPS found yet."
+        : imageCount
+          ? "Reading embedded metadata and EXIF tags."
+          : "No embedded GPS found yet."
     },
     {
       id: "locate",
@@ -2684,6 +2726,233 @@ function renderAssetGenerationLoading({ title = "Starting generated asset databa
   `;
 }
 
+function formatGeneratedAssetCategory(value) {
+  return titleCase(String(value || "asset").replaceAll("_", " "));
+}
+
+function hasThreatVectorCategory(asset) {
+  return ["threat_vector", "equipment", "static_prop", "adversary_role", "effect"].includes(normalize(asset?.category));
+}
+
+function generatedAssetId(value, fallback) {
+  const id = normalize(value || fallback).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return /^[a-z]/.test(id) ? id.slice(0, 64) : `asset_${id}`.slice(0, 64);
+}
+
+function createThreatVectorAsset({ id, name, description, equipment = [], tags = [], source }) {
+  return {
+    contract_type: "asset_card",
+    schema_version: "1.0",
+    asset_id: generatedAssetId(id, name),
+    category: "threat_vector",
+    display_name: name,
+    description,
+    unreal_asset_path: null,
+    spawn_policy: "never_spawn",
+    gameplay_tags: ["adaptsim.threat_vector", "adaptsim.training_safe", ...tags].slice(0, 12),
+    capabilities: [
+      "Creates a visible decision cue for defensive simulation review.",
+      "Supports recognition, reporting, deconfliction, and escalation-control training."
+    ],
+    equipment,
+    preferred_affordances: [
+      "Non-functional visual prop or marker",
+      "Inspector-visible state changes only",
+      "Scenario-director review before spawning"
+    ],
+    constraints: [
+      "Training abstraction only.",
+      "No operational employment guidance.",
+      "No functional weapon mechanics or live targeting behavior."
+    ],
+    behavior_profiles: ["observe_report_assess"],
+    likelihood_modifiers: {},
+    collision_profile: "overlap_only",
+    bounds_m: null,
+    ingestion_status: "prototype",
+    source_rationale: source || "Derived from Step 02 confirmed military context and Step 04 analyst inputs."
+  };
+}
+
+function buildStep2ThreatVectorAssets(snapshot, existingAssetCards = []) {
+  if (!snapshot) return existingAssetCards.filter(hasThreatVectorCategory);
+  const existing = existingAssetCards.filter(hasThreatVectorCategory);
+  const seen = new Set(existing.map((asset) => normalize(asset?.asset_id || asset?.display_name)));
+  const step2Evidence = [
+    ...toTextList(snapshot.hardware),
+    ...toTextList(snapshot.weaponsSystems),
+    ...toTextList(snapshot.forceDisposition),
+    ...toTextList(snapshot.reasonedAdjustments)
+  ].filter((item) => item && !/profile unavailable/i.test(item));
+  const evidenceSummary = step2Evidence.slice(0, 4).join(" ");
+  const source = evidenceSummary
+    ? `Sourced from Step 02 confirmed military context: ${clampText(evidenceSummary, 280)}`
+    : "Sourced from Step 02 confirmed map context and generic defensive-training asset taxonomy.";
+  const templates = [
+    {
+      id: "training_vehicle_checkpoint_vector",
+      name: "Vehicle checkpoint threat vector",
+      equipment: ["vehicle proxy", "temporary barrier", "inspection marker"],
+      tags: ["adaptsim.vehicle", "adaptsim.checkpoint"],
+      description: "A non-location-specific vehicle cue for checkpoint, access-control, and screening decisions in the simulation environment."
+    },
+    {
+      id: "inert_training_knife_cue",
+      name: "Inert training knife cue",
+      equipment: ["rubber training knife", "evidence marker"],
+      tags: ["adaptsim.weapon_cue", "adaptsim.close_contact"],
+      description: "A safe, inert edged-tool cue used to test observation, separation, reporting, and escalation-control responses."
+    },
+    {
+      id: "small_uas_observation_vector",
+      name: "Small UAS observation vector",
+      equipment: ["inert drone silhouette", "observation marker"],
+      tags: ["adaptsim.uas", "adaptsim.airspace"],
+      description: "A static drone-observation cue for defensive recognition and airspace reporting workflows without flight or payload behavior."
+    },
+    {
+      id: "concealed_weapon_silhouette_cue",
+      name: "Concealed weapon silhouette cue",
+      equipment: ["inert long-object silhouette", "training marker"],
+      tags: ["adaptsim.weapon_cue", "adaptsim.screening"],
+      description: "A generic silhouette cue for screening and reporting decisions, modeled as a non-functional visual training object."
+    },
+    {
+      id: "suspicious_package_training_vector",
+      name: "Suspicious package training vector",
+      equipment: ["equipment case", "unattended bag proxy"],
+      tags: ["adaptsim.package", "adaptsim.eod_training"],
+      description: "An unattended-object cue for cordon, notification, and scene-control training without device construction or hazard details."
+    },
+    {
+      id: "communications_disruption_marker",
+      name: "Communications disruption marker",
+      equipment: ["signal-loss marker", "radio prop"],
+      tags: ["adaptsim.c4i", "adaptsim.degraded_comms"],
+      description: "A scenario marker representing degraded communications so trainees practice fallback reporting and command confirmation."
+    },
+    {
+      id: "perimeter_observation_cue",
+      name: "Perimeter observation cue",
+      equipment: ["observer marker", "sensor mast shell"],
+      tags: ["adaptsim.perimeter", "adaptsim.surveillance"],
+      description: "A generic observation cue for perimeter awareness and patrol reporting, without site-specific vulnerabilities."
+    },
+    {
+      id: "crowd_anomaly_training_marker",
+      name: "Crowd anomaly training marker",
+      equipment: ["crowd marker", "behavior cue card"],
+      tags: ["adaptsim.crowd", "adaptsim.anomaly"],
+      description: "A non-personalized crowd behavior cue for recognition, communication, and proportional response decisions."
+    }
+  ];
+
+  const derived = templates
+    .map((template) => createThreatVectorAsset({ ...template, source }))
+    .filter((asset) => {
+      const key = normalize(asset.asset_id || asset.display_name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return [...existing, ...derived];
+}
+
+function formatGeneratedAssetBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") return "";
+  const values = ["x", "y", "z"].map((axis) => {
+    const value = Number(bounds[axis]);
+    return Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 0 : 1)}m` : "";
+  });
+  return values.every(Boolean) ? values.join(" x ") : "";
+}
+
+function getGeneratedAssetName(asset, index) {
+  return clampText(asset?.display_name || asset?.asset_id || `Generated asset ${index + 1}`, 90);
+}
+
+function renderGeneratedAssetRows(assetCards, trellisCandidates) {
+  const trellisByAssetId = new Map(
+    trellisCandidates
+      .filter((candidate) => candidate && typeof candidate === "object")
+      .map((candidate) => [candidate.source_asset_id || candidate.asset_id, candidate])
+  );
+  const rows = assetCards.length
+    ? assetCards
+    : trellisCandidates.map((candidate) => ({
+        asset_id: candidate.asset_id,
+        display_name: candidate.display_name,
+        category: "static_prop",
+        description: candidate.visual_descriptor || candidate.generation_prompt,
+        ingestion_status: "prototype",
+        bounds_m: null,
+        source_rationale: candidate.scene_context || candidate.scale_descriptor
+      }));
+
+  if (!rows.length) {
+    return '<p class="generated-asset-empty">No individual generated assets were returned in this session.</p>';
+  }
+
+  return `
+    <div class="generated-asset-list">
+      ${rows.map((asset, index) => {
+        const candidate = trellisByAssetId.get(asset?.asset_id);
+        const name = getGeneratedAssetName(asset, index);
+        const category = formatGeneratedAssetCategory(asset?.category);
+        const status = formatGeneratedAssetCategory(asset?.ingestion_status || "prototype");
+        const bounds = formatGeneratedAssetBounds(asset?.bounds_m);
+        const meta = [category, status, bounds].filter(Boolean).join(" / ");
+        const description = clampText(asset?.description || asset?.source_rationale || "Generated asset candidate awaiting review.", 220);
+        const trellisSummary = candidate
+          ? clampText(candidate.visual_descriptor || candidate.geometry_descriptor || candidate.generation_prompt, 260)
+          : "";
+        return `
+          <article class="generated-asset-row">
+            <div class="generated-asset-row-head">
+              <div>
+                <strong>${escapeHtml(name)}</strong>
+                <span>${escapeHtml(meta)}</span>
+              </div>
+              ${candidate ? '<em>3D target</em>' : ""}
+            </div>
+            <p>${escapeHtml(description)}</p>
+            ${trellisSummary ? `<small>${escapeHtml(trellisSummary)}</small>` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderGeneratedAssetReady(session) {
+  const database = session.asset_database ?? {};
+  const assetCards = buildStep2ThreatVectorAssets(getSelectedSnapshot(), Array.isArray(database.asset_cards) ? database.asset_cards : []);
+  const trellisCandidates = Array.isArray(database.trellis_candidates) ? database.trellis_candidates : [];
+  const assetCount = assetCards.length;
+  const candidateCount = trellisCandidates.length;
+  const summary = database.session_summary
+    || `${assetCount} threat-vector asset card${assetCount === 1 ? "" : "s"} and ${candidateCount} Trellis candidate${candidateCount === 1 ? "" : "s"} stored locally.`;
+  const cautions = toTextList(database.cautions).slice(0, 3);
+
+  return `
+    <details class="reason-card generated-asset-ready">
+      <summary>
+        <div>
+          <strong>Generated asset database ready</strong>
+          <p>${escapeHtml(`${assetCount} threat-vector asset card${assetCount === 1 ? "" : "s"} expanded from Step 02 context.`)}</p>
+        </div>
+        <span>View assets</span>
+      </summary>
+      <div class="generated-asset-ready-body">
+        <p>${escapeHtml(summary)}</p>
+        ${renderGeneratedAssetRows(assetCards, trellisCandidates)}
+        ${cautions.length ? `<div class="generated-asset-cautions"><strong>Review notes</strong>${renderList(cautions)}</div>` : ""}
+      </div>
+    </details>
+  `;
+}
+
 function renderAssetGenerationStatus(session) {
   if (!session) return;
   const generationStatus = normalize(session.generation?.status || session.status);
@@ -2697,14 +2966,7 @@ function renderAssetGenerationStatus(session) {
     return;
   }
   if (generationStatus === "complete" || normalize(session.status) === "asset_database_ready") {
-    const assetCount = session.asset_database?.asset_cards?.length ?? 0;
-    const candidateCount = session.asset_database?.trellis_candidates?.length ?? 0;
-    $(selectors.reasoningOutput).innerHTML = `
-      <div class="reason-card">
-        <strong>Generated asset database ready</strong>
-        <p>${escapeHtml(`${assetCount} asset card${assetCount === 1 ? "" : "s"} and ${candidateCount} Trellis candidate${candidateCount === 1 ? "" : "s"} stored locally.`)}</p>
-      </div>
-    `;
+    $(selectors.reasoningOutput).innerHTML = renderGeneratedAssetReady(session);
     return;
   }
   if (generationStatus === "failed") {
@@ -2769,6 +3031,10 @@ function hasSolidLocationAnchor(snapshot = getSelectedSnapshot()) {
   const coordinates = readCoordinateInputs();
   if (!coordinates) return false;
   return Boolean(state.globe?.pin) || hasSourceGpsAtCoordinates(coordinates.lat, coordinates.lon);
+}
+
+function hasStepOneLocationFix(snapshot = getSelectedSnapshot()) {
+  return Boolean(snapshot || state.sourceFiles.some((file) => normalizeGps(file.gps)) || hasSolidLocationAnchor(snapshot));
 }
 
 function isStepOneLocationLoading() {
@@ -2946,6 +3212,83 @@ async function activateCoordinates(gps, {
   }
 }
 
+function isPhotoSourceFile(file) {
+  return normalize(file?.kind) === "photo" || /^image\//i.test(file?.type || "");
+}
+
+function getSourcePhotoFiles() {
+  return state.sourceFiles.filter(isPhotoSourceFile);
+}
+
+function getMappedSourcePhotos() {
+  return getSourcePhotoFiles()
+    .map((file, index) => ({
+      file,
+      gps: normalizeGps(file.gps),
+      photoIndex: index + 1
+    }))
+    .filter((entry) => entry.gps);
+}
+
+function getSourceAggregationAnchor() {
+  const snapshot = getSelectedSnapshot();
+  if (snapshot) {
+    return {
+      lat: snapshot.lat,
+      lon: snapshot.lon,
+      label: snapshot.selectedLocation || snapshot.country || "current snapshot"
+    };
+  }
+
+  const coordinates = readCoordinateInputs();
+  if (coordinates && hasSolidLocationAnchor()) {
+    return {
+      lat: coordinates.lat,
+      lon: coordinates.lon,
+      label: "current map fix"
+    };
+  }
+
+  const firstMappedPhoto = getMappedSourcePhotos()[0];
+  return firstMappedPhoto
+    ? {
+        lat: firstMappedPhoto.gps.lat,
+        lon: firstMappedPhoto.gps.lon,
+        label: firstMappedPhoto.file.name
+      }
+    : null;
+}
+
+function isGpsNearAggregationAnchor(gps, anchor) {
+  const normalizedGps = normalizeGps(gps);
+  if (!normalizedGps || !anchor) return false;
+  return coordinateDistanceMeters(
+    normalizedGps.lat,
+    normalizedGps.lon,
+    anchor.lat,
+    anchor.lon
+  ) <= sourcePhotoAggregationRadiusMeters;
+}
+
+function sourcePhotoBaseName(file) {
+  const name = clampText(file?.name, 120, "Photo");
+  return name.replace(/\.[^.]+$/, "").trim() || "Photo";
+}
+
+function getSourcePhotoDescriptor(file, photoIndex = 1) {
+  return `P${photoIndex} ${clampText(sourcePhotoBaseName(file), 16, "Photo")}`;
+}
+
+function getSourcePhotoSummary(file) {
+  const gps = normalizeGps(file?.gps);
+  const location = file?.vision?.possibleLocations?.find((candidate) => candidate.name || candidate.country);
+  return [
+    gps?.source || "Photo coordinate fix",
+    location ? [location.name, location.country].filter(Boolean).join(", ") : "",
+    file?.vision?.what || ""
+  ].filter(Boolean).join(" | ");
+}
+
 function renderSourceFiles() {
   const count = $(selectors.sourceFileCount);
   const list = $(selectors.sourceFileList);
@@ -3051,6 +3394,7 @@ function stageSourceFileGps(file, { revealMap = true } = {}) {
   state.workflow.step4Acknowledged = false;
   clearSelectedOutlines();
   renderPublicSitesForSnapshot(null);
+  renderSourcePhotoMarkers();
   placePin(gps.lat, gps.lon);
   if (state.globe?.viewer) {
     if (revealMap) triggerMapSnapFeedback({ revealMap });
@@ -3082,6 +3426,82 @@ function sourceFileKey(file) {
   return [normalize(file.name), file.size, file.lastModified].join("|");
 }
 
+function createSourceFileRecord(file) {
+  return normalizeSourceFile({
+    id: `source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: file.name,
+    type: file.type,
+    kind: classifySourceFile(file),
+    size: file.size,
+    lastModified: file.lastModified,
+    addedAt: new Date().toISOString(),
+    gps: null,
+    visionStatus: isImageFileLike(file) ? "Reading metadata and visual cues." : ""
+  });
+}
+
+async function inspectAddedSourceMetadata(addedFiles, { aggregationAnchor = null } = {}) {
+  const imageFiles = addedFiles.filter(isImageFileLike);
+  if (!imageFiles.length) return;
+
+  const inspected = await Promise.all(imageFiles.map(async (sourceFile) => {
+    const blob = state.sourceFileBlobs.get(sourceFile.id);
+    if (!blob) return null;
+    const gps = await extractImageGps(blob);
+    const target = state.sourceFiles.find((entry) => entry.id === sourceFile.id);
+    if (!target) return null;
+    target.gps = gps;
+    target.visionStatus = isImageFileLike(target) ? "Visual analysis queued." : "";
+    return target;
+  }));
+
+  const gpsFiles = inspected.filter((file) => file?.gps);
+  setIntakeAgentTask(
+    "metadata",
+    "complete",
+    gpsFiles.length
+      ? `${gpsFiles.length} coordinate fix${gpsFiles.length === 1 ? "" : "es"} found.`
+      : "No embedded GPS found in image metadata."
+  );
+
+  const firstGpsFile = gpsFiles[0];
+  let shouldFocusMapAfterMetadata = false;
+  if (firstGpsFile) {
+    const nearAnchorCount = gpsFiles.filter((file) => isGpsNearAggregationAnchor(file.gps, aggregationAnchor)).length;
+    const shouldAggregateOnly = Boolean(aggregationAnchor && nearAnchorCount === gpsFiles.length);
+    if (shouldAggregateOnly) {
+      const aggregateMessage = `${gpsFiles.length} additional photo GPS fix${gpsFiles.length === 1 ? "" : "es"} aggregated near ${aggregationAnchor.label}.`;
+      setIntakeAgentTask("locate", "complete", aggregateMessage, "Additional source photos aggregated.");
+      updateResolution(aggregateMessage, "ready");
+      renderSourcePhotoMarkers();
+    } else {
+      const stagedGpsFile = aggregationAnchor
+        ? gpsFiles.find((file) => !isGpsNearAggregationAnchor(file.gps, aggregationAnchor)) || firstGpsFile
+        : firstGpsFile;
+      stageSourceFileGps(stagedGpsFile, { revealMap: false });
+      shouldFocusMapAfterMetadata = true;
+      const gpsReadyMessage = gpsFiles.length === 1
+        ? `GPS ready from ${stagedGpsFile.name}.`
+        : `${gpsFiles.length} photo GPS fixes are mapped in Step 02.`;
+      setIntakeAgentTask(
+        "locate",
+        "waiting",
+        gpsReadyMessage,
+        "Confirm Step 02 before generating the snapshot."
+      );
+      updateResolution(`${gpsReadyMessage} Confirm Step 02 before continuing.`, "ready");
+    }
+  } else {
+    updateResolution("Photo source attached. Continue to Step 02 while image analysis runs.", "ready");
+  }
+
+  saveState();
+  renderApp();
+  if (shouldFocusMapAfterMetadata) {
+    focusWorkflowStep("02", { focusSelector: selectors.confirmMapStep });
+  }
+}
+
 async function addSourceFiles(files) {
   const incoming = Array.from(files ?? []);
   if (!incoming.length) return;
@@ -3090,62 +3510,59 @@ async function addSourceFiles(files) {
   const existingKeys = new Set(state.sourceFiles.map(sourceFileKey));
   const added = [];
 
-  const inspectedFiles = await Promise.all(incoming.map(async (file) => {
-    const sourceFile = normalizeSourceFile({
-      id: `source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: file.name,
-      type: file.type,
-      kind: classifySourceFile(file),
-      size: file.size,
-      lastModified: file.lastModified,
-      addedAt: new Date().toISOString(),
-      gps: await extractImageGps(file),
-      visionStatus: isImageFileLike(file) ? "Visual analysis queued." : ""
-    });
-    return { file, sourceFile };
-  }));
-
-  for (const { file, sourceFile } of inspectedFiles) {
+  for (const file of incoming) {
+    const sourceFile = createSourceFileRecord(file);
     if (!sourceFile || existingKeys.has(sourceFileKey(sourceFile))) continue;
     existingKeys.add(sourceFileKey(sourceFile));
     state.sourceFileBlobs.set(sourceFile.id, file);
     added.push(sourceFile);
   }
 
-  state.sourceFiles = [...added, ...state.sourceFiles].slice(0, 24);
+  if (!added.length) {
+    updateResolution("No new source files were added.", "neutral");
+    return;
+  }
+
+  const aggregationAnchor = getSourceAggregationAnchor();
+  state.sourceFiles = [...added, ...state.sourceFiles].slice(0, 48);
   const hasImageDrop = added.some((file) => file.kind === "Photo");
-  if (added.length) {
-    state.workflow.mapConfirmed = false;
-    state.workflow.step3SnapshotGenerated = false;
-    state.workflow.step4Acknowledged = false;
-    startIntakeAgent(added);
-  }
-  const firstGpsFile = added.find((file) => file.gps);
-  if (firstGpsFile) {
-    stageSourceFileGps(firstGpsFile, { revealMap: false });
-    updateResolution(`Photo GPS loaded from ${firstGpsFile.name}. Confirm Step 02 before continuing.`, "ready");
-  } else {
-    updateResolution(
-      hasImageDrop
-        ? "Photo source attached. Continue to Step 02 while image analysis runs."
-        : `${added.length || 0} source file${added.length === 1 ? "" : "s"} attached.`,
-      added.length ? "ready" : "neutral"
-    );
-  }
+  startIntakeAgent(state.sourceFiles);
+  updateResolution(
+    hasImageDrop
+      ? "Source attached. Reading metadata and location cues."
+      : `${added.length} source file${added.length === 1 ? "" : "s"} attached.`,
+    "ready"
+  );
   saveState();
   renderApp();
-  if (added.length) {
+  if (!aggregationAnchor) {
     focusWorkflowStep("02", { focusSelector: selectors.confirmMapStep });
   }
-  added.filter(isImageFileLike).forEach((file) => {
-    void analyzeSourceImage(file.id);
-  });
+
+  const continueWithVision = () => {
+    added.filter(isImageFileLike).forEach((file) => {
+      void analyzeSourceImage(file.id);
+    });
+  };
+
+  if (hasImageDrop) {
+    void inspectAddedSourceMetadata(added, { aggregationAnchor })
+      .catch((error) => {
+        setIntakeAgentTask("metadata", "blocked", error.message || "Metadata scan failed.");
+        updateResolution(error.message || "Source metadata could not be inspected.", "restricted");
+        saveState();
+        renderApp();
+      })
+      .finally(continueWithVision);
+  } else {
+    continueWithVision();
+  }
 }
 
 function removeSourceFile(fileId) {
   if (!state.sourceFiles.some((file) => file.id === fileId)) return;
   resetAppToStartingPoint({
-    statusMessage: "Source removed. Workflow reset to starting point."
+    statusMessage: "Source removed. Reset to starting point."
   });
 }
 
@@ -3336,7 +3753,7 @@ async function pollGeneratedAssetSession(sessionId) {
   renderApp();
   renderAssetGenerationStatus(session);
 
-  const activeStatuses = new Set(["generating_asset_database", "asset_database_ready"]);
+  const activeStatuses = new Set(["generating_asset_database"]);
   const generationRunning = ["queued", "running"].includes(normalize(session?.generation?.status));
   const trellisRunning = ["queued", "running", "relaying"].includes(normalize(session?.trellis?.status));
   if (activeStatuses.has(normalize(session?.status)) || generationRunning || trellisRunning) {
@@ -3362,6 +3779,19 @@ async function startGenerativeAssetSession(files) {
             country: selectedSnapshot.country,
             lat: selectedSnapshot.lat,
             lon: selectedSnapshot.lon
+          }
+        : null,
+      militaryContext: selectedSnapshot
+        ? {
+            forces: selectedSnapshot.militaryForces?.slice(0, 8) || [],
+            forceDisposition: selectedSnapshot.forceDisposition?.slice(0, 8) || [],
+            hardware: selectedSnapshot.hardware?.slice(0, 10) || [],
+            weaponsSystems: selectedSnapshot.weaponsSystems?.slice(0, 10) || [],
+            openSourceQueries: selectedSnapshot.openSourceQueries?.slice(0, 12) || [],
+            openSourceSources: selectedSnapshot.openSourceSources?.slice(0, 12).map((source) => ({
+              title: source.title,
+              url: source.url
+            })) || []
           }
         : null,
       analystNotes: selectedSnapshot?.humanInputs?.slice(0, 5) || [],
@@ -3531,6 +3961,7 @@ async function analyzeSourceImage(fileId) {
   const browserFile = state.sourceFileBlobs.get(fileId)
     ?? Array.from(input.files ?? []).find((entry) => sourceFileKey(entry) === sourceFileKey(file));
   if (!file || !browserFile || !isImageFileLike(browserFile)) return;
+  const hadGpsAtAnalysisStart = Boolean(normalizeGps(file.gps));
 
   setIntakeAgentTask("vision", "running", `Analyzing ${file.name} for metadata, text strings, and visual location clues.`, "Image forensics are running.");
   if (!file.gps) {
@@ -3599,13 +4030,23 @@ async function analyzeSourceImage(fileId) {
     renderApp();
     const updatedTarget = state.sourceFiles.find((entry) => entry.id === fileId);
     const gpsKey = updatedTarget?.gps ? coordinateSnapshotKey(updatedTarget.gps.lat, updatedTarget.gps.lon) : "";
-    if (updatedTarget?.gps && !findSnapshotAtCoordinates(updatedTarget.gps.lat, updatedTarget.gps.lon) && !state.pendingCoordinateSnaps.has(gpsKey)) {
+    const hasNewGpsFromAnalysis = Boolean(updatedTarget?.gps && !hadGpsAtAnalysisStart);
+    const shouldPromoteImageGps = hasNewGpsFromAnalysis
+      && !hasSolidLocationAnchor()
+      && !findSnapshotAtCoordinates(updatedTarget.gps.lat, updatedTarget.gps.lon)
+      && !state.pendingCoordinateSnaps.has(gpsKey);
+    if (shouldPromoteImageGps) {
       stageSourceFileGps(updatedTarget, { revealMap: false });
       setIntakeAgentTask("locate", "waiting", "Image-derived coordinates are ready in Step 02.", "Confirm the map before generating the snapshot.");
       updateResolution(`Image location loaded from ${updatedTarget.name}. Confirm Step 02 before continuing.`, "ready");
       saveState();
       renderApp();
       focusWorkflowStep("02", { focusSelector: selectors.confirmMapStep });
+    } else if (hasNewGpsFromAnalysis) {
+      setIntakeAgentTask("locate", "waiting", "Additional image coordinates mapped in Step 02.", "Confirm the map before generating the snapshot.");
+      updateResolution(`Mapped image location from ${updatedTarget.name}.`, "ready");
+      saveState();
+      renderApp();
     } else if (!updatedTarget?.gps) {
       setIntakeAgentTask("locate", "blocked", "No usable GPS or geocoded visual cue was found.");
       setIntakeAgentTask("snapshot", "blocked", "Snapshot needs usable coordinates.");
@@ -3757,6 +4198,216 @@ function gpsDmsToDecimal(parts, ref) {
   return sign * (degrees + minutes / 60 + seconds / 3600);
 }
 
+function normalizeWorkflowStep(stepNumber) {
+  const raw = String(stepNumber ?? "").trim();
+  const match = raw.match(/\d+/);
+  const normalized = match ? match[0].padStart(2, "0").slice(-2) : raw.padStart(2, "0");
+  return workflowStepOrder.includes(normalized) ? normalized : workflowStepOrder[0];
+}
+
+function normalizeWorkflowPath(pathname = window.location.pathname) {
+  const normalized = String(pathname || "/").replace(/\/+$/g, "");
+  return normalized || "/";
+}
+
+function getWorkflowStepFromUrl() {
+  const pathname = normalizeWorkflowPath();
+  return workflowRouteSteps.get(pathname) ?? "01";
+}
+
+function getWorkflowStepRoute(stepNumber) {
+  return workflowStepRoutes[normalizeWorkflowStep(stepNumber)] ?? workflowStepRoutes["01"];
+}
+
+function setWorkflowPageTitle(stepNumber) {
+  document.title = workflowStepTitles[normalizeWorkflowStep(stepNumber)] ?? "AdaptSim";
+}
+
+function updateWorkflowRoute(stepNumber, { replace = false } = {}) {
+  const step = normalizeWorkflowStep(stepNumber);
+  const targetPath = getWorkflowStepRoute(step);
+  const currentPath = normalizeWorkflowPath();
+  setWorkflowPageTitle(step);
+  if (currentPath === targetPath && !window.location.search && !window.location.hash) return;
+
+  const url = new URL(window.location.href);
+  url.pathname = targetPath;
+  url.search = "";
+  url.hash = "";
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({ ...(window.history.state ?? {}), adaptsimStep: step }, "", url);
+}
+
+function initializeWorkflowRoute() {
+  state.activeWorkflowStep = getWorkflowStepFromUrl();
+  updateWorkflowRoute(state.activeWorkflowStep, { replace: true });
+}
+
+function getWorkflowStepProgress(steps, stepNumber) {
+  return steps?.[normalizeWorkflowStep(stepNumber)] ?? { state: "locked", label: "Locked" };
+}
+
+function isWorkflowStepAccessible(steps, stepNumber) {
+  return getWorkflowStepProgress(steps, stepNumber).state !== "locked";
+}
+
+function getFirstAccessibleWorkflowStep(steps) {
+  return workflowStepOrder.find((step) => isWorkflowStepAccessible(steps, step)) ?? "01";
+}
+
+function getNearestAccessibleWorkflowStep(steps, fromStep, direction) {
+  const startIndex = workflowStepOrder.indexOf(normalizeWorkflowStep(fromStep));
+  if (startIndex < 0) return "";
+  for (let index = startIndex + direction; index >= 0 && index < workflowStepOrder.length; index += direction) {
+    const candidate = workflowStepOrder[index];
+    if (isWorkflowStepAccessible(steps, candidate)) return candidate;
+  }
+  return "";
+}
+
+function getAdjacentWorkflowStep(fromStep, direction) {
+  const startIndex = workflowStepOrder.indexOf(normalizeWorkflowStep(fromStep));
+  const nextIndex = startIndex + direction;
+  return workflowStepOrder[nextIndex] ?? "";
+}
+
+function resizeVisibleGlobeSoon() {
+  const viewer = state.globe?.viewer;
+  if (!viewer || typeof viewer.resize !== "function") return;
+  window.requestAnimationFrame(() => {
+    try {
+      viewer.resize();
+      scheduleScaleUpdate();
+    } catch {
+      // Cesium may still be initializing while a page transition is underway.
+    }
+  });
+}
+
+function focusWithoutScrolling(element) {
+  if (!element || typeof element.focus !== "function") return;
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    const left = window.scrollX;
+    const top = window.scrollY;
+    element.focus();
+    window.scrollTo(left, top);
+  }
+}
+
+function setActiveWorkflowPage(stepNumber, { scroll = false, focusSelector = "", replaceUrl = false, updateUrl = true } = {}) {
+  const step = normalizeWorkflowStep(stepNumber);
+  const page = document.querySelector(`[data-workflow-page="${step}"]`);
+  if (!page) return false;
+
+  state.activeWorkflowStep = step;
+  if (updateUrl) {
+    updateWorkflowRoute(step, { replace: replaceUrl });
+  } else {
+    setWorkflowPageTitle(step);
+  }
+  const shell = document.querySelector(selectors.workflowShell);
+  if (shell) shell.dataset.activeStep = step;
+
+  document.querySelectorAll(selectors.workflowPages).forEach((workflowPage) => {
+    const isActive = workflowPage.dataset.workflowPage === step;
+    workflowPage.dataset.pageActive = String(isActive);
+    workflowPage.setAttribute("aria-hidden", String(!isActive));
+    if (isActive) {
+      workflowPage.removeAttribute("inert");
+    } else {
+      workflowPage.setAttribute("inert", "");
+    }
+  });
+
+  document.querySelectorAll(selectors.workflowNavSteps).forEach((button) => {
+    if (button.dataset.workflowNavStep === step) {
+      button.setAttribute("aria-current", "step");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
+
+  if (step === "02") {
+    resizeVisibleGlobeSoon();
+  }
+
+  const scrollToPage = () => {
+    const targetTop = Math.max(0, page.getBoundingClientRect().top + window.scrollY - 12);
+    window.scrollTo({
+      top: targetTop,
+      behavior: reducedMotionQuery.matches ? "auto" : "smooth",
+    });
+  };
+
+  if (scroll) {
+    window.requestAnimationFrame(scrollToPage);
+    window.setTimeout(scrollToPage, reducedMotionQuery.matches ? 0 : 180);
+  }
+
+  if (focusSelector) {
+    window.setTimeout(() => {
+      const control = document.querySelector(focusSelector);
+      if (control && !control.disabled) {
+        focusWithoutScrolling(control);
+      } else {
+        focusWithoutScrolling(page);
+      }
+    }, reducedMotionQuery.matches ? 0 : 240);
+  }
+
+  return true;
+}
+
+function renderWorkflowPages(steps) {
+  state.workflowStepProgress = steps;
+  let activeStep = normalizeWorkflowStep(state.activeWorkflowStep);
+
+  setActiveWorkflowPage(activeStep, { replaceUrl: true });
+
+  document.querySelectorAll(selectors.workflowNavSteps).forEach((button) => {
+    const step = normalizeWorkflowStep(button.dataset.workflowNavStep);
+    const progress = getWorkflowStepProgress(steps, step);
+    const isLocked = progress.state === "locked";
+    button.disabled = isLocked;
+    button.dataset.workflowState = progress.state;
+    button.setAttribute("aria-disabled", String(isLocked));
+    button.title = isLocked ? `${workflowStepNames[step]} unlocks after the prior step.` : `${workflowStepNames[step]}: ${progress.label}`;
+    const status = button.querySelector("[data-workflow-nav-status]");
+    if (status) {
+      status.textContent = progress.label;
+      status.dataset.workflowNavStatus = progress.state;
+    }
+  });
+
+  const prevStep = getAdjacentWorkflowStep(activeStep, -1);
+  const nextStep = getAdjacentWorkflowStep(activeStep, 1);
+  const prevButton = document.querySelector(selectors.workflowPrevStep);
+  const nextButton = document.querySelector(selectors.workflowNextStep);
+  if (prevButton) {
+    prevButton.disabled = !prevStep;
+    prevButton.dataset.targetStep = prevStep;
+    prevButton.textContent = prevStep ? `Back to ${workflowStepNames[prevStep]}` : "Back";
+  }
+  if (nextButton) {
+    const allStepsComplete = workflowStepOrder.every((step) => getWorkflowStepProgress(steps, step).state === "complete");
+    nextButton.disabled = !nextStep || !isWorkflowStepAccessible(steps, nextStep);
+    nextButton.dataset.targetStep = nextStep;
+    nextButton.textContent = nextStep ? `Continue to ${workflowStepNames[nextStep]}` : allStepsComplete ? "Complete" : "Next Step";
+  }
+}
+
+function navigateWorkflowStep(direction) {
+  const steps = state.workflowStepProgress;
+  if (!steps) return;
+  const targetStep = getAdjacentWorkflowStep(state.activeWorkflowStep, direction);
+  if (!targetStep) return;
+  if (direction > 0 && !isWorkflowStepAccessible(steps, targetStep)) return;
+  setActiveWorkflowPage(targetStep);
+  renderWorkflowPages(steps);
+}
+
 function renderWorkflowProgress(snapshot) {
   const hasMapReady = Boolean(state.globe?.viewer);
   const hasSnapshot = Boolean(snapshot);
@@ -3773,12 +4424,13 @@ function renderWorkflowProgress(snapshot) {
   const canLocate = hasWorkflowStart && hasMapReady && hasMapConfirmed;
   const canReason = hasStep3Generated && hasMapSource;
   const mapConfirmReadiness = getMapConfirmReadiness(snapshot);
+  const stepOneLocationFixReady = hasWorkflowStart && hasStepOneLocationFix(snapshot);
+  const stepOneLocationStillLoading = isStepOneLocationLoading();
   const steps = {
     "01": hasWorkflowStart
-      ? {
-          state: isStepOneLocationLoading() ? "active" : "complete",
-          label: isStepOneLocationLoading() ? "Loading" : "Complete"
-        }
+      ? stepOneLocationFixReady
+        ? { state: "complete", label: "GPS Ready" }
+        : { state: "active", label: stepOneLocationStillLoading ? "Loading" : "Locate" }
       : { state: "active", label: "Start" },
     "02": hasWorkflowStart
       ? {
@@ -3832,12 +4484,16 @@ function renderWorkflowProgress(snapshot) {
       }
     });
   });
+  renderWorkflowPages(steps);
 }
 
 function renderApp() {
   const snapshot = getSelectedSnapshot();
   $(selectors.summarySnapshots).textContent = String(state.snapshots.length);
-  $(selectors.dataBoundary).textContent = state.mapConfig.activeProvider || "No live force disposition";
+  const dataBoundary = document.querySelector(selectors.dataBoundary);
+  if (dataBoundary) {
+    dataBoundary.textContent = state.mapConfig.activeProvider || "No live force disposition";
+  }
 
   renderIntakeAgent();
   renderSourceFiles();
@@ -3846,9 +4502,13 @@ function renderApp() {
   renderSnapshotTable();
   renderModelFields(snapshot);
   renderMapControls();
+  renderSourcePhotoMarkers();
   renderWorkflowProgress(snapshot);
   renderMapReadinessStatus(snapshot);
   syncControls(snapshot);
+  if (state.generatedAssetSession) {
+    renderAssetGenerationStatus(state.generatedAssetSession);
+  }
 }
 
 function renderMapControls() {
@@ -3948,22 +4608,17 @@ function syncControls(snapshot) {
 
 function focusWorkflowStep(stepNumber, { focusSelector = "" } = {}) {
   const step = document.querySelector(`[data-step="${stepNumber}"]`);
-  if (!step) return;
-  const scrollToStep = () => {
-    const targetTop = Math.max(0, step.getBoundingClientRect().top + window.scrollY - 12);
-    window.scrollTo({
-      top: targetTop,
-      behavior: reducedMotionQuery.matches ? "auto" : "smooth",
-    });
-  };
-  window.requestAnimationFrame(scrollToStep);
-  window.setTimeout(scrollToStep, reducedMotionQuery.matches ? 0 : 180);
-  window.setTimeout(scrollToStep, reducedMotionQuery.matches ? 0 : 620);
+  const page = document.querySelector(`[data-workflow-page="${normalizeWorkflowStep(stepNumber)}"]`);
+  const target = page || step;
+  if (!target) return;
+  setActiveWorkflowPage(stepNumber, { focusSelector });
   if (!focusSelector) return;
   window.setTimeout(() => {
     const control = document.querySelector(focusSelector);
     if (control && !control.disabled) {
-      control.focus();
+      focusWithoutScrolling(control);
+    } else {
+      focusWithoutScrolling(target);
     }
   }, reducedMotionQuery.matches ? 0 : 220);
 }
@@ -4149,8 +4804,9 @@ function renderSnapshotDetail(snapshot) {
     : snapshot.selectedLocation;
   const sourceCount = snapshot.openSourceSources.length;
   const previousDisclosure = target.querySelector(".snapshot-database-disclosure");
-  const preserveOpen = previousDisclosure?.open && previousDisclosure.dataset.snapshotId === snapshot.id;
-  const openAttribute = preserveOpen ? " open" : "";
+  const sameSnapshotDisclosure = previousDisclosure?.dataset.snapshotId === snapshot.id;
+  const shouldOpenDatabase = sameSnapshotDisclosure ? previousDisclosure.open : true;
+  const openAttribute = shouldOpenDatabase ? " open" : "";
   if (!countryFlag) void ensureCountryFlag(snapshot);
 
   target.className = "snapshot-detail-shell";
@@ -4842,7 +5498,7 @@ function clearWorkflowInputFields() {
   toggleCustomProviderForm(false);
 }
 
-function resetAppToStartingPoint({ statusMessage = "Workflow reset to starting point." } = {}) {
+function resetAppToStartingPoint({ statusMessage = "Reset to starting point." } = {}) {
   state.resetSerial += 1;
   clearLocationSearchState({ clearInput: true });
   window.clearTimeout(state.coordinateAutoTimer);
@@ -4860,9 +5516,11 @@ function resetAppToStartingPoint({ statusMessage = "Workflow reset to starting p
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
   state.workflow.step4Acknowledged = false;
+  state.activeWorkflowStep = "01";
   resetIntakeAgentState();
   saveState();
   removePin();
+  removeSourcePhotoEntities();
   clearSelectedOutlines();
   clearPublicSites();
   hideCountryHover();
@@ -4911,7 +5569,10 @@ function updateMapStatus(status, activeProvider = state.mapConfig.activeProvider
   state.mapConfig.activeProvider = activeProvider;
   try {
     renderMapControls();
-    $(selectors.dataBoundary).textContent = activeProvider;
+    const dataBoundary = document.querySelector(selectors.dataBoundary);
+    if (dataBoundary) {
+      dataBoundary.textContent = activeProvider;
+    }
   } catch {
     // UI may not be ready during initial script evaluation.
   }
@@ -5052,6 +5713,8 @@ async function initGlobe() {
     publicSiteVisibleKey: "",
     publicSiteRenderToken: "",
     publicSiteVisibilityRaf: 0,
+    sourcePhotoEntities: [],
+    sourcePhotoVisibleKey: "",
     countryGeoJson: null,
     borderLoadPromise: null,
     imageryRequestToken: "",
@@ -5062,6 +5725,7 @@ async function initGlobe() {
   attachScaleUpdater();
   scheduleScaleUpdate();
   await applyMapProvider();
+  renderSourcePhotoMarkers();
   void loadCountryBorders();
 }
 
@@ -5098,6 +5762,7 @@ function attachCesiumClickHandler() {
     viewer.scene.canvas.classList.remove("poi-hover");
     hideCountryHover();
     hidePublicSiteHover(120);
+    hideSourcePhotoHover(120);
   };
   viewer.scene.canvas.addEventListener("mousemove", state.globe.hoverMoveHandler);
   viewer.scene.canvas.addEventListener("mouseleave", state.globe.hoverLeaveHandler);
@@ -5115,6 +5780,7 @@ function attachCesiumClickHandler() {
     viewer.scene.canvas.classList.add("dragging");
     hideCountryHover();
     hidePublicSiteHover();
+    hideSourcePhotoHover();
   };
   state.globe.pointerUpHandler = () => {
     if (state.globe.isDragging) {
@@ -5204,10 +5870,25 @@ function handleMapClick(position) {
   if (!viewer) return;
   if (state.globe.isDragging || performance.now() < (state.globe.justDraggedUntil ?? 0)) return;
 
+  const sourcePhoto = findSourcePhotoFromPick(position, 30);
+  if (sourcePhoto) {
+    const rect = viewer.scene.canvas.getBoundingClientRect();
+    state.pinnedPublicSiteId = "";
+    hideCountryHover();
+    hidePublicSiteHover(0, { force: true });
+    showSourcePhotoHover(sourcePhoto, {
+      clientX: rect.left + position.x,
+      clientY: rect.top + position.y
+    }, { pinned: true });
+    return;
+  }
+
   const site = findPublicSiteFromPick(position, 30);
   if (!site) return;
 
   const rect = viewer.scene.canvas.getBoundingClientRect();
+  state.pinnedSourcePhotoId = "";
+  hideSourcePhotoHover(0, { force: true });
   state.pinnedPublicSiteId = site.id;
   hideCountryHover();
   showPublicSiteHover(site, {
@@ -5389,12 +6070,14 @@ function handleMapHover(event) {
   if (state.globe.isDragging) {
     viewer.scene.canvas.classList.remove("poi-hover");
     hideCountryHover();
+    hideSourcePhotoHover();
     return;
   }
 
   positionCountryHover(event);
   const rect = viewer.scene.canvas.getBoundingClientRect();
   const position = new Cesium.Cartesian2(event.clientX - rect.left, event.clientY - rect.top);
+  if (handleSourcePhotoHover(event, position)) return;
   if (handlePublicSiteHover(event, position)) return;
 
   const cartesian = pickCesiumPosition(position);
@@ -6641,6 +7324,188 @@ function drawPublicSiteEntities(sites, totalSites = sites.length) {
   renderPublicSiteLegend(sites, totalSites);
 }
 
+function removeSourcePhotoEntities() {
+  const { viewer, sourcePhotoEntities } = state.globe ?? {};
+  if (!viewer) return;
+  (sourcePhotoEntities ?? []).forEach((entity) => viewer.entities.remove(entity));
+  state.globe.sourcePhotoEntities = [];
+  state.globe.sourcePhotoVisibleKey = "";
+  state.pinnedSourcePhotoId = "";
+  hideSourcePhotoHover(0, { force: true });
+}
+
+function sourcePhotoMarkerKey(mappedPhotos) {
+  return mappedPhotos
+    .map(({ file, gps, photoIndex }) => [file.id, photoIndex, gps.lat, gps.lon, file.name].join(":"))
+    .join("|");
+}
+
+function drawSourcePhotoEntities(mappedPhotos = getMappedSourcePhotos()) {
+  const { Cesium, viewer } = state.globe ?? {};
+  if (!Cesium || !viewer) return;
+
+  removeSourcePhotoEntities();
+  if (!mappedPhotos.length) return;
+
+  state.globe.sourcePhotoEntities = mappedPhotos.map(({ file, gps, photoIndex }) => {
+    const descriptor = getSourcePhotoDescriptor(file, photoIndex);
+    const label = {
+      text: descriptor,
+      font: "700 12px IBM Plex Mono, ui-monospace, monospace",
+      fillColor: Cesium.Color.fromCssColorString("#f2fffd"),
+      outlineColor: Cesium.Color.fromCssColorString("#061514"),
+      outlineWidth: 3,
+      showBackground: true,
+      backgroundColor: Cesium.Color.fromCssColorString("#061514").withAlpha(0.82),
+      backgroundPadding: new Cesium.Cartesian2(6, 4),
+      pixelOffset: new Cesium.Cartesian2(0, -27),
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
+    };
+    if (Cesium.LabelStyle) label.style = Cesium.LabelStyle.FILL_AND_OUTLINE;
+    if (Cesium.NearFarScalar) label.scaleByDistance = new Cesium.NearFarScalar(120, 1, 650000, 0.55);
+
+    const entity = viewer.entities.add({
+      name: descriptor,
+      position: Cesium.Cartesian3.fromDegrees(gps.lon, gps.lat, 0),
+      point: {
+        pixelSize: 13,
+        color: Cesium.Color.fromCssColorString("#74fff3").withAlpha(0.96),
+        outlineColor: Cesium.Color.fromCssColorString("#fff7e8").withAlpha(0.94),
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      },
+      label
+    });
+    entity.sourcePhotoFileId = file.id;
+    return entity;
+  });
+}
+
+function renderSourcePhotoMarkers() {
+  const globe = state.globe;
+  if (!globe) return;
+  const mappedPhotos = getMappedSourcePhotos();
+  const key = sourcePhotoMarkerKey(mappedPhotos);
+  if (key === globe.sourcePhotoVisibleKey) return;
+  drawSourcePhotoEntities(mappedPhotos);
+  globe.sourcePhotoVisibleKey = key;
+}
+
+function getSourcePhotoMarkerFromFile(file) {
+  const gps = normalizeGps(file?.gps);
+  if (!file || !gps) return null;
+  const photoIndex = Math.max(1, getSourcePhotoFiles().findIndex((entry) => entry.id === file.id) + 1);
+  return { file, gps, photoIndex };
+}
+
+function getSourcePhotoFromEntity(entity) {
+  const fileId = entity?.sourcePhotoFileId;
+  if (!fileId) return null;
+  const file = state.sourceFiles.find((entry) => entry.id === fileId);
+  return getSourcePhotoMarkerFromFile(file);
+}
+
+function getEntityScreenPosition(entity) {
+  const { Cesium, viewer } = state.globe ?? {};
+  if (!Cesium || !viewer || !entity?.position?.getValue) return null;
+  const cartesian = entity.position.getValue(viewer.clock.currentTime);
+  if (!Cesium.defined(cartesian)) return null;
+
+  const transforms = Cesium.SceneTransforms ?? {};
+  const transform = transforms.worldToWindowCoordinates ?? transforms.wgs84ToWindowCoordinates;
+  const position = transform?.(viewer.scene, cartesian)
+    ?? viewer.scene.cartesianToCanvasCoordinates?.(cartesian);
+
+  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return null;
+  return position;
+}
+
+function findNearestSourcePhoto(position, radiusPx = 28) {
+  const entities = state.globe?.sourcePhotoEntities ?? [];
+  let nearestPhoto = null;
+  let nearestDistance = radiusPx;
+
+  entities.forEach((entity) => {
+    const marker = getSourcePhotoFromEntity(entity);
+    const screenPosition = getEntityScreenPosition(entity);
+    if (!marker || !screenPosition) return;
+
+    const distance = Math.hypot(screenPosition.x - position.x, screenPosition.y - position.y);
+    if (distance > nearestDistance) return;
+    nearestDistance = distance;
+    nearestPhoto = marker;
+  });
+
+  return nearestPhoto;
+}
+
+function findSourcePhotoFromPick(position, radiusPx = 0) {
+  const { viewer } = state.globe ?? {};
+  if (!viewer) return null;
+  const picked = viewer.scene.pick(position);
+  const pickedPhoto = getSourcePhotoFromEntity(picked?.id ?? picked?.primitive?.id);
+  return pickedPhoto ?? (radiusPx ? findNearestSourcePhoto(position, radiusPx) : null);
+}
+
+function renderSourcePhotoHover(marker) {
+  const { file, gps, photoIndex } = marker;
+  const descriptor = getSourcePhotoDescriptor(file, photoIndex);
+  const summary = getSourcePhotoSummary(file) || "Geolocated source photo from Step 01 intake.";
+  return `
+    <button class="site-hover-close" type="button" data-source-photo-hover-close aria-label="Close source photo">x</button>
+    <div class="source-photo-hover-badge site-hover-image" aria-hidden="true">
+      <strong>P${photoIndex}</strong>
+      <span>Photo fix</span>
+    </div>
+    <div class="site-hover-body">
+      <span class="site-type" style="--site-color: #74fff3">Step 01 source</span>
+      <strong>${escapeHtml(descriptor)}</strong>
+      <small>${escapeHtml(formatCoordinates(gps.lat, gps.lon))} | ${escapeHtml(gps.source || "Photo GPS")}</small>
+      <p>${escapeHtml(clampText(summary, 160))}</p>
+      <small>${escapeHtml(file.name)}</small>
+    </div>
+  `;
+}
+
+function hideSourcePhotoHover(delay = 0, options = {}) {
+  if (options.force) state.pinnedSourcePhotoId = "";
+  if (state.pinnedSourcePhotoId && !options.force) return;
+  window.clearTimeout(state.sourcePhotoHoverTimer);
+  state.sourcePhotoHoverTimer = window.setTimeout(() => {
+    const card = document.querySelector(selectors.sourcePhotoHover);
+    if (card) card.hidden = true;
+  }, delay);
+}
+
+function showSourcePhotoHover(marker, event, options = {}) {
+  if (!marker) return;
+  if (state.pinnedSourcePhotoId && state.pinnedSourcePhotoId !== marker.file.id && !options.pinned) return;
+  if (options.pinned) state.pinnedSourcePhotoId = marker.file.id;
+
+  const card = $(selectors.sourcePhotoHover);
+  window.clearTimeout(state.sourcePhotoHoverTimer);
+  positionFloatingCard(card, event, 330, 150);
+  card.hidden = false;
+  card.innerHTML = renderSourcePhotoHover(marker);
+}
+
+function handleSourcePhotoHover(event, position) {
+  const marker = findSourcePhotoFromPick(position);
+  const { viewer } = state.globe ?? {};
+  if (!marker) {
+    hideSourcePhotoHover(220);
+    return false;
+  }
+
+  viewer?.scene.canvas.classList.add("poi-hover");
+  hideCountryHover();
+  hidePublicSiteHover(0, { force: true });
+  showSourcePhotoHover(marker, event);
+  return true;
+}
+
 function updatePublicSiteVisibility() {
   const globe = state.globe;
   const snapshot = getPublicSiteVisibilityAnchor();
@@ -6796,33 +7661,73 @@ function orientGlobeToLocation(lat, lon, extent = null, options = {}) {
 
 function attachEvents() {
   const sourceDropzone = $(selectors.sourceDropzone);
+  const sourceFileInput = $(selectors.sourceFileInput);
+  const sourceDropTargets = [
+    sourceDropzone,
+    document.querySelector(".source-dropzone-shell"),
+    document.querySelector("#workflow-page-01")
+  ].filter((target, index, list) => target && list.indexOf(target) === index);
   let sourceDragDepth = 0;
-  $(selectors.sourceFileInput).addEventListener("change", async (event) => {
-    await addSourceFiles(event.target.files);
-    event.target.value = "";
+
+  const clearSourceDragState = () => {
+    sourceDragDepth = 0;
+    sourceDropzone.classList.remove("is-dragging");
+  };
+
+  const handleSourceFiles = async (files) => {
+    try {
+      await addSourceFiles(files);
+    } catch (error) {
+      console.error("Source intake failed", error);
+      setIntakeAgentTask("intake", "blocked", error.message || "Source intake failed.");
+      updateResolution(error.message || "Source intake failed.", "restricted");
+      renderApp();
+    }
+  };
+
+  sourceFileInput.addEventListener("change", (event) => {
+    void handleSourceFiles(event.target.files).finally(() => {
+      event.target.value = "";
+    });
   });
-  sourceDropzone.addEventListener("dragenter", (event) => {
+
+  const handleSourceDragEnter = (event) => {
     event.preventDefault();
+    event.stopPropagation();
     sourceDragDepth += 1;
     sourceDropzone.classList.add("is-dragging");
-  });
-  sourceDropzone.addEventListener("dragover", (event) => {
+  };
+
+  const handleSourceDragOver = (event) => {
     event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     sourceDropzone.classList.add("is-dragging");
-  });
-  sourceDropzone.addEventListener("dragleave", (event) => {
+  };
+
+  const handleSourceDragLeave = (event) => {
     event.preventDefault();
+    event.stopPropagation();
     sourceDragDepth = Math.max(0, sourceDragDepth - 1);
     if (!sourceDragDepth) {
       sourceDropzone.classList.remove("is-dragging");
     }
-  });
-  sourceDropzone.addEventListener("drop", (event) => {
+  };
+
+  const handleSourceDrop = (event) => {
     event.preventDefault();
-    sourceDragDepth = 0;
-    sourceDropzone.classList.remove("is-dragging");
-    addSourceFiles(event.dataTransfer?.files);
+    event.stopPropagation();
+    clearSourceDragState();
+    void handleSourceFiles(event.dataTransfer?.files);
+  };
+
+  sourceDropTargets.forEach((target) => {
+    target.addEventListener("dragenter", handleSourceDragEnter);
+    target.addEventListener("dragover", handleSourceDragOver);
+    target.addEventListener("dragleave", handleSourceDragLeave);
+    target.addEventListener("drop", handleSourceDrop);
   });
+
   $(selectors.sourceFileList).addEventListener("click", (event) => {
     const gpsButton = event.target.closest("[data-use-source-gps-id]");
     if (gpsButton) {
@@ -6841,6 +7746,32 @@ function attachEvents() {
     if (removeButton) {
       removeSourceFile(removeButton.dataset.removeSourceFileId);
     }
+  });
+
+  document.querySelectorAll(selectors.workflowNavSteps).forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      setActiveWorkflowPage(button.dataset.workflowNavStep);
+      if (state.workflowStepProgress) {
+        renderWorkflowPages(state.workflowStepProgress);
+      }
+    });
+  });
+  document.querySelector(selectors.workflowHome)?.addEventListener("click", (event) => {
+    setActiveWorkflowPage(event.currentTarget.dataset.workflowHomeStep || "01", { scroll: true });
+    if (state.workflowStepProgress) {
+      renderWorkflowPages(state.workflowStepProgress);
+    }
+  });
+  document.querySelector(selectors.workflowPrevStep)?.addEventListener("click", () => navigateWorkflowStep(-1));
+  document.querySelector(selectors.workflowNextStep)?.addEventListener("click", () => navigateWorkflowStep(1));
+  window.addEventListener("popstate", () => {
+    state.activeWorkflowStep = getWorkflowStepFromUrl();
+    renderApp();
+    window.scrollTo({
+      top: 0,
+      behavior: reducedMotionQuery.matches ? "auto" : "smooth"
+    });
   });
 
   $(selectors.locationSearch).addEventListener("input", (event) => renderSearchResults(event.target.value));
@@ -6870,6 +7801,11 @@ function attachEvents() {
     if (!event.target.closest("[data-site-hover-close]")) return;
     event.preventDefault();
     hidePublicSiteHover(0, { force: true });
+  });
+  $(selectors.sourcePhotoHover).addEventListener("click", (event) => {
+    if (!event.target.closest("[data-source-photo-hover-close]")) return;
+    event.preventDefault();
+    hideSourcePhotoHover(0, { force: true });
   });
   $(selectors.centerSelected).addEventListener("click", centerSelectedLocation);
   $(selectors.zoomInMap).addEventListener("click", () => zoomMap(0.55));
@@ -6906,6 +7842,7 @@ function attachEvents() {
 
 async function init() {
   loadState();
+  initializeWorkflowRoute();
   loadMapConfig();
   attachEvents();
   renderMapControls();

@@ -453,6 +453,7 @@ class AssetCard(ContractModel):
     schema_version: Literal["1.0"] = SCHEMA_VERSION
     asset_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
     category: Literal[
+        "threat_vector",
         "adversary_role",
         "static_prop",
         "equipment",
@@ -534,6 +535,7 @@ class BehaviorProfile(ContractModel):
     display_name: str = Field(min_length=1, max_length=96)
     applies_to_categories: list[
         Literal[
+            "threat_vector",
             "adversary_role",
             "static_prop",
             "equipment",

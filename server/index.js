@@ -561,6 +561,31 @@ function buildSessionInputManifest(body) {
 
   const manifestSources = sourceFiles.map(({ imageDataUrl: _imageDataUrl, ...source }) => source);
   const context = body?.context && typeof body.context === "object" ? body.context : {};
+  const militaryContext = context.militaryContext && typeof context.militaryContext === "object"
+    ? {
+        forces: Array.isArray(context.militaryContext.forces)
+          ? context.militaryContext.forces.map((item) => clampApiText(item, 260, "")).filter(Boolean).slice(0, 12)
+          : [],
+        forceDisposition: Array.isArray(context.militaryContext.forceDisposition)
+          ? context.militaryContext.forceDisposition.map((item) => clampApiText(item, 360, "")).filter(Boolean).slice(0, 12)
+          : [],
+        hardware: Array.isArray(context.militaryContext.hardware)
+          ? context.militaryContext.hardware.map((item) => clampApiText(item, 360, "")).filter(Boolean).slice(0, 16)
+          : [],
+        weaponsSystems: Array.isArray(context.militaryContext.weaponsSystems)
+          ? context.militaryContext.weaponsSystems.map((item) => clampApiText(item, 360, "")).filter(Boolean).slice(0, 16)
+          : [],
+        openSourceQueries: Array.isArray(context.militaryContext.openSourceQueries)
+          ? context.militaryContext.openSourceQueries.map((item) => clampApiText(item, 220, "")).filter(Boolean).slice(0, 20)
+          : [],
+        openSourceSources: Array.isArray(context.militaryContext.openSourceSources)
+          ? context.militaryContext.openSourceSources.map((source) => ({
+              title: clampApiText(source?.title, 220, ""),
+              url: clampApiText(source?.url, 500, "")
+            })).filter((source) => source.title || source.url).slice(0, 20)
+          : []
+      }
+    : null;
   const manifest = {
     requested_at: new Date().toISOString(),
     operator_id: clampApiText(body?.operatorId || context.operatorId, 120, "local_user"),
@@ -574,6 +599,7 @@ function buildSessionInputManifest(body) {
           lon: context.location.lon == null ? null : Number(context.location.lon)
         }
       : null,
+    militaryContext,
     sourceFiles: manifestSources
   };
   return {
@@ -656,7 +682,7 @@ function assetDatabaseResponseSchema() {
             contract_type: { type: "string", enum: ["asset_card"] },
             schema_version: { type: "string", enum: ["1.0"] },
             asset_id: { type: "string", pattern: "^[a-z][a-z0-9_]{2,63}$" },
-            category: { type: "string", enum: ["adversary_role", "static_prop", "equipment", "effect", "objective_marker", "training_marker"] },
+            category: { type: "string", enum: ["threat_vector", "adversary_role", "static_prop", "equipment", "effect", "objective_marker", "training_marker"] },
             display_name: { type: "string" },
             description: { type: "string" },
             unreal_asset_path: { type: ["string", "null"] },
@@ -770,13 +796,21 @@ function assetDatabaseResponseSchema() {
 function buildAssetGenerationPrompt(manifest) {
   return [
     "You are AdaptSim's asset-database generator. Produce a strict JSON generated_asset_database for a training simulation authoring pipeline.",
-    "Use the uploaded photos, video/file metadata, extracted coordinates, and analyst notes only as source cues. Generate explicit, inspectable training assets, not live intelligence.",
+    "The primary users are military training and analysis teams. Generate explicit, inspectable defensive-training assets centered on realistic threat vectors, not tourism scenery.",
+    "Use the uploaded photos, video/file metadata, extracted coordinates, and analyst notes only as source cues. Generate training-relevant threat-vector assets, not live intelligence.",
+    "Use manifest.militaryContext as the Step 02 source of truth for threat-vector themes. Prefer weapons, inert weapon cues, small tools, vehicles, drones, equipment cases, barriers, sensor shells, communications markers, and other equipment-oriented training assets over location-specific place cards.",
+    "Do not create asset cards whose primary value is a country, city, port, airport, landmark, or base name. Geographic context may explain why the simulation needs a vector, but the asset itself should be a reusable threat vector, equipment cue, vehicle cue, or training prop.",
     "The output must be suitable for later validation against AdaptSim asset-card contracts and for offline Trellis/TRELLIS.2 static asset generation.",
-    "Prefer static props, obstacles, debris, barricades, equipment, objective markers, concealment/cover objects, and training markers for Trellis candidates.",
+    "Prefer asset_cards with category threat_vector. Use adversary_role for abstract OPFOR/persona metadata, equipment for inert representative equipment, static_prop for physical training props, effect for simulated non-damaging cues, objective_marker/training_marker for evaluator controls.",
+    "Threat-vector assets should describe realistic defensive-training concerns such as surveillance cue, suspicious package cue, small UAS cue, vehicle checkpoint concern, crowd anomaly, concealment indicator, restricted-area probe, communications disruption marker, access-control concern, perimeter observation cue, and evacuation friction cue.",
+    "Each threat_vector must include observable indicators, training purpose, likely trainee decision point, and simulation-safe constraints in description, capabilities, preferred_affordances, constraints, gameplay_tags, and source_rationale.",
+    "For Trellis candidates, prefer static non-functional props associated with those threat vectors: mock suspicious package, inert drone silhouette, inspection marker, temporary barrier, sensor mast shell, training sign, equipment case, low-detail vehicle proxy, crowd marker, debris/obstruction prop, and other non-functional visual cues.",
     "For every trellis_candidate, write descriptors detailed enough for high-quality 3D generation: silhouette, component breakdown, proportions, dimensions in meters, materials, surface texture, color palette, wear/weathering, seams, handles, fasteners, labels or markings if visible, and scene placement context.",
     "Each trellis_candidate.generation_prompt should be a consolidated text-to-3D prompt of roughly 80-140 words. Include the object type, its key geometry, scale, material stack, texture style, age/wear, and what should be emphasized from the source cue.",
     "Use detail_checklist to enumerate the concrete geometry/texture details Trellis should preserve. Keep descriptors static and visual; do not include instructions for functionality, damage effects, targeting, real-world unit markings, or weapon operation.",
-    "Do not generate live force disposition, targeting guidance, vulnerabilities, real-world attack plans, or operational readiness claims.",
+    "Do not generate live force disposition, target-specific vulnerabilities, ingress/egress attack guidance, standoff distances, timing guidance, weapon employment, construction details, evasion steps, real-world attack plans, or operational readiness claims.",
+    "For real landmarks, public venues, bases, or sensitive locations, keep threat vectors generic and training-focused. Do not identify exploitable weak points, optimal attack positions, or location-specific security gaps.",
+    "session_summary must state that the database is a military training threat-vector asset database and must name the main training threat themes in non-operational language.",
     "Do not mark generated assets as scenario_director_whitelist unless a reviewed Unreal /Game path is already known. Use never_spawn and placeholder/prototype status for generated candidates.",
     "Avoid fully rigged humans, exact weapon mechanics, or safety-critical geometry as Trellis outputs. Represent human/adversary roles as asset-card metadata only.",
     `Input manifest JSON:\n${JSON.stringify(manifest, null, 2)}`

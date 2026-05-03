@@ -1,9 +1,16 @@
 export function MapStage() {
   return (
-    <section className="workflow-stage map-stage-shell minimized-workflow-step" data-step="02" aria-labelledby="global-map-title">
+    <section
+      id="workflow-page-02"
+      className="workflow-stage workflow-page map-stage-shell minimized-workflow-step"
+      data-step="02"
+      data-workflow-page="02"
+      aria-labelledby="global-map-title"
+      aria-hidden="true"
+      tabIndex={-1}
+    >
       <div className="stage-heading compact-step-heading">
         <div>
-          <p className="eyebrow">Global Map</p>
           <h2 id="global-map-title">Geospatial View</h2>
         </div>
         <div className="step-heading-actions">
@@ -127,6 +134,7 @@ export function MapStage() {
         </div>
         <div id="country-hover" className="country-hover" hidden></div>
         <div id="public-site-hover" className="site-hover" hidden></div>
+        <div id="source-photo-hover" className="site-hover source-photo-hover" hidden></div>
         <div className="globe-overlay bottom-left">
           <div className="status-stack">
             <span id="resolution-status" className="status-pill neutral" aria-live="polite">
