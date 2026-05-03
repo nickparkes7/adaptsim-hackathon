@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { CaptureSimulationFlow } from "./components/CaptureSimulationFlow";
 import { ControlRail } from "./components/ControlRail";
 import { MapStage } from "./components/MapStage";
 import { OutputPanels } from "./components/OutputPanels";
@@ -20,6 +21,7 @@ export default function App() {
       <div className="app-shell">
         <ControlRail />
         <main id="main-workspace" className="workspace">
+          <CaptureSimulationFlow />
           <SourceIntake />
           <MapStage />
           <SummaryStrip />

@@ -1,0 +1,70 @@
+{
+  "contract_type": "unreal_import_report",
+  "schema_version": "1.0",
+  "capture_id": "safety_park",
+  "generated_at": "2026-05-03T05:06:00Z",
+  "status": "ready",
+  "worker": {
+    "worker_id": "l4_unreal_import",
+    "vm_instance": "linux-pixel-streaming",
+    "zone": "us-east1-d",
+    "tool_versions": {
+      "unreal_engine": "5.7.4",
+      "import_script": "AdaptSim/import_scanned_scene.py"
+    }
+  },
+  "reconstruction_manifest_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/reconstruction_manifest.json",
+  "gcs_prefix": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/",
+  "unreal_project_path": "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim",
+  "content_root_path": "/Game/AdaptSim/Scans/safety_park",
+  "level_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park",
+  "imported_assets": [
+    {
+      "asset_type": "level",
+      "asset_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park",
+      "source_artifact_type": null
+    },
+    {
+      "asset_type": "static_mesh",
+      "asset_path": "/Game/AdaptSim/Scans/safety_park/SM_scene_mesh",
+      "source_artifact_type": "unreal_mesh_glb"
+    },
+    {
+      "asset_type": "collision",
+      "asset_path": "/Game/AdaptSim/Scans/safety_park/SM_collision_proxy",
+      "source_artifact_type": "collision_proxy_obj"
+    },
+    {
+      "asset_type": "material",
+      "asset_path": "/Game/AdaptSim/Scans/safety_park/MI_scene_vertex_color",
+      "source_artifact_type": "unreal_mesh_glb"
+    },
+    {
+      "asset_type": "navmesh",
+      "asset_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park/NavMeshBounds",
+      "source_artifact_type": null
+    },
+    {
+      "asset_type": "player_start",
+      "asset_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park/PlayerStart",
+      "source_artifact_type": null
+    }
+  ],
+  "validation": {
+    "level_exists": true,
+    "static_mesh_count": 2,
+    "materials_assigned": true,
+    "collision_configured": true,
+    "nanite_enabled": true,
+    "player_start_present": true,
+    "navmesh_bounds_present": true,
+    "semantic_placeholders_present": true
+  },
+  "import_duration_s": 74.6,
+  "import_log_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal/logs/import.log",
+  "semantic_environment_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal/semantic_environment.json",
+  "warnings": [
+    "Semantic anchors are placeholder/manual-review anchors until editor review is complete."
+  ],
+  "errors": []
+}

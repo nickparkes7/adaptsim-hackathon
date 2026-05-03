@@ -1,6 +1,6 @@
 # AdaptSim Contracts
 
-This directory holds the hackathon MVP contracts between the asset database, semantic environment export, planner, Unreal ScenarioDirector, telemetry, and AAR.
+This directory holds the hackathon MVP contracts between the web/control API, GCS capture store, A100 reconstruction worker, L4 Unreal import worker, asset database, semantic environment export, planner, Unreal ScenarioDirector, telemetry, and AAR.
 
 The Pydantic models in `contracts/models.py` are the maintainable source of truth. JSON Schema files in `contracts/schemas/` are generated from those models so non-Python code can validate the same shapes.
 
@@ -8,11 +8,57 @@ The Pydantic models in `contracts/models.py` are the maintainable source of trut
 
 - `asset_card`: reviewed asset metadata. Spawnable assets must use `spawn_policy: "scenario_director_whitelist"` and include a reviewed `/Game/...` Unreal asset path.
 - `behavior_profile`: planner and runtime behavior names, with the Unreal StateTree, Behavior Tree, Smart Object, or ability asset that implements the profile.
+- `capture_metadata`: raw capture metadata written by the control API at `raw/metadata.json`. Owner: web/control API.
+- `capture_status`: pollable capture lifecycle status at `status.json` and the matching frontend status response. Owner: control API, updated by A100 and L4 workers.
+- `reconstruction_manifest`: A100 output manifest for SfM/FVDB/mesh postprocessing artifacts under `unreal-import/reconstruction_manifest.json`. Owner: A100 reconstruction worker.
+- `unreal_import_report`: L4 Unreal import and validation report under `unreal/import_report.json`. Owner: L4 Unreal import worker.
+- `asset_generation_request`: minimal request to derive semantic environments, asset cards, or scenario manifests from a reconstructed/imported capture. Owner: control API or planner service.
+- `asset_generation_result`: generated-asset references and errors for the request above. Owner: asset/planner generation service.
 - `semantic_anchor`: one tagged room, hallway, door, cover item, exit, no-spawn zone, or other tactical affordance.
 - `semantic_environment`: one scanned Unreal level plus anchors and graph edges.
 - `scenario_manifest`: planner output consumed by Unreal. Each event includes rationale, trigger, required tags, avoid tags, severity, scenario likelihood under assumptions, and behavior profile.
 - `telemetry_event`: one runtime fact emitted by Unreal.
 - `after_action_review_input`: bounded input for AAR generation from objectives, assumptions, rubric, and telemetry.
+
+## Capture Reconstruction Contracts
+
+The MVP capture contracts use the verified GCS handoff configuration:
+
+```text
+GCS_BUCKET=aiscanners-hackathon2025
+GCS_CAPTURE_PREFIX=adaptsim-captures
+GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+GCS_SIGNING_REGION=us
+```
+
+For a capture ID such as `safety_park`, every contract expects the root prefix:
+
+```text
+gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/
+```
+
+`capture_status.status` and `capture_status.progress.phase` use the shared lifecycle vocabulary from the photo reconstruction docs:
+
+```text
+created
+uploading
+uploaded
+queued_reconstruction
+validating_images
+sfm_solving
+sfm_failed
+reconstructing_splat
+exporting_splat
+extracting_mesh
+postprocessing_mesh
+ready_for_unreal_import
+importing_unreal
+imported_unreal
+ready
+failed
+```
+
+The A100 worker should publish `reconstruction_manifest` after producing the Unreal-facing mesh artifacts. The L4 worker should publish `unreal_import_report` after import and validation, including level path, imported assets, validation checks, import log URI, and semantic environment URI when available.
 
 ## Validation
 

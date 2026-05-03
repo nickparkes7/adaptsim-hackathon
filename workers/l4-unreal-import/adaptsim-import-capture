@@ -1,0 +1,689 @@
+#!/usr/bin/env python3
+"""Import an AdaptSim reconstructed capture into Unreal on the L4 VM."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import re
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+DEFAULT_GCS_ROOT = "gs://aiscanners-hackathon2025/adaptsim-captures"
+DEFAULT_UE_ROOT = "/home/nicholas.parkes/tools/unreal/UnrealEngine-5.7.4"
+DEFAULT_UE_PROJECT_ROOT = "/home/nicholas.parkes/Documents/Unreal Projects/AdaptSim"
+CAPTURE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
+
+SEMANTIC_ANCHORS = [
+    {
+        "anchor_id": "entry",
+        "anchor_type": "entry_point",
+        "display_name": "Entry",
+        "tags": ["entry_point", "hallway", "placeholder"],
+        "location_cm": (-420.0, 0.0, 90.0),
+        "rotation_deg": (0.0, 0.0, 0.0),
+        "linked_anchor_ids": ["hallway_center", "doorway"],
+        "notes": "Placeholder entry marker generated during Unreal import.",
+    },
+    {
+        "anchor_id": "exit",
+        "anchor_type": "exit",
+        "display_name": "Exit",
+        "tags": ["exit", "hallway", "placeholder"],
+        "location_cm": (420.0, 0.0, 90.0),
+        "rotation_deg": (0.0, 180.0, 0.0),
+        "linked_anchor_ids": ["hallway_center", "chokepoint"],
+        "notes": "Placeholder exit marker generated during Unreal import.",
+    },
+    {
+        "anchor_id": "hallway_center",
+        "anchor_type": "hallway",
+        "display_name": "Hallway Center",
+        "tags": ["hallway", "navigation", "placeholder"],
+        "location_cm": (0.0, 0.0, 100.0),
+        "rotation_deg": (0.0, 90.0, 0.0),
+        "linked_anchor_ids": ["entry", "exit", "doorway", "cover"],
+        "notes": "Central placeholder for routing and scenario triggers.",
+    },
+    {
+        "anchor_id": "doorway",
+        "anchor_type": "door",
+        "display_name": "Doorway",
+        "tags": ["door", "transition", "placeholder"],
+        "location_cm": (-150.0, 240.0, 100.0),
+        "rotation_deg": (0.0, 90.0, 0.0),
+        "linked_anchor_ids": ["entry", "hallway_center"],
+        "notes": "Placeholder threshold marker generated during Unreal import.",
+    },
+    {
+        "anchor_id": "cover",
+        "anchor_type": "cover",
+        "display_name": "Cover",
+        "tags": ["cover", "spawnable", "placeholder"],
+        "location_cm": (-120.0, -240.0, 80.0),
+        "rotation_deg": (0.0, 35.0, 0.0),
+        "linked_anchor_ids": ["hallway_center", "ambush_point"],
+        "notes": "Placeholder cover affordance; review against final collision.",
+    },
+    {
+        "anchor_id": "ambush_point",
+        "anchor_type": "spawn_zone",
+        "display_name": "Ambush Point",
+        "tags": ["spawn_zone", "ambush_point", "placeholder"],
+        "location_cm": (240.0, -140.0, 100.0),
+        "rotation_deg": (0.0, -120.0, 0.0),
+        "linked_anchor_ids": ["cover", "chokepoint", "observation_point"],
+        "notes": "Placeholder adversary spawn marker generated during Unreal import.",
+    },
+    {
+        "anchor_id": "observation_point",
+        "anchor_type": "line_of_sight",
+        "display_name": "Observation Point",
+        "tags": ["line_of_sight", "observation_point", "placeholder"],
+        "location_cm": (0.0, 340.0, 160.0),
+        "rotation_deg": (-10.0, -90.0, 0.0),
+        "linked_anchor_ids": ["hallway_center", "ambush_point"],
+        "notes": "Placeholder line-of-sight marker generated during Unreal import.",
+    },
+    {
+        "anchor_id": "chokepoint",
+        "anchor_type": "chokepoint",
+        "display_name": "Chokepoint",
+        "tags": ["chokepoint", "near_cover", "placeholder"],
+        "location_cm": (120.0, 0.0, 100.0),
+        "rotation_deg": (0.0, 90.0, 0.0),
+        "linked_anchor_ids": ["hallway_center", "exit", "ambush_point"],
+        "notes": "Placeholder narrow-passage marker generated during Unreal import.",
+    },
+]
+
+
+class WorkerError(RuntimeError):
+    pass
+
+
+class CommandError(WorkerError):
+    def __init__(self, command: list[str], returncode: int):
+        self.command = command
+        self.returncode = returncode
+        super().__init__(f"Command failed with exit code {returncode}: {shlex.join(command)}")
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def gcs_join(root: str, *parts: str) -> str:
+    uri = root.rstrip("/")
+    for part in parts:
+        uri += "/" + part.strip("/")
+    return uri
+
+
+def read_json(path: Path, default: Any = None) -> Any:
+    if not path.exists():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def csv3(values: tuple[float, float, float] | list[float]) -> str:
+    return ",".join(f"{float(value):g}" for value in values[:3])
+
+
+def transform_from_manifest(manifest: dict[str, Any]) -> tuple[float, tuple[float, float, float], tuple[float, float, float]]:
+    transform = manifest.get("transform_to_unreal") or {}
+    scale = float(transform.get("scale") or 1.0)
+    if scale <= 0:
+        scale = 1.0
+    rotation = transform.get("rotation_deg") or (0.0, 0.0, 0.0)
+    translation_m = transform.get("translation_m") or (0.0, 0.0, 0.0)
+    location_cm = tuple(float(value) * 100.0 for value in translation_m[:3])
+    return scale, tuple(float(value) for value in rotation[:3]), location_cm
+
+
+def nav_extent_from_manifest(manifest: dict[str, Any]) -> tuple[float, float, float]:
+    fallback = (2500.0, 2500.0, 600.0)
+    try:
+        size = manifest["render_mesh"]["bounds_m"]["size_m"]
+        extent = (
+            max(float(size["x"]) * 120.0, 800.0),
+            max(float(size["y"]) * 120.0, 800.0),
+            max(float(size["z"]) * 120.0, 400.0),
+        )
+    except Exception:
+        return fallback
+    return extent
+
+
+def semantic_environment(capture_id: str, level_path: str) -> dict[str, Any]:
+    anchor_ids = {anchor["anchor_id"] for anchor in SEMANTIC_ANCHORS}
+    edges = []
+    seen_edges = set()
+    for anchor in SEMANTIC_ANCHORS:
+        from_anchor = anchor["anchor_id"]
+        for to_anchor in anchor["linked_anchor_ids"]:
+            if to_anchor not in anchor_ids:
+                continue
+            key = (from_anchor, to_anchor, "connects")
+            if key in seen_edges:
+                continue
+            seen_edges.add(key)
+            edges.append(
+                {
+                    "from_anchor_id": from_anchor,
+                    "to_anchor_id": to_anchor,
+                    "relation": "connects",
+                    "distance_m": None,
+                }
+            )
+
+    anchors = []
+    for anchor in SEMANTIC_ANCHORS:
+        location_cm = anchor["location_cm"]
+        anchors.append(
+            {
+                "contract_type": "semantic_anchor",
+                "schema_version": "1.0",
+                "anchor_id": anchor["anchor_id"],
+                "anchor_type": anchor["anchor_type"],
+                "display_name": anchor["display_name"],
+                "tags": anchor["tags"],
+                "transform": {
+                    "location_m": [round(float(value) / 100.0, 4) for value in location_cm],
+                    "rotation_deg": list(anchor["rotation_deg"]),
+                },
+                "extent_m": [1.0, 1.0, 1.0],
+                "linked_anchor_ids": anchor["linked_anchor_ids"],
+                "navmesh_reachable": True,
+                "notes": anchor["notes"],
+            }
+        )
+
+    return {
+        "contract_type": "semantic_environment",
+        "schema_version": "1.0",
+        "environment_id": capture_id,
+        "source_scan_id": capture_id,
+        "unreal_level_path": level_path,
+        "coordinate_frame": "unreal_world_m",
+        "units": "meters",
+        "anchors": anchors,
+        "graph_edges": edges,
+    }
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Import a reconstructed AdaptSim capture into Unreal.")
+    parser.add_argument("--capture-id", required=True)
+    parser.add_argument("--gcs-root", default=os.environ.get("ADAPTSIM_GCS_ROOT", DEFAULT_GCS_ROOT))
+    parser.add_argument("--local-root", default=os.environ.get("ADAPTSIM_CAPTURE_DATA_ROOT"))
+    parser.add_argument("--ue-root", default=os.environ.get("ADAPTSIM_UE_ROOT", DEFAULT_UE_ROOT))
+    parser.add_argument(
+        "--ue-project-root",
+        default=os.environ.get("ADAPTSIM_UE_PROJECT_ROOT", DEFAULT_UE_PROJECT_ROOT),
+    )
+    parser.add_argument("--gcloud-bin", default=os.environ.get("ADAPTSIM_GCLOUD_BIN", "gcloud"))
+    parser.add_argument("--final-phase", choices=("imported_unreal", "ready"), default="ready")
+    parser.add_argument("--collision-mode", choices=("complex", "simple", "none"), default="complex")
+    parser.add_argument("--semantic-anchor-mode", choices=("adapt_sim", "target_point"), default="target_point")
+    parser.add_argument("--min-semantic-placeholders", type=int, default=4)
+    parser.add_argument("--min-materials", type=int, default=0)
+    parser.add_argument("--min-textures", type=int, default=0)
+    parser.add_argument("--require-nanite", action="store_true")
+    replace_group = parser.add_mutually_exclusive_group()
+    replace_group.add_argument("--replace-existing", dest="replace_existing", action="store_true")
+    replace_group.add_argument("--no-replace-existing", dest="replace_existing", action="store_false")
+    parser.set_defaults(replace_existing=True)
+    return parser.parse_args(argv)
+
+
+class ImportCaptureWorker:
+    def __init__(self, args: argparse.Namespace):
+        self.args = args
+        self.capture_id = args.capture_id
+        if not CAPTURE_ID_RE.match(self.capture_id):
+            raise WorkerError(
+                "--capture-id must match ^[a-z][a-z0-9_]{2,63}$ so GCS, Unreal, and contract paths stay stable"
+            )
+
+        self.repo_root = Path(__file__).resolve().parents[2]
+        self.gcs_prefix = gcs_join(args.gcs_root, "captures", self.capture_id) + "/"
+        self.mesh_uri = gcs_join(self.gcs_prefix, "unreal-import", "scene_mesh.glb")
+        self.manifest_uri = gcs_join(self.gcs_prefix, "unreal-import", "reconstruction_manifest.json")
+        self.status_uri = gcs_join(self.gcs_prefix, "status.json")
+        self.import_report_uri = gcs_join(self.gcs_prefix, "unreal", "import_report.json")
+        self.semantic_environment_uri = gcs_join(self.gcs_prefix, "unreal", "semantic_environment.json")
+        self.import_log_uri = gcs_join(self.gcs_prefix, "unreal", "logs", "import.log")
+
+        local_root = Path(args.local_root).expanduser() if args.local_root else Path.home() / "adaptsim/data/captures"
+        self.capture_root = local_root / self.capture_id
+        self.unreal_import_dir = self.capture_root / "unreal-import"
+        self.unreal_output_dir = self.capture_root / "unreal"
+        self.log_dir = self.unreal_output_dir / "logs"
+        self.mesh_path = self.unreal_import_dir / "scene_mesh.glb"
+        self.manifest_path = self.unreal_import_dir / "reconstruction_manifest.json"
+        self.status_path = self.capture_root / "status.json"
+        self.import_report_path = self.unreal_output_dir / "import_report.json"
+        self.semantic_environment_path = self.unreal_output_dir / "semantic_environment.json"
+        self.import_log_path = self.log_dir / "import.log"
+        self.validation_report_path = self.unreal_output_dir / "validation_report.json"
+
+        self.ue_root = Path(args.ue_root)
+        self.ue_project_root = Path(args.ue_project_root)
+        self.uproject = self.ue_project_root / "AdaptSim.uproject"
+        self.ue_cmd = self.ue_root / "Engine/Binaries/Linux/UnrealEditor-Cmd"
+        self.project_python_dir = self.ue_project_root / "Content/Python/AdaptSim"
+        self.project_importer = self.project_python_dir / "import_scanned_scene.py"
+        self.project_validator = self.project_python_dir / "validate_imported_scene.py"
+        self.repo_importer = self.repo_root / "unreal/Content/Python/AdaptSim/import_scanned_scene.py"
+        self.repo_validator = self.repo_root / "unreal/Content/Python/AdaptSim/validate_imported_scene.py"
+
+        self.content_path = f"/Game/AdaptSim/Scans/{self.capture_id}"
+        self.level_path = f"/Game/AdaptSim/Maps/L_Reconstructed_{self.capture_id}"
+        self.status_data: dict[str, Any] = {}
+        self.start_time = time.monotonic()
+
+    def run(self) -> int:
+        self.prepare_local_dirs()
+        self.log(f"Starting L4 Unreal import for capture {self.capture_id}")
+        self.log(f"GCS prefix: {self.gcs_prefix}")
+
+        try:
+            self.download_status()
+            self.write_and_upload_status(
+                "ready_for_unreal_import",
+                "L4 Unreal import is running.",
+                80,
+                "importing",
+            )
+            self.download_inputs()
+            manifest = self.load_manifest()
+            self.sync_unreal_scripts()
+            self.run_unreal_import(manifest)
+            validation_report = self.run_validation()
+            self.write_semantic_environment()
+            self.write_import_report(
+                status=self.args.final_phase,
+                validation_report=validation_report,
+                warnings=[],
+                errors=[],
+            )
+            self.upload_outputs()
+            self.write_and_upload_status(
+                self.args.final_phase,
+                "Unreal import validated; scene is launchable."
+                if self.args.final_phase == "ready"
+                else "Unreal import validated.",
+                100 if self.args.final_phase == "ready" else 95,
+                "ready" if self.args.final_phase == "ready" else "imported",
+            )
+            self.log("L4 Unreal import completed.")
+            return 0
+        except Exception as exc:
+            return self.handle_failure(exc)
+
+    def prepare_local_dirs(self) -> None:
+        for path in (self.unreal_import_dir, self.unreal_output_dir, self.log_dir):
+            path.mkdir(parents=True, exist_ok=True)
+        self.import_log_path.write_text("", encoding="utf-8")
+
+    def log(self, message: str) -> None:
+        line = f"[{utc_now()}] {message}\n"
+        with self.import_log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(line)
+        print(message, flush=True)
+
+    def run_command(self, command: list[str], cwd: Path | None = None) -> None:
+        self.log("$ " + shlex.join(command))
+        with self.import_log_path.open("a", encoding="utf-8") as log_file:
+            process = subprocess.run(
+                command,
+                cwd=str(cwd) if cwd else None,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+        if process.returncode != 0:
+            raise CommandError(command, process.returncode)
+
+    def gcloud_cp(self, source: str | Path, dest: str | Path) -> None:
+        self.run_command([self.args.gcloud_bin, "--quiet", "storage", "cp", str(source), str(dest)])
+
+    def gcloud_cp_optional(self, source: str, dest: Path) -> bool:
+        try:
+            self.gcloud_cp(source, dest)
+            return True
+        except CommandError as exc:
+            self.log(f"Optional GCS object not downloaded: {source} ({exc.returncode})")
+            return False
+
+    def download_status(self) -> None:
+        self.gcloud_cp_optional(self.status_uri, self.status_path)
+        self.status_data = read_json(self.status_path, default={}) or {}
+
+    def download_inputs(self) -> None:
+        self.log("Downloading Unreal import mesh and reconstruction manifest.")
+        self.gcloud_cp(self.mesh_uri, self.mesh_path)
+        self.gcloud_cp(self.manifest_uri, self.manifest_path)
+        if not self.mesh_path.exists() or self.mesh_path.stat().st_size == 0:
+            raise WorkerError(f"Downloaded mesh is missing or empty: {self.mesh_path}")
+
+    def load_manifest(self) -> dict[str, Any]:
+        manifest = read_json(self.manifest_path, default={}) or {}
+        manifest_capture_id = manifest.get("capture_id")
+        if manifest_capture_id and manifest_capture_id != self.capture_id:
+            raise WorkerError(
+                f"Manifest capture_id {manifest_capture_id!r} does not match requested {self.capture_id!r}"
+            )
+        return manifest
+
+    def sync_unreal_scripts(self) -> None:
+        for source in (self.repo_importer, self.repo_validator):
+            if not source.exists():
+                raise WorkerError(f"Missing Unreal Python script: {source}")
+        if not self.ue_cmd.exists():
+            raise WorkerError(f"Missing UnrealEditor-Cmd: {self.ue_cmd}")
+        if not self.uproject.exists():
+            raise WorkerError(f"Missing AdaptSim.uproject: {self.uproject}")
+
+        self.project_python_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.repo_importer, self.project_importer)
+        shutil.copy2(self.repo_validator, self.project_validator)
+        self.log(f"Synced Unreal Python scripts into {self.project_python_dir}")
+
+    def run_unreal_import(self, manifest: dict[str, Any]) -> None:
+        scale, rotation_deg, location_cm = transform_from_manifest(manifest)
+        nav_extent_cm = nav_extent_from_manifest(manifest)
+        script_args = [
+            "--source",
+            str(self.mesh_path),
+            "--scan-id",
+            self.capture_id,
+            "--dest-root",
+            "/Game/AdaptSim/Scans",
+            "--demo-level-path",
+            self.level_path,
+            "--collision-mode",
+            self.args.collision_mode,
+            "--scale",
+            f"{scale:g}",
+            "--rotation-deg",
+            csv3(rotation_deg),
+            "--location-cm",
+            csv3(location_cm),
+            "--nav-extent-cm",
+            csv3(nav_extent_cm),
+            "--semantic-anchors",
+            "--semantic-anchor-mode",
+            self.args.semantic_anchor_mode,
+        ]
+        if self.args.replace_existing:
+            script_args.append("--replace-existing")
+
+        encoded_args = base64.b64encode(shlex.join(script_args).encode("utf-8")).decode("ascii")
+        command = [
+            str(self.ue_cmd),
+            str(self.uproject),
+            "-unattended",
+            "-nop4",
+            "-nosplash",
+            "-nullrhi",
+            f"-ExecutePythonScript={self.project_importer}",
+            f"-ScanwrightArgsB64={encoded_args}",
+            "-log",
+        ]
+        self.log(f"Running Unreal import into {self.content_path} and {self.level_path}")
+        self.run_command(command, cwd=self.ue_project_root)
+
+    def run_validation(self) -> dict[str, Any]:
+        script_args = [
+            "--map-path",
+            self.level_path,
+            "--content-path",
+            self.content_path,
+            "--scan-id",
+            self.capture_id,
+            "--min-semantic-placeholders",
+            str(self.args.min_semantic_placeholders),
+            "--min-materials",
+            str(self.args.min_materials),
+            "--min-textures",
+            str(self.args.min_textures),
+            "--report-json",
+            str(self.validation_report_path),
+        ]
+        if self.args.collision_mode == "none":
+            script_args.append("--no-require-collision")
+        if self.args.require_nanite:
+            script_args.append("--require-nanite")
+
+        encoded_args = base64.b64encode(shlex.join(script_args).encode("utf-8")).decode("ascii")
+        command = [
+            str(self.ue_cmd),
+            str(self.uproject),
+            "-unattended",
+            "-nop4",
+            "-nosplash",
+            "-nullrhi",
+            f"-ExecutePythonScript={self.project_validator}",
+            f"-AdaptSimValidateArgsB64={encoded_args}",
+            "-log",
+        ]
+        self.log("Running Unreal validation.")
+        self.run_command(command, cwd=self.ue_project_root)
+        validation_report = read_json(self.validation_report_path, default={}) or {}
+        if validation_report.get("status") != "passed":
+            errors = validation_report.get("errors") or ["Validation did not report passed status."]
+            raise WorkerError("; ".join(str(error) for error in errors))
+        return validation_report
+
+    def write_semantic_environment(self) -> None:
+        write_json(self.semantic_environment_path, semantic_environment(self.capture_id, self.level_path))
+        self.log(f"Wrote semantic environment placeholder JSON: {self.semantic_environment_path}")
+
+    def worker_info(self) -> dict[str, Any]:
+        return {
+            "worker_id": "l4_unreal_import",
+            "vm_instance": os.environ.get("ADAPTSIM_VM_NAME") or socket.gethostname(),
+            "zone": os.environ.get("ADAPTSIM_VM_ZONE", "us-east1-d"),
+            "tool_versions": {
+                "python": sys.version.split()[0],
+                "unreal_engine_path": str(self.ue_root),
+            },
+        }
+
+    def write_import_report(
+        self,
+        status: str,
+        validation_report: dict[str, Any] | None,
+        warnings: list[str],
+        errors: list[str],
+    ) -> None:
+        validation_report = validation_report or {}
+        validation = validation_report.get("validation") or {
+            "level_exists": False,
+            "static_mesh_count": 0,
+            "materials_assigned": False,
+            "collision_configured": False,
+            "nanite_enabled": False,
+            "player_start_present": False,
+            "navmesh_bounds_present": False,
+            "semantic_placeholders_present": False,
+        }
+        imported_assets: list[dict[str, Any]] = []
+        if status in {"imported_unreal", "ready"}:
+            imported_assets.append(
+                {
+                    "asset_type": "level",
+                    "asset_path": self.level_path,
+                    "source_artifact_type": "unreal_level",
+                }
+            )
+            for path in validation_report.get("static_mesh_paths") or []:
+                imported_assets.append(
+                    {
+                        "asset_type": "static_mesh",
+                        "asset_path": path,
+                        "source_artifact_type": "unreal_mesh_glb",
+                    }
+                )
+            for path in validation_report.get("material_paths") or []:
+                imported_assets.append(
+                    {
+                        "asset_type": "material",
+                        "asset_path": path,
+                        "source_artifact_type": "unreal_mesh_glb",
+                    }
+                )
+            for path in validation_report.get("texture_paths") or []:
+                imported_assets.append(
+                    {
+                        "asset_type": "texture",
+                        "asset_path": path,
+                        "source_artifact_type": "unreal_mesh_glb",
+                    }
+                )
+
+        report = {
+            "contract_type": "unreal_import_report",
+            "schema_version": "1.0",
+            "capture_id": self.capture_id,
+            "generated_at": utc_now(),
+            "status": status,
+            "worker": self.worker_info(),
+            "reconstruction_manifest_uri": self.manifest_uri,
+            "gcs_prefix": self.gcs_prefix,
+            "unreal_project_path": str(self.ue_project_root),
+            "content_root_path": self.content_path,
+            "level_path": self.level_path if status in {"imported_unreal", "ready"} else None,
+            "imported_assets": imported_assets,
+            "validation": validation,
+            "import_duration_s": round(max(time.monotonic() - self.start_time, 0.0), 3),
+            "import_log_uri": self.import_log_uri,
+            "semantic_environment_uri": self.semantic_environment_uri
+            if self.semantic_environment_path.exists()
+            else None,
+            "warnings": warnings,
+            "errors": errors,
+        }
+        write_json(self.import_report_path, report)
+        self.log(f"Wrote import report: {self.import_report_path}")
+
+    def upload_outputs(self) -> None:
+        self.log("Uploading Unreal import artifacts to GCS.")
+        self.gcloud_cp(self.semantic_environment_path, self.semantic_environment_uri)
+        self.gcloud_cp(self.import_report_path, self.import_report_uri)
+        self.gcloud_cp(self.import_log_path, self.import_log_uri)
+
+    def write_and_upload_status(
+        self,
+        phase: str,
+        message: str,
+        percent: int,
+        unreal_status: str,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        status = dict(self.status_data)
+        status.setdefault("contract_type", "capture_status")
+        status.setdefault("schema_version", "1.0")
+        status.setdefault("capture_id", self.capture_id)
+        status.setdefault("display_name", self.capture_id.replace("_", " ").title())
+        status["status"] = phase
+        status["updated_at"] = utc_now()
+        status["gcs_prefix"] = self.gcs_prefix
+        status["progress"] = {"phase": phase, "message": message, "percent": percent}
+        artifacts = dict(status.get("artifacts") or {})
+        artifacts["reconstruction_manifest_uri"] = self.manifest_uri
+        if self.import_report_path.exists():
+            artifacts["unreal_import_report_uri"] = self.import_report_uri
+        if self.semantic_environment_path.exists():
+            artifacts["semantic_environment_uri"] = self.semantic_environment_uri
+        status["artifacts"] = artifacts
+        status["unreal"] = {
+            "status": unreal_status,
+            "level_path": self.level_path if unreal_status in {"imported", "ready"} else None,
+            "import_report_uri": self.import_report_uri if self.import_report_path.exists() else None,
+        }
+        if error:
+            status["error"] = error
+        else:
+            status.pop("error", None)
+        self.status_data = status
+        write_json(self.status_path, status)
+        self.gcloud_cp(self.status_path, self.status_uri)
+
+    def handle_failure(self, exc: Exception) -> int:
+        error_message = str(exc)
+        self.log(f"Import failed: {error_message}")
+        validation_report = read_json(self.validation_report_path, default={}) or {}
+        self.write_import_report(
+            status="failed",
+            validation_report=validation_report,
+            warnings=[],
+            errors=[error_message[:500]],
+        )
+
+        upload_errors = []
+        for source, dest in (
+            (self.import_log_path, self.import_log_uri),
+            (self.import_report_path, self.import_report_uri),
+        ):
+            try:
+                self.gcloud_cp(source, dest)
+            except Exception as upload_exc:
+                upload_errors.append(str(upload_exc))
+                self.log(f"Failed to upload failure artifact {source}: {upload_exc}")
+
+        try:
+            self.write_and_upload_status(
+                "failed",
+                "Unreal import failed.",
+                100,
+                "failed",
+                {
+                    "code": "unreal_import_failed",
+                    "message": error_message[:500],
+                    "failed_phase": "ready_for_unreal_import",
+                    "retryable": True,
+                },
+            )
+        except Exception as status_exc:
+            upload_errors.append(str(status_exc))
+            self.log(f"Failed to upload failure status: {status_exc}")
+
+        if upload_errors:
+            self.log("One or more failure artifacts could not be uploaded.")
+        return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv or sys.argv[1:])
+    worker = ImportCaptureWorker(args)
+    return worker.run()
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        raise SystemExit(130)
+    except WorkerError as exc:
+        print(f"adaptsim-import-capture: {exc}", file=sys.stderr)
+        raise SystemExit(2)

@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "GeneratedAssetReference": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Id"
+        },
+        "artifact_type": {
+          "enum": [
+            "semantic_environment",
+            "asset_card",
+            "scenario_manifest",
+            "unreal_level"
+          ],
+          "title": "Artifact Type",
+          "type": "string"
+        },
+        "gcs_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gcs Uri"
+        },
+        "unreal_asset_path": {
+          "anyOf": [
+            {
+              "pattern": "^/Game/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unreal Asset Path"
+        }
+      },
+      "required": [
+        "artifact_type"
+      ],
+      "title": "GeneratedAssetReference",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/asset_generation_result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capture_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "contract_type": {
+      "const": "asset_generation_result",
+      "default": "asset_generation_result",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Errors",
+      "type": "array"
+    },
+    "generated_assets": {
+      "items": {
+        "$ref": "#/$defs/GeneratedAssetReference"
+      },
+      "maxItems": 32,
+      "title": "Generated Assets",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "request_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "request_id",
+    "capture_id",
+    "generated_at",
+    "status"
+  ],
+  "title": "AssetGenerationResult",
+  "type": "object"
+}

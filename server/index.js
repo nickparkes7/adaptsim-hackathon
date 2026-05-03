@@ -19,6 +19,7 @@ const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
 const serverDir = __dirname;
 const projectRoot = path.resolve(serverDir, "..");
+const contractsExamplesDir = path.join(projectRoot, "contracts", "examples");
 const webDistDir = path.join(projectRoot, "apps/web/dist");
 const webPublicDir = path.join(projectRoot, "apps/web/public");
 const dataDir = process.env.DATA_DIR || path.join(webPublicDir, "data");
@@ -39,6 +40,27 @@ const generatedSessionRoot = process.env.ADAPTSIM_SESSION_DIR || path.join(proje
 const openAiAssetModel = process.env.OPENAI_ASSET_MODEL || "gpt-5.5";
 const trellisVmEndpoint = String(process.env.TRELLIS_VM_ENDPOINT || "").trim().replace(/\/+$/, "");
 const trellisVmApiKey = String(process.env.TRELLIS_VM_API_KEY || "").trim();
+const schemaVersion = "1.0";
+const gcsBucket = process.env.GCS_BUCKET || "aiscanners-hackathon2025";
+const gcsCapturePrefix = String(process.env.GCS_CAPTURE_PREFIX || "adaptsim-captures").replace(/^\/+|\/+$/g, "");
+const gcsSigningServiceAccount = process.env.GCS_SIGNING_SERVICE_ACCOUNT || "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com";
+const gcsSigningRegion = process.env.GCS_SIGNING_REGION || "us";
+const gcsSignedUrlDuration = process.env.GCS_SIGNED_URL_DURATION || "1h";
+const pixelStreamUrl = process.env.ADAPTSIM_PIXEL_STREAM_URL || "http://127.0.0.1:8080/";
+const streamReadyDelayMs = Number(process.env.ADAPTSIM_STREAM_READY_DELAY_MS || 0);
+const streamTtlMs = Number(process.env.ADAPTSIM_STREAM_TTL_MS || 90 * 60 * 1000);
+const workerTriggersEnabled = process.env.ADAPTSIM_ENABLE_WORKER_TRIGGERS === "1";
+const workerTriggerTimeoutMs = Number(process.env.ADAPTSIM_WORKER_TRIGGER_TIMEOUT_MS || 15000);
+const a100Instance = process.env.ADAPTSIM_A100_INSTANCE || "a100-instance-02";
+const a100Zone = process.env.ADAPTSIM_A100_ZONE || "us-east1-b";
+const a100Project = process.env.ADAPTSIM_GCP_PROJECT || "gecko-dev-fde";
+const l4Instance = process.env.ADAPTSIM_L4_INSTANCE || "linux-pixel-streaming";
+const l4Zone = process.env.ADAPTSIM_L4_ZONE || "us-east1-d";
+const l4Project = process.env.ADAPTSIM_GCP_PROJECT || "gecko-dev-fde";
+const demoSceneId = "scan_hallway_alpha";
+const demoScenarioIds = ["scan_hallway_delay_001", "scan_hallway_observer_002"];
+const demoRunId = "run_hallway_delay_001";
+const launchedRuns = new Map();
 const defaultAllowedOrigins = [
   "http://127.0.0.1:5173",
   "http://localhost:5173",
@@ -62,6 +84,7 @@ const contentTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".md": "text/markdown; charset=utf-8",
   ".ico": "image/x-icon",
 };
 
@@ -1151,19 +1174,589 @@ function runCommand(command, args, options = {}) {
       },
       (error, stdout = "", stderr = "") => {
         if (error?.code === "ENOENT") {
-          resolve({ command, available: false, ok: false, stdout: "", stderr: "not installed" });
+          resolve({ command, available: false, ok: false, exitCode: "ENOENT", stdout: "", stderr: "not installed" });
           return;
         }
         resolve({
           command,
           available: true,
           ok: !error,
+          exitCode: error?.code || 0,
           stdout: String(stdout).slice(0, options.textLimit || 12000),
           stderr: String(stderr || error?.message || "").slice(0, 1000)
         });
       }
     );
   });
+}
+
+function requireJsonRequest(request) {
+  if (!String(request.headers["content-type"] || "").includes("application/json")) {
+    throw new HttpError(415, "Content-Type must be application/json.");
+  }
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function parseDurationMs(value) {
+  const match = String(value || "").trim().match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)?$/i);
+  if (!match) return 60 * 60 * 1000;
+  const amount = Number(match[1]);
+  const unit = (match[2] || "s").toLowerCase();
+  const multipliers = { ms: 1, s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
+  return amount * (multipliers[unit] || 1000);
+}
+
+function expiresAtFromDuration(duration) {
+  return new Date(Date.now() + parseDurationMs(duration)).toISOString();
+}
+
+function validateIdentifier(value, label = "identifier") {
+  const text = String(value || "").trim();
+  if (!/^[a-z][a-z0-9_]{2,63}$/.test(text)) {
+    throw new HttpError(400, `${label} must match ^[a-z][a-z0-9_]{2,63}$.`);
+  }
+  return text;
+}
+
+function validateTag(value, label = "tag") {
+  const text = String(value || "").trim();
+  if (!/^[a-z][a-z0-9_]{1,63}$/.test(text)) {
+    throw new HttpError(400, `${label} must match ^[a-z][a-z0-9_]{1,63}$.`);
+  }
+  return text;
+}
+
+function captureIdFromDisplayName(displayName) {
+  let slug = String(displayName || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_{2,}/g, "_");
+  if (!slug || !/^[a-z]/.test(slug)) slug = `capture_${slug || "scan"}`;
+  if (slug.length < 3) slug = `${slug}_scan`;
+  return slug.slice(0, 64).replace(/_+$/g, "") || "capture_scan";
+}
+
+function sanitizeFilename(filename) {
+  const text = String(filename || "").trim();
+  if (!/^[A-Za-z0-9_. -]{1,160}$/.test(text) || text === "." || text === "..") {
+    throw new HttpError(400, "Each filename must be 1-160 characters and contain only letters, numbers, spaces, dots, underscores, or hyphens.");
+  }
+  return text;
+}
+
+function validateContentType(contentType) {
+  const text = String(contentType || "").toLowerCase().trim();
+  if (!["image/jpeg", "image/png", "image/heic", "image/heif"].includes(text)) {
+    throw new HttpError(400, "Supported capture image content types are image/jpeg, image/png, image/heic, and image/heif.");
+  }
+  return text;
+}
+
+function validatePositiveInt(value, label, { min = 1, max = 5000 } = {}) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max) {
+    throw new HttpError(400, `${label} must be an integer between ${min} and ${max}.`);
+  }
+  return number;
+}
+
+function validateScaleHint(value) {
+  const hint = value && typeof value === "object" ? value : { type: "unknown" };
+  const type = String(hint.type || "unknown").trim();
+  if (!["known_distance", "calibration_marker", "unknown"].includes(type)) {
+    throw new HttpError(400, "scale_hint.type must be known_distance, calibration_marker, or unknown.");
+  }
+
+  const distance = hint.distance_m == null ? null : Number(hint.distance_m);
+  if (type !== "unknown" && (!Number.isFinite(distance) || distance <= 0)) {
+    throw new HttpError(400, `${type} scale_hint requires a positive distance_m.`);
+  }
+  if (type === "unknown" && distance != null) {
+    throw new HttpError(400, "unknown scale_hint must not include distance_m.");
+  }
+
+  return {
+    type,
+    label: hint.label == null ? null : String(hint.label).slice(0, 96),
+    distance_m: distance,
+    confidence: ["operator_provided", "estimated", "unknown"].includes(hint.confidence)
+      ? hint.confidence
+      : type === "unknown" ? "unknown" : "operator_provided"
+  };
+}
+
+function gcsRootUri() {
+  return `gs://${gcsBucket}/${gcsCapturePrefix}`;
+}
+
+function captureGcsPrefix(captureId) {
+  return `${gcsRootUri()}/captures/${captureId}/`;
+}
+
+function captureObjectUri(captureId, relativePath) {
+  return `${captureGcsPrefix(captureId)}${String(relativePath || "").replace(/^\/+/, "")}`;
+}
+
+function readFixtureJson(...parts) {
+  return JSON.parse(fs.readFileSync(path.join(contractsExamplesDir, ...parts), "utf8"));
+}
+
+function readFixtureText(...parts) {
+  return fs.readFileSync(path.join(contractsExamplesDir, ...parts), "utf8");
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function writeTempJson(payload) {
+  return fs.promises.mkdtemp(path.join(os.tmpdir(), "adaptsim-gcs-")).then(async (tempDir) => {
+    const filePath = path.join(tempDir, "payload.json");
+    await fs.promises.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    return { tempDir, filePath };
+  });
+}
+
+async function writeJsonToGcs(gcsUri, payload) {
+  const { tempDir, filePath } = await writeTempJson(payload);
+  try {
+    const result = await runCommand("gcloud", ["storage", "cp", filePath, gcsUri], {
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+      textLimit: 20000
+    });
+    if (!result.available) {
+      throw new HttpError(503, "gcloud CLI is required for GCS-backed AdaptSim state.");
+    }
+    if (!result.ok) {
+      throw new HttpError(502, `Could not write ${gcsUri}: ${result.stderr || result.stdout || "gcloud storage cp failed"}`);
+    }
+  } finally {
+    fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function readJsonFromGcs(gcsUri, { optional = false } = {}) {
+  const result = await runCommand("gcloud", ["storage", "cat", gcsUri], {
+    timeout: 30000,
+    maxBuffer: 4 * 1024 * 1024,
+    textLimit: 4 * 1024 * 1024
+  });
+  if (!result.available) {
+    throw new HttpError(503, "gcloud CLI is required for GCS-backed AdaptSim state.");
+  }
+  if (!result.ok) {
+    if (optional && /No URLs matched|NotFound|No such object|404/i.test(`${result.stderr}\n${result.stdout}`)) return null;
+    throw new HttpError(502, `Could not read ${gcsUri}: ${result.stderr || result.stdout || "gcloud storage cat failed"}`);
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    throw new HttpError(502, `${gcsUri} did not contain valid JSON.`);
+  }
+}
+
+function extractSignedUrl(stdout) {
+  const text = String(stdout || "").trim();
+  try {
+    const parsed = JSON.parse(text);
+    const first = Array.isArray(parsed) ? parsed[0] : parsed;
+    const url = first?.signed_url || first?.signedUrl || first?.url || first?.URL;
+    if (url) return String(url);
+  } catch {}
+
+  const match = text.match(/https:\/\/storage\.googleapis\.com\/\S+/);
+  if (match) return match[0];
+  return "";
+}
+
+async function signGcsUrl(gcsUri, { method = "GET", contentType = null, duration = gcsSignedUrlDuration } = {}) {
+  const args = [
+    "storage",
+    "sign-url",
+    gcsUri,
+    `--http-verb=${method}`,
+    `--duration=${duration}`,
+    `--region=${gcsSigningRegion}`,
+    `--impersonate-service-account=${gcsSigningServiceAccount}`,
+    "--format=json"
+  ];
+  if (contentType) args.splice(4, 0, `--headers=content-type=${contentType}`);
+
+  const result = await runCommand("gcloud", args, {
+    timeout: 30000,
+    maxBuffer: 1024 * 1024,
+    textLimit: 200000
+  });
+  if (!result.available) {
+    throw new HttpError(503, "gcloud CLI is required for signed GCS URLs.");
+  }
+  if (!result.ok) {
+    throw new HttpError(502, `Could not sign ${gcsUri}: ${result.stderr || result.stdout || "gcloud storage sign-url failed"}`);
+  }
+  const signedUrl = extractSignedUrl(result.stdout);
+  if (!signedUrl) {
+    throw new HttpError(502, "gcloud storage sign-url returned no signed URL.");
+  }
+  return signedUrl;
+}
+
+function buildCaptureStatus(metadata, status, { message, percent, sfm = null, artifacts = null, unreal = null, error = null } = {}) {
+  const phaseMessages = {
+    created: "Capture created. Request upload URLs when images are selected.",
+    uploading: "Signed upload URLs issued. Browser uploads should go directly to GCS.",
+    uploaded: "Upload marked complete.",
+    queued_reconstruction: "Capture queued for A100 reconstruction.",
+    validating_images: "Validating uploaded images.",
+    sfm_solving: "Solving camera poses with SfM.",
+    reconstructing_splat: "Running splat reconstruction.",
+    exporting_splat: "Exporting splat artifacts.",
+    extracting_mesh: "Running mesh extraction.",
+    postprocessing_mesh: "Postprocessing mesh for Unreal import.",
+    ready_for_unreal_import: "Reconstruction artifacts are ready for Unreal import.",
+    importing_unreal: "Importing reconstructed scene into Unreal.",
+    imported_unreal: "Unreal import complete.",
+    ready: "Scene is ready for launch.",
+    failed: "Capture processing failed.",
+    sfm_failed: "SfM failed."
+  };
+  const defaultPercents = {
+    created: 0,
+    uploading: 5,
+    uploaded: 10,
+    queued_reconstruction: 15,
+    validating_images: 25,
+    sfm_solving: 40,
+    reconstructing_splat: 52,
+    exporting_splat: 58,
+    extracting_mesh: 68,
+    postprocessing_mesh: 78,
+    ready_for_unreal_import: 86,
+    importing_unreal: 92,
+    imported_unreal: 98,
+    ready: 100,
+    failed: 100,
+    sfm_failed: 100
+  };
+
+  return {
+    contract_type: "capture_status",
+    schema_version: schemaVersion,
+    capture_id: metadata.capture_id,
+    display_name: metadata.display_name,
+    status,
+    updated_at: nowIso(),
+    gcs_prefix: metadata.gcs_prefix,
+    progress: {
+      phase: status,
+      message: message || phaseMessages[status] || "Capture status updated.",
+      percent: percent == null ? defaultPercents[status] || 0 : percent
+    },
+    sfm: sfm || {
+      input_images: Number(metadata.uploaded_image_count || 0),
+      registered_images: null
+    },
+    artifacts: artifacts || {
+      raw_metadata_uri: captureObjectUri(metadata.capture_id, "raw/metadata.json"),
+      sfm_report_uri: null,
+      splat_ply_uri: null,
+      splat_usdz_url: null,
+      mesh_preview_url: null,
+      unreal_mesh_url: null,
+      reconstruction_manifest_uri: null,
+      unreal_import_report_uri: null,
+      semantic_environment_uri: null
+    },
+    unreal: unreal || {
+      status: "not_started",
+      level_path: null,
+      import_report_uri: null
+    },
+    error
+  };
+}
+
+function validateCaptureCreateBody(body) {
+  const displayName = String(body.display_name || "").trim();
+  if (!displayName || displayName.length > 120) {
+    throw new HttpError(400, "display_name is required and must be at most 120 characters.");
+  }
+  const captureId = body.capture_id
+    ? validateIdentifier(body.capture_id, "capture_id")
+    : validateIdentifier(captureIdFromDisplayName(displayName), "generated capture_id");
+  return {
+    capture_id: captureId,
+    display_name: displayName,
+    operator_id: validateIdentifier(body.operator_id || "hackathon_demo", "operator_id"),
+    environment_type: validateTag(body.environment_type || "indoor_hallway", "environment_type"),
+    expected_image_count: validatePositiveInt(body.expected_image_count || 1, "expected_image_count"),
+    scale_hint: validateScaleHint(body.scale_hint),
+    notes: body.notes == null ? null : String(body.notes).slice(0, 1000)
+  };
+}
+
+function buildCaptureMetadata(input) {
+  return {
+    contract_type: "capture_metadata",
+    schema_version: schemaVersion,
+    capture_id: input.capture_id,
+    display_name: input.display_name,
+    operator_id: input.operator_id,
+    created_at: nowIso(),
+    environment_type: input.environment_type,
+    expected_image_count: input.expected_image_count,
+    uploaded_image_count: 0,
+    scale_hint: input.scale_hint,
+    notes: input.notes,
+    gcs_bucket: gcsBucket,
+    gcs_capture_prefix: gcsCapturePrefix,
+    gcs_prefix: captureGcsPrefix(input.capture_id),
+    signing_service_account: gcsSigningServiceAccount,
+    signing_region: gcsSigningRegion,
+    images: []
+  };
+}
+
+function validateUploadUrlBody(body) {
+  if (!Array.isArray(body.files) || !body.files.length || body.files.length > 5000) {
+    throw new HttpError(400, "files must contain between 1 and 5000 upload entries.");
+  }
+  const seen = new Set();
+  return body.files.map((file) => {
+    const filename = sanitizeFilename(file.filename);
+    const key = filename.toLowerCase();
+    if (seen.has(key)) throw new HttpError(400, `Duplicate upload filename: ${filename}.`);
+    seen.add(key);
+    return {
+      filename,
+      content_type: validateContentType(file.content_type || file.contentType),
+      size_bytes: validatePositiveInt(file.size_bytes, `size_bytes for ${filename}`, { min: 1, max: 50 * 1024 * 1024 * 1024 })
+    };
+  });
+}
+
+function buildCaptureArtifacts(captureId) {
+  const prefix = captureGcsPrefix(captureId);
+  const definitions = [
+    ["raw_metadata", "application/json", "raw/metadata.json"],
+    ["sfm_report", "application/json", "sfm/report.json"],
+    ["splat_ply", "application/octet-stream", "reconstruction/splat.ply"],
+    ["splat_usdz", "model/vnd.usdz+zip", "reconstruction/splat.usdz"],
+    ["mesh_dlnr_ply", "application/octet-stream", "reconstruction/mesh_dlnr.ply"],
+    ["reconstruction_report", "application/json", "reconstruction/report.json"],
+    ["unreal_mesh_glb", "model/gltf-binary", "unreal-import/scene_mesh.glb"],
+    ["unreal_mesh_decimated_glb", "model/gltf-binary", "unreal-import/scene_mesh_decimated.glb"],
+    ["collision_proxy_obj", "text/plain", "unreal-import/collision_proxy.obj"],
+    ["reconstruction_manifest", "application/json", "unreal-import/reconstruction_manifest.json"],
+    ["unreal_import_report", "application/json", "unreal/import_report.json"],
+    ["semantic_environment", "application/json", "unreal/semantic_environment.json"]
+  ];
+  return definitions.map(([artifactType, contentType, relativePath]) => {
+    const gcsUri = `${prefix}${relativePath}`;
+    return {
+      artifact_type: artifactType,
+      content_type: contentType,
+      gcs_uri: gcsUri,
+      url: `/api/v1/captures/${captureId}/artifacts/${artifactType}`
+    };
+  });
+}
+
+function artifactDefinitionForType(captureId, artifactType) {
+  return buildCaptureArtifacts(captureId).find((artifact) => artifact.artifact_type === artifactType) || null;
+}
+
+function buildRemoteCommand(template, fallback, variables = {}) {
+  let command = String(template || fallback);
+  Object.entries(variables).forEach(([key, value]) => {
+    command = command.replaceAll(`{${key}}`, String(value));
+  });
+  return command;
+}
+
+async function runGcloudSshTrigger({ instance, zone, project, command, timeout = workerTriggerTimeoutMs }) {
+  if (!workerTriggersEnabled) {
+    return { enabled: false, ok: true };
+  }
+  const result = await runCommand("gcloud", [
+    "compute",
+    "ssh",
+    instance,
+    `--zone=${zone}`,
+    `--project=${project}`,
+    "--command",
+    command
+  ], {
+    timeout,
+    maxBuffer: 256 * 1024,
+    textLimit: 12000
+  });
+  return { enabled: true, ...result };
+}
+
+function triggerReconstructionWorker(captureId) {
+  const fallback = `cd ~/adaptsim/repos/adaptsim-hackathon && adaptsim-reconstruct --capture-id ${captureId} --gcs-root ${gcsRootUri()}`;
+  const command = buildRemoteCommand(process.env.ADAPTSIM_A100_RECONSTRUCT_COMMAND, fallback, {
+    capture_id: captureId,
+    gcs_root: gcsRootUri()
+  });
+  return runGcloudSshTrigger({
+    instance: a100Instance,
+    zone: a100Zone,
+    project: a100Project,
+    command
+  });
+}
+
+function triggerPixelStreamingLaunch({ sceneId, scenarioId, runId }) {
+  const fallback = `cd ~/adaptsim/repos/adaptsim-hackathon && adaptsim-launch-scenario --scene-id ${sceneId} --scenario-id ${scenarioId} --run-id ${runId}`;
+  const command = buildRemoteCommand(process.env.ADAPTSIM_L4_LAUNCH_COMMAND, fallback, {
+    scene_id: sceneId,
+    scenario_id: scenarioId,
+    run_id: runId
+  });
+  return runGcloudSshTrigger({
+    instance: l4Instance,
+    zone: l4Zone,
+    project: l4Project,
+    command
+  });
+}
+
+function loadScenarioManifest(scenarioId) {
+  const safeScenarioId = validateIdentifier(scenarioId, "scenario_id");
+  const fileName = `${safeScenarioId}.json`;
+  const filePath = path.join(contractsExamplesDir, "scenario_manifests", fileName);
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function summarizeScenario(manifest) {
+  const severities = (manifest.events || []).map((event) => Number(event.severity || 0));
+  return {
+    scenario_id: manifest.scenario_id,
+    display_name: manifest.display_name,
+    status: "ready",
+    training_objective: manifest.training_objective,
+    event_count: Array.isArray(manifest.events) ? manifest.events.length : 0,
+    severity_max: severities.length ? Math.max(...severities) : 0,
+    manifest_url: `/api/v1/scenarios/${manifest.scenario_id}/manifest`
+  };
+}
+
+function loadDemoSceneStatus() {
+  const semanticEnvironment = readFixtureJson("semantic_environments", "scanned_hallway_alpha.json");
+  return {
+    scene_id: semanticEnvironment.environment_id,
+    display_name: "Horror Corridor",
+    status: "ready",
+    source_scan_id: semanticEnvironment.source_scan_id,
+    unreal_level_path: semanticEnvironment.unreal_level_path,
+    updated_at: "2026-05-02T16:45:00-07:00",
+    anchor_count: Array.isArray(semanticEnvironment.anchors) ? semanticEnvironment.anchors.length : 0,
+    scenario_count: demoScenarioIds.length,
+    stream: {
+      status: "available",
+      provider: "unreal_pixel_streaming"
+    },
+    artifacts: {
+      semantic_environment_url: "/api/v1/artifacts/semantic_environments/scan_hallway_alpha"
+    }
+  };
+}
+
+function buildSceneStatusFromCapture(captureStatus) {
+  const ready = captureStatus.status === "ready";
+  const reconstructingStatuses = new Set([
+    "queued_reconstruction",
+    "validating_images",
+    "sfm_solving",
+    "reconstructing_splat",
+    "exporting_splat",
+    "extracting_mesh",
+    "postprocessing_mesh"
+  ]);
+  const compiledStatuses = new Set(["ready_for_unreal_import", "importing_unreal", "imported_unreal"]);
+  const sceneStatus = ready
+    ? "ready"
+    : ["failed", "sfm_failed"].includes(captureStatus.status)
+      ? "failed"
+      : compiledStatuses.has(captureStatus.status)
+        ? "compiled"
+        : reconstructingStatuses.has(captureStatus.status)
+          ? "reconstructing"
+          : "uploading";
+  return {
+    scene_id: captureStatus.capture_id,
+    display_name: captureStatus.display_name,
+    status: sceneStatus,
+    source_scan_id: captureStatus.capture_id,
+    unreal_level_path: captureStatus.unreal?.level_path || null,
+    updated_at: captureStatus.updated_at,
+    anchor_count: 0,
+    scenario_count: ready ? demoScenarioIds.length : 0,
+    stream: {
+      status: ready ? "available" : "unavailable",
+      provider: "unreal_pixel_streaming"
+    },
+    artifacts: {
+      semantic_environment_url: captureStatus.artifacts?.semantic_environment_uri
+        ? `/api/v1/captures/${captureStatus.capture_id}/artifacts/semantic_environment`
+        : null
+    }
+  };
+}
+
+function runRecordForId(runId) {
+  if (launchedRuns.has(runId)) return launchedRuns.get(runId);
+  if (runId === demoRunId) {
+    return {
+      run_id: demoRunId,
+      scene_id: demoSceneId,
+      scenario_id: "scan_hallway_delay_001",
+      created_at_ms: Date.now() - streamReadyDelayMs,
+      status: "ready"
+    };
+  }
+  return null;
+}
+
+function buildRunId(scenarioId) {
+  const suffix = crypto.randomBytes(3).toString("hex");
+  return `run_${scenarioId}_${Date.now().toString(36)}_${suffix}`.slice(0, 96);
+}
+
+function streamEmbedUrl(runId) {
+  const url = new URL(pixelStreamUrl);
+  url.searchParams.set("run_id", runId);
+  return url.toString();
+}
+
+function streamSignalingUrl() {
+  if (process.env.ADAPTSIM_PIXEL_SIGNALING_URL) return process.env.ADAPTSIM_PIXEL_SIGNALING_URL;
+  const url = new URL(pixelStreamUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/signalling";
+  url.search = "";
+  return url.toString();
+}
+
+function rewriteTelemetryForRun(payload, run) {
+  const telemetry = cloneJson(payload);
+  telemetry.run_id = run.run_id;
+  telemetry.scenario_id = run.scenario_id;
+  telemetry.events = (telemetry.events || []).map((event) => ({
+    ...event,
+    run_id: run.run_id,
+    scenario_id: run.scenario_id
+  }));
+  return telemetry;
 }
 
 function readAsciiFromBuffer(buffer, offset, length) {
@@ -2254,6 +2847,327 @@ async function handlePhotoVision(request, response) {
   });
 }
 
+async function loadCaptureMetadata(captureId) {
+  return readJsonFromGcs(captureObjectUri(captureId, "raw/metadata.json"), { optional: true });
+}
+
+async function loadCaptureStatus(captureId) {
+  return readJsonFromGcs(captureObjectUri(captureId, "status.json"), { optional: true });
+}
+
+async function handleCreateCapture(request, response) {
+  requireJsonRequest(request);
+  const body = await readJsonBody(request);
+  const input = validateCaptureCreateBody(body);
+  const metadata = buildCaptureMetadata(input);
+  const status = buildCaptureStatus(metadata, "created");
+
+  await writeJsonToGcs(captureObjectUri(input.capture_id, "raw/metadata.json"), metadata);
+  await writeJsonToGcs(captureObjectUri(input.capture_id, "status.json"), status);
+
+  sendJson(request, response, 201, {
+    capture_id: input.capture_id,
+    status: "created",
+    gcs_prefix: metadata.gcs_prefix
+  });
+}
+
+async function handleUploadUrls(request, response, captureId) {
+  requireJsonRequest(request);
+  const safeCaptureId = validateIdentifier(captureId, "capture_id");
+  const metadata = await loadCaptureMetadata(safeCaptureId);
+  if (!metadata) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+
+  const body = await readJsonBody(request, 512 * 1024);
+  const files = validateUploadUrlBody(body);
+  const uploads = [];
+  for (const file of files) {
+    const gcsUri = captureObjectUri(safeCaptureId, `raw/images/${file.filename}`);
+    const uploadUrl = await signGcsUrl(gcsUri, {
+      method: "PUT",
+      contentType: file.content_type,
+      duration: gcsSignedUrlDuration
+    });
+    uploads.push({
+      filename: file.filename,
+      method: "PUT",
+      upload_url: uploadUrl,
+      gcs_uri: gcsUri,
+      content_type: file.content_type,
+      size_bytes: file.size_bytes,
+      headers: {
+        "Content-Type": file.content_type
+      },
+      expires_at: expiresAtFromDuration(gcsSignedUrlDuration)
+    });
+  }
+
+  const uploadManifest = {
+    contract_type: "capture_upload_manifest",
+    schema_version: schemaVersion,
+    capture_id: safeCaptureId,
+    created_at: nowIso(),
+    uploads: uploads.map(({ upload_url, headers, ...item }) => ({ ...item, required_headers: headers }))
+  };
+  const status = buildCaptureStatus(metadata, "uploading", {
+    sfm: {
+      input_images: files.length,
+      registered_images: null
+    }
+  });
+
+  await writeJsonToGcs(captureObjectUri(safeCaptureId, "raw/upload_manifest.json"), uploadManifest);
+  await writeJsonToGcs(captureObjectUri(safeCaptureId, "status.json"), status);
+
+  sendJson(request, response, 200, {
+    capture_id: safeCaptureId,
+    uploads
+  });
+}
+
+async function handleSubmitCapture(request, response, captureId) {
+  requireJsonRequest(request);
+  const safeCaptureId = validateIdentifier(captureId, "capture_id");
+  const metadata = await loadCaptureMetadata(safeCaptureId);
+  if (!metadata) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+
+  const body = await readJsonBody(request);
+  const uploadedImageCount = validatePositiveInt(body.uploaded_image_count, "uploaded_image_count");
+  const shouldStartReconstruction = body.start_reconstruction !== false;
+  const uploadManifest = await readJsonFromGcs(captureObjectUri(safeCaptureId, "raw/upload_manifest.json"), { optional: true }).catch(() => null);
+  const manifestUploads = Array.isArray(uploadManifest?.uploads) ? uploadManifest.uploads : [];
+  const images = manifestUploads.slice(0, uploadedImageCount).map((item) => ({
+    filename: item.filename,
+    content_type: item.content_type,
+    size_bytes: item.size_bytes,
+    gcs_uri: item.gcs_uri
+  }));
+  const updatedMetadata = {
+    ...metadata,
+    uploaded_image_count: uploadedImageCount,
+    images: images.length === uploadedImageCount ? images : []
+  };
+  const statusName = shouldStartReconstruction ? "queued_reconstruction" : "uploaded";
+  const status = buildCaptureStatus(updatedMetadata, statusName, {
+    sfm: {
+      input_images: uploadedImageCount,
+      registered_images: null
+    }
+  });
+
+  await writeJsonToGcs(captureObjectUri(safeCaptureId, "raw/metadata.json"), updatedMetadata);
+  await writeJsonToGcs(captureObjectUri(safeCaptureId, "status.json"), status);
+
+  if (shouldStartReconstruction) {
+    triggerReconstructionWorker(safeCaptureId).then((result) => {
+      if (result.enabled && !result.ok) {
+        console.error(`A100 reconstruction trigger failed for ${safeCaptureId}: ${result.stderr || result.stdout || result.exitCode}`);
+      }
+    }).catch((error) => {
+      console.error(`A100 reconstruction trigger failed for ${safeCaptureId}: ${error.message}`);
+    });
+  }
+
+  sendJson(request, response, 200, {
+    capture_id: safeCaptureId,
+    status: statusName,
+    status_url: `/api/v1/captures/${safeCaptureId}/status`
+  });
+}
+
+async function handleCaptureStatus(request, response, captureId) {
+  const safeCaptureId = validateIdentifier(captureId, "capture_id");
+  const status = await loadCaptureStatus(safeCaptureId);
+  if (!status) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+  sendJson(request, response, 200, status);
+}
+
+async function handleCaptureArtifacts(request, response, captureId) {
+  const safeCaptureId = validateIdentifier(captureId, "capture_id");
+  const status = await loadCaptureStatus(safeCaptureId);
+  if (!status) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+  sendJson(request, response, 200, {
+    capture_id: safeCaptureId,
+    artifacts: buildCaptureArtifacts(safeCaptureId)
+  });
+}
+
+async function handleCaptureArtifactDownload(request, response, captureId, artifactType) {
+  const safeCaptureId = validateIdentifier(captureId, "capture_id");
+  const safeArtifactType = validateTag(artifactType, "artifact_type");
+  const status = await loadCaptureStatus(safeCaptureId);
+  if (!status) throw new HttpError(404, `Capture ${safeCaptureId} was not found.`);
+  const artifact = artifactDefinitionForType(safeCaptureId, safeArtifactType);
+  if (!artifact) throw new HttpError(404, `Artifact ${safeArtifactType} is not known for capture ${safeCaptureId}.`);
+  const signedUrl = await signGcsUrl(artifact.gcs_uri, { method: "GET" });
+  setSecurityHeaders(response);
+  setCorsHeaders(request, response);
+  response.writeHead(302, {
+    Location: signedUrl,
+    "Cache-Control": "no-store"
+  });
+  response.end();
+}
+
+async function handleSceneStatus(request, response, sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  if (safeSceneId === demoSceneId) {
+    sendJson(request, response, 200, loadDemoSceneStatus());
+    return;
+  }
+  const captureStatus = await loadCaptureStatus(safeSceneId);
+  if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
+  sendJson(request, response, 200, buildSceneStatusFromCapture(captureStatus));
+}
+
+async function handleSceneScenarios(request, response, sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  if (safeSceneId !== demoSceneId) {
+    const captureStatus = await loadCaptureStatus(safeSceneId);
+    if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
+    if (captureStatus.status !== "ready") {
+      sendJson(request, response, 200, { scene_id: safeSceneId, scenarios: [] });
+      return;
+    }
+  }
+  const scenarios = demoScenarioIds
+    .map((scenarioId) => loadScenarioManifest(scenarioId))
+    .filter(Boolean)
+    .map(summarizeScenario);
+  sendJson(request, response, 200, {
+    scene_id: safeSceneId,
+    scenarios
+  });
+}
+
+async function handleScenarioManifest(request, response, scenarioId) {
+  const manifest = loadScenarioManifest(scenarioId);
+  if (!manifest) throw new HttpError(404, `Scenario ${scenarioId} was not found.`);
+  sendJson(request, response, 200, manifest);
+}
+
+async function handleLaunchScenario(request, response, sceneId, scenarioId) {
+  requireJsonRequest(request);
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  const safeScenarioId = validateIdentifier(scenarioId, "scenario_id");
+  const manifest = loadScenarioManifest(safeScenarioId);
+  if (!manifest) throw new HttpError(404, `Scenario ${safeScenarioId} was not found.`);
+  if (safeSceneId !== demoSceneId) {
+    const captureStatus = await loadCaptureStatus(safeSceneId);
+    if (!captureStatus) throw new HttpError(404, `Scene ${safeSceneId} was not found.`);
+  }
+
+  await readJsonBody(request).catch(() => ({}));
+  const runId = buildRunId(safeScenarioId);
+  const run = {
+    run_id: runId,
+    scene_id: safeSceneId,
+    scenario_id: safeScenarioId,
+    created_at_ms: Date.now(),
+    status: "launching"
+  };
+  launchedRuns.set(runId, run);
+
+  triggerPixelStreamingLaunch({ sceneId: safeSceneId, scenarioId: safeScenarioId, runId }).then((result) => {
+    if (result.enabled && !result.ok) {
+      console.error(`Pixel Streaming launch trigger failed for ${runId}: ${result.stderr || result.stdout || result.exitCode}`);
+    }
+  }).catch((error) => {
+    console.error(`Pixel Streaming launch trigger failed for ${runId}: ${error.message}`);
+  });
+
+  sendJson(request, response, 202, {
+    run_id: runId,
+    scene_id: safeSceneId,
+    scenario_id: safeScenarioId,
+    status: "launching",
+    stream: {
+      status: "launching",
+      embed_url: null,
+      poll_url: `/api/v1/runs/${runId}/stream`
+    }
+  });
+}
+
+async function handleRunStream(request, response, runId) {
+  const safeRunId = String(runId || "").trim();
+  const run = runRecordForId(safeRunId);
+  if (!run) throw new HttpError(404, `Run ${safeRunId} was not found.`);
+  const ready = Date.now() - run.created_at_ms >= streamReadyDelayMs;
+  if (ready) run.status = "ready";
+  sendJson(request, response, 200, {
+    run_id: safeRunId,
+    status: ready ? "ready" : "launching",
+    stream: {
+      status: ready ? "ready" : "launching",
+      provider: "unreal_pixel_streaming",
+      embed_url: ready ? streamEmbedUrl(safeRunId) : null,
+      signaling_url: ready ? streamSignalingUrl() : null,
+      expires_at: ready ? new Date(Date.now() + streamTtlMs).toISOString() : null
+    }
+  });
+}
+
+async function handleRunTelemetry(request, response, runId) {
+  const safeRunId = String(runId || "").trim();
+  const run = runRecordForId(safeRunId);
+  if (!run) throw new HttpError(404, `Run ${safeRunId} was not found.`);
+  const telemetry = rewriteTelemetryForRun(readFixtureJson("telemetry", "mock_hallway_delay_log.json"), run);
+  const url = new URL(request.url, "http://local");
+  const tail = Number(url.searchParams.get("tail"));
+  if (Number.isInteger(tail) && tail > 0) {
+    telemetry.events = telemetry.events.slice(-tail);
+  }
+  sendJson(request, response, 200, telemetry);
+}
+
+async function handleRunArtifacts(request, response, runId) {
+  const safeRunId = String(runId || "").trim();
+  const run = runRecordForId(safeRunId);
+  if (!run) throw new HttpError(404, `Run ${safeRunId} was not found.`);
+  sendJson(request, response, 200, {
+    run_id: safeRunId,
+    artifacts: [
+      {
+        artifact_type: "scenario_manifest",
+        content_type: "application/json",
+        url: `/api/v1/scenarios/${run.scenario_id}/manifest`
+      },
+      {
+        artifact_type: "telemetry_log",
+        content_type: "application/json",
+        url: `/api/v1/runs/${safeRunId}/telemetry`
+      },
+      {
+        artifact_type: "after_action_review",
+        content_type: "text/markdown",
+        url: `/api/v1/runs/${safeRunId}/aar`
+      }
+    ]
+  });
+}
+
+async function handleRunAar(request, response, runId) {
+  const safeRunId = String(runId || "").trim();
+  const run = runRecordForId(safeRunId);
+  if (!run) throw new HttpError(404, `Run ${safeRunId} was not found.`);
+  const markdown = readFixtureText("aar", "mock_hallway_delay_log_aar.md")
+    .replaceAll(demoRunId, safeRunId)
+    .replaceAll("scan_hallway_delay_001", run.scenario_id);
+  sendJson(request, response, 200, {
+    run_id: safeRunId,
+    scenario_id: run.scenario_id,
+    content_type: "text/markdown",
+    markdown
+  });
+}
+
+async function handleSemanticEnvironmentArtifact(request, response, sceneId) {
+  const safeSceneId = validateIdentifier(sceneId, "scene_id");
+  if (safeSceneId !== demoSceneId) throw new HttpError(404, `Semantic environment ${safeSceneId} was not found.`);
+  sendJson(request, response, 200, readFixtureJson("semantic_environments", "scanned_hallway_alpha.json"));
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     if (!isAllowedOrigin(request)) {
@@ -2273,6 +3187,11 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && pathname === "/api/health") {
       sendJson(request, response, 200, { ok: true, service: "adaptsim-api" });
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/v1/health") {
+      sendJson(request, response, 200, { ok: true, service: "adaptsim-control-api", schema_version: schemaVersion });
       return;
     }
 
@@ -2305,6 +3224,95 @@ const server = http.createServer(async (request, response) => {
     const trellisRelayMatch = pathname?.match(/^\/api(?:\/v1)?\/generative-assets\/sessions\/([a-z0-9_]+)\/trellis$/i);
     if (request.method === "POST" && trellisRelayMatch) {
       await handleRelayTrellisSession(request, response, trellisRelayMatch[1]);
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/v1/captures") {
+      await handleCreateCapture(request, response);
+      return;
+    }
+
+    let match = pathname?.match(/^\/api\/v1\/captures\/([^/]+)\/upload-urls$/);
+    if (request.method === "POST" && match) {
+      await handleUploadUrls(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/captures\/([^/]+)\/submit$/);
+    if (request.method === "POST" && match) {
+      await handleSubmitCapture(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/captures\/([^/]+)\/status$/);
+    if (request.method === "GET" && match) {
+      await handleCaptureStatus(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/captures\/([^/]+)\/artifacts$/);
+    if (request.method === "GET" && match) {
+      await handleCaptureArtifacts(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/captures\/([^/]+)\/artifacts\/([^/]+)$/);
+    if (request.method === "GET" && match) {
+      await handleCaptureArtifactDownload(request, response, match[1], match[2]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/scenes\/([^/]+)\/status$/);
+    if (request.method === "GET" && match) {
+      await handleSceneStatus(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/scenes\/([^/]+)\/scenarios$/);
+    if (request.method === "GET" && match) {
+      await handleSceneScenarios(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/scenarios\/([^/]+)\/manifest$/);
+    if (request.method === "GET" && match) {
+      await handleScenarioManifest(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/scenes\/([^/]+)\/scenarios\/([^/]+)\/launch$/);
+    if (request.method === "POST" && match) {
+      await handleLaunchScenario(request, response, match[1], match[2]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/runs\/([^/]+)\/stream$/);
+    if (request.method === "GET" && match) {
+      await handleRunStream(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/runs\/([^/]+)\/telemetry$/);
+    if (request.method === "GET" && match) {
+      await handleRunTelemetry(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/runs\/([^/]+)\/artifacts$/);
+    if (request.method === "GET" && match) {
+      await handleRunArtifacts(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/runs\/([^/]+)\/aar$/);
+    if (request.method === "GET" && match) {
+      await handleRunAar(request, response, match[1]);
+      return;
+    }
+
+    match = pathname?.match(/^\/api\/v1\/artifacts\/semantic_environments\/([^/]+)$/);
+    if (request.method === "GET" && match) {
+      await handleSemanticEnvironmentArtifact(request, response, match[1]);
       return;
     }
 

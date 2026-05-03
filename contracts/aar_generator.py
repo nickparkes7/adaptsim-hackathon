@@ -25,6 +25,7 @@ SUPPORTED_INPUTS = {
 KEY_EVENT_TYPES = {
     "trigger_fired",
     "asset_spawned",
+    "adversary_spawned",
     "perception_contact",
     "trainee_action",
     "actor_state",
@@ -233,6 +234,67 @@ def summarize_run(context: AarContext) -> list[str]:
     return lines
 
 
+def telemetry_coverage_lines(events: list[TelemetryEvent]) -> list[str]:
+    counts = Counter(event.event_type for event in events)
+    has_adversary_spawn = any(
+        event.event_type == "adversary_spawned"
+        or (
+            event.event_type == "asset_spawned"
+            and event.asset_id
+            and event.asset_id.startswith("adversary_")
+        )
+        for event in events
+    )
+    has_trainee_action = any(event.event_type == "trainee_action" for event in events)
+    has_trainee_position_or_progress = any(
+        (
+            event.source == "trainee"
+            and (
+                event.position_m is not None
+                or "position_m" in event.data
+                or "progress" in event.data
+                or "route_progress" in event.data
+            )
+        )
+        or (
+            event.event_type == "objective_update"
+            and (
+                str(event.data.get("actor_id") or "").lower().startswith("trainee")
+                or str(event.actor_id or "").lower().startswith("trainee")
+            )
+        )
+        for event in events
+    )
+
+    checks = [
+        ("run_started", counts["run_started"] > 0, f"{counts['run_started']} event(s)"),
+        ("trigger_fired", counts["trigger_fired"] > 0, f"{counts['trigger_fired']} event(s)"),
+        ("asset_spawned", counts["asset_spawned"] > 0, f"{counts['asset_spawned']} event(s)"),
+        (
+            "asset/adversary spawned",
+            has_adversary_spawn,
+            "adversary_spawned or adversary asset_spawned telemetry present",
+        ),
+        (
+            "trainee_action or trainee position/progress",
+            has_trainee_action or has_trainee_position_or_progress,
+            "needed for response/progress coaching",
+        ),
+        ("run_ended", counts["run_ended"] > 0, f"{counts['run_ended']} event(s)"),
+    ]
+
+    lines: list[str] = []
+    for label, present, detail in checks:
+        status = "present" if present else "missing"
+        lines.append(f"- `{label}`: {status} ({detail})")
+    if not (has_trainee_action or has_trainee_position_or_progress):
+        lines.append(
+            "- AAR cannot score trainee response from this run without a trainee_action, "
+            "trainee position, or trainee progress marker."
+        )
+    return lines
+
+
 def timeline_lines(events: list[TelemetryEvent]) -> list[str]:
     if not events:
         return ["- No telemetry events supplied."]
@@ -419,6 +481,9 @@ def render_markdown(context: AarContext) -> str:
         "",
         "## Run Summary",
         *summarize_run(context),
+        "",
+        "## Telemetry Coverage",
+        *telemetry_coverage_lines(context.events),
         "",
         "## Timeline",
         *timeline_lines(context.events),

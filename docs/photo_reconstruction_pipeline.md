@@ -48,12 +48,57 @@ A100: navsus-compute-service-account@gecko-dev-fde.iam.gserviceaccount.com
 L4:   photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
 ```
 
+For MVP signed browser uploads, the control API should run under local
+Application Default Credentials and impersonate the existing L4/storage service
+account. A dedicated `adaptsim-url-signer` service account could not be created
+with the current user's permissions, so do not use that name in code or docs.
+
+```text
+GCS_BUCKET=aiscanners-hackathon2025
+GCS_CAPTURE_PREFIX=adaptsim-captures
+GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+GCS_SIGNING_REGION=us
+```
+
+Local setup for the control API:
+
+```bash
+gcloud auth application-default login
+```
+
+The local principal must be able to impersonate
+`photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com` for signed URL
+generation. A `gcloud storage sign-url` PUT probe succeeded with
+`--impersonate-service-account=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com`
+and `--region=us`. The `--region=us` value is required because this bucket is a
+US multi-region bucket and auto-detection may fail under impersonation.
+`navsus-compute-service-account@gecko-dev-fde.iam.gserviceaccount.com` has
+bucket access for the A100 VM, but the local user could not impersonate it for
+signed URL generation.
+
 Verified access-check objects:
 
 ```text
 gs://aiscanners-hackathon2025/adaptsim-captures/_access_checks/a100-instance-02.txt
 gs://aiscanners-hackathon2025/adaptsim-captures/_access_checks/linux-pixel-streaming.txt
 ```
+
+### Browser Upload CORS
+
+Bucket CORS is configured from `infra/gcp/gcs-cors.json` and was applied to
+`gs://aiscanners-hackathon2025` on 2026-05-03 UTC.
+
+Allowed origins:
+
+```text
+http://127.0.0.1:5173
+http://localhost:5173
+http://127.0.0.1:8787
+http://localhost:8787
+```
+
+Allowed methods are `GET`, `HEAD`, `PUT`, `POST`, and `OPTIONS`. Exposed
+headers are `Content-Type`, `ETag`, and `x-goog-generation`.
 
 ### A100 Reconstruction VM
 
@@ -468,7 +513,9 @@ POST /captures/{capture_id}/upload-urls
 POST /captures/{capture_id}/submit
 ```
 
-Bucket CORS must allow the frontend origin and upload methods.
+Bucket CORS must allow the frontend origin and upload methods. The MVP CORS
+configuration is checked in at `infra/gcp/gcs-cors.json` and has already been
+applied to `gs://aiscanners-hackathon2025`.
 
 ### FE-3: Capture Guidance
 
@@ -543,11 +590,28 @@ Minimum responsibilities:
 Initial state can live in GCS JSON files. Add a database only when needed for
 auth, multi-user ownership, or richer job history.
 
+MVP control API GCS configuration:
+
+```text
+GCS_BUCKET=aiscanners-hackathon2025
+GCS_CAPTURE_PREFIX=adaptsim-captures
+GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+GCS_SIGNING_REGION=us
+```
+
+Use local Application Default Credentials for development. The signed URL
+implementation should impersonate the service account above, not rely on a
+downloaded JSON key.
+
+MVP worker trigger strategy: the control API should invoke checked-in worker
+CLIs over `gcloud compute ssh` to the A100 and L4 VMs. Pub/Sub, Cloud Run, and
+object notification orchestration can come after the hackathon path is working.
+
 ## Parallelization
 
 Can start in parallel:
 
-- GCS CORS and signed URL proof of concept.
+- Control API signed URL implementation using the confirmed GCS config.
 - A100 reconstruction CLI skeleton.
 - L4 import CLI wrapper.
 - Frontend upload/status UI.
@@ -571,7 +635,7 @@ frontend uploads images
 ## Immediate Next Tasks
 
 1. Add capture status and reconstruction manifest models under `contracts/`.
-2. Add GCS CORS config under `infra/gcp/` and test browser-compatible signed uploads.
+2. Implement signed upload URL generation using the confirmed GCS signer config.
 3. Build `workers/a100-reconstruction` CLI that can download a capture and write status/logs.
 4. Add the COLMAP stage and verify `SfmScene.from_colmap(...)` loads the result.
 5. Run FVDB on one real uploaded capture and publish `splat.ply`, `splat.usdz`, and `mesh_dlnr.ply`.
@@ -581,11 +645,6 @@ frontend uploads images
 
 ## Open Questions
 
-- Which service will own signed URL generation: a new control API in this repo,
-  or an existing backend/frontend project?
-- What frontend origin(s) should bucket CORS allow?
 - What scale calibration method is acceptable for the demo?
-- Should A100 jobs be triggered by API calls, polling GCS status, or Pub/Sub
-  object notifications?
 - Which mesh postprocessing stack should be standardized?
 - What polygon budgets are acceptable for Unreal render mesh and collision proxy?

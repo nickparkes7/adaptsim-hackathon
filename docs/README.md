@@ -6,7 +6,8 @@ Start here when resuming project context.
 
 - `photo_reconstruction_pipeline.md`: persistent plan for frontend image upload,
   GCS handoff, A100 FVDB reconstruction, L4 Unreal import, repo layout, parallel
-  workstreams, next tasks, and open questions.
+  workstreams, confirmed signed URL service account, next tasks, and open
+  questions.
 - `web_app_integration_spec.md`: frontend/API contract for demo playback plus
   capture upload, signed upload URLs, reconstruction status, and artifacts.
 - `scan_import_runbook.md`: Unreal scan import commands, including GCS handoff
@@ -25,4 +26,10 @@ The compact VM and bucket baseline lives in:
 
 ```text
 .agents/skills/adaptsim-vm-operator/references/vm-baseline.md
+```
+
+The browser upload CORS config lives in:
+
+```text
+infra/gcp/gcs-cors.json
 ```

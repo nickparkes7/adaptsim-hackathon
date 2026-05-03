@@ -1,0 +1,160 @@
+{
+  "contract_type": "reconstruction_manifest",
+  "schema_version": "1.0",
+  "capture_id": "safety_park",
+  "generated_at": "2026-05-03T04:55:00Z",
+  "gcs_prefix": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/",
+  "worker": {
+    "worker_id": "a100_reconstruction",
+    "vm_instance": "a100-instance-02",
+    "zone": "us-east1-b",
+    "tool_versions": {
+      "colmap": "cuda",
+      "frgs": "fvdb-reality-capture 0.4.0",
+      "torch": "2.10.0+cu130"
+    }
+  },
+  "raw_metadata_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/metadata.json",
+  "image_count": 6,
+  "registered_image_count": 6,
+  "sparse_point_count": 184522,
+  "reconstruction_method": "fvdb_frgs_dlnr_mesh",
+  "dlnr_truncation_margin_m": 0.1,
+  "coordinate_frame": {
+    "units": "meters",
+    "up_axis": "z",
+    "forward_axis": "x",
+    "handedness": "right",
+    "scale_to_meters": 1.0
+  },
+  "transform_to_unreal": {
+    "origin": "operator_marker",
+    "scale": 100.0,
+    "rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "translation_m": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "source_mesh": {
+    "vertices": 612438,
+    "faces": 1224876,
+    "bounds_m": {
+      "center_m": [
+        0.0,
+        0.0,
+        1.1
+      ],
+      "size_m": {
+        "x": 18.4,
+        "y": 12.2,
+        "z": 2.8
+      }
+    }
+  },
+  "render_mesh": {
+    "vertices": 248112,
+    "faces": 496220,
+    "bounds_m": {
+      "center_m": [
+        0.0,
+        0.0,
+        1.1
+      ],
+      "size_m": {
+        "x": 18.4,
+        "y": 12.2,
+        "z": 2.8
+      }
+    }
+  },
+  "collision_proxy": {
+    "vertices": 8420,
+    "faces": 16780,
+    "bounds_m": {
+      "center_m": [
+        0.0,
+        0.0,
+        1.1
+      ],
+      "size_m": {
+        "x": 18.4,
+        "y": 12.2,
+        "z": 2.8
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "artifact_type": "raw_metadata",
+      "content_type": "application/json",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/metadata.json",
+      "size_bytes": 4096,
+      "sha256": null
+    },
+    {
+      "artifact_type": "sfm_report",
+      "content_type": "application/json",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/sfm/colmap/report.json",
+      "size_bytes": 8192,
+      "sha256": null
+    },
+    {
+      "artifact_type": "splat_ply",
+      "content_type": "application/octet-stream",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/reconstruction/splat.ply",
+      "size_bytes": 243089112,
+      "sha256": null
+    },
+    {
+      "artifact_type": "splat_usdz",
+      "content_type": "model/vnd.usdz+zip",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/reconstruction/splat.usdz",
+      "size_bytes": 98122144,
+      "sha256": null
+    },
+    {
+      "artifact_type": "mesh_dlnr_ply",
+      "content_type": "application/octet-stream",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/reconstruction/mesh_dlnr.ply",
+      "size_bytes": 182440904,
+      "sha256": null
+    },
+    {
+      "artifact_type": "unreal_mesh_glb",
+      "content_type": "model/gltf-binary",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/scene_mesh.glb",
+      "size_bytes": 95423312,
+      "sha256": null
+    },
+    {
+      "artifact_type": "unreal_mesh_decimated_glb",
+      "content_type": "model/gltf-binary",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/scene_mesh_decimated.glb",
+      "size_bytes": 38122080,
+      "sha256": null
+    },
+    {
+      "artifact_type": "collision_proxy_obj",
+      "content_type": "text/plain",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/collision_proxy.obj",
+      "size_bytes": 2104400,
+      "sha256": null
+    },
+    {
+      "artifact_type": "reconstruction_manifest",
+      "content_type": "application/json",
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/reconstruction_manifest.json",
+      "size_bytes": 12288,
+      "sha256": null
+    }
+  ],
+  "warnings": [
+    "Scale is operator-provided from a known distance marker."
+  ]
+}

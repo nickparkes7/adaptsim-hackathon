@@ -1,0 +1,432 @@
+{
+  "$defs": {
+    "CaptureArtifactLinks": {
+      "additionalProperties": false,
+      "properties": {
+        "mesh_preview_url": {
+          "anyOf": [
+            {
+              "pattern": "^(https?://|/api/).+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mesh Preview Url"
+        },
+        "raw_metadata_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Metadata Uri"
+        },
+        "reconstruction_manifest_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reconstruction Manifest Uri"
+        },
+        "semantic_environment_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Environment Uri"
+        },
+        "sfm_report_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sfm Report Uri"
+        },
+        "splat_ply_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Splat Ply Uri"
+        },
+        "splat_usdz_url": {
+          "anyOf": [
+            {
+              "pattern": "^(https?://|/api/).+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Splat Usdz Url"
+        },
+        "unreal_import_report_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unreal Import Report Uri"
+        },
+        "unreal_mesh_url": {
+          "anyOf": [
+            {
+              "pattern": "^(https?://|/api/).+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unreal Mesh Url"
+        }
+      },
+      "title": "CaptureArtifactLinks",
+      "type": "object"
+    },
+    "CaptureError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "failed_phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "created",
+                "uploading",
+                "uploaded",
+                "queued_reconstruction",
+                "validating_images",
+                "sfm_solving",
+                "sfm_failed",
+                "reconstructing_splat",
+                "exporting_splat",
+                "extracting_mesh",
+                "postprocessing_mesh",
+                "ready_for_unreal_import",
+                "importing_unreal",
+                "imported_unreal",
+                "ready",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Failed Phase"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "CaptureError",
+      "type": "object"
+    },
+    "CaptureProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Percent",
+          "type": "integer"
+        },
+        "phase": {
+          "enum": [
+            "created",
+            "uploading",
+            "uploaded",
+            "queued_reconstruction",
+            "validating_images",
+            "sfm_solving",
+            "sfm_failed",
+            "reconstructing_splat",
+            "exporting_splat",
+            "extracting_mesh",
+            "postprocessing_mesh",
+            "ready_for_unreal_import",
+            "importing_unreal",
+            "imported_unreal",
+            "ready",
+            "failed"
+          ],
+          "title": "Phase",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "message",
+        "percent"
+      ],
+      "title": "CaptureProgress",
+      "type": "object"
+    },
+    "CaptureSfmStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "input_images": {
+          "minimum": 0,
+          "title": "Input Images",
+          "type": "integer"
+        },
+        "registered_images": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registered Images"
+        },
+        "report_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report Uri"
+        },
+        "sparse_points": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sparse Points"
+        }
+      },
+      "required": [
+        "input_images"
+      ],
+      "title": "CaptureSfmStatus",
+      "type": "object"
+    },
+    "CaptureUnrealStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "import_report_uri": {
+          "anyOf": [
+            {
+              "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Import Report Uri"
+        },
+        "level_path": {
+          "anyOf": [
+            {
+              "pattern": "^/Game/.+",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level Path"
+        },
+        "status": {
+          "default": "not_started",
+          "enum": [
+            "not_started",
+            "queued",
+            "importing",
+            "imported",
+            "ready",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "CaptureUnrealStatus",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/capture_status.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "$ref": "#/$defs/CaptureArtifactLinks"
+    },
+    "capture_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "contract_type": {
+      "const": "capture_status",
+      "default": "capture_status",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CaptureError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "gcs_prefix": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Gcs Prefix",
+      "type": "string"
+    },
+    "progress": {
+      "$ref": "#/$defs/CaptureProgress"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sfm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CaptureSfmStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "status": {
+      "enum": [
+        "created",
+        "uploading",
+        "uploaded",
+        "queued_reconstruction",
+        "validating_images",
+        "sfm_solving",
+        "sfm_failed",
+        "reconstructing_splat",
+        "exporting_splat",
+        "extracting_mesh",
+        "postprocessing_mesh",
+        "ready_for_unreal_import",
+        "importing_unreal",
+        "imported_unreal",
+        "ready",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "unreal": {
+      "$ref": "#/$defs/CaptureUnrealStatus"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "capture_id",
+    "display_name",
+    "status",
+    "updated_at",
+    "gcs_prefix",
+    "progress"
+  ],
+  "title": "CaptureStatus",
+  "type": "object"
+}

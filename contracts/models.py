@@ -7,13 +7,64 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCHEMA_VERSION = "1.0"
+GCS_BUCKET = "aiscanners-hackathon2025"
+GCS_CAPTURE_PREFIX = "adaptsim-captures"
+GCS_SIGNING_SERVICE_ACCOUNT = "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com"
+GCS_SIGNING_REGION = "us"
 
 Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")]
 Tag = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
 AssetPath = Annotated[str, Field(pattern=r"^/Game/.+")]
+GcsUri = Annotated[str, Field(pattern=r"^gs://[A-Za-z0-9._-]+/.+")]
+HttpOrApiUrl = Annotated[str, Field(pattern=r"^(https?://|/api/).+")]
 Probability = Annotated[float, Field(ge=0, le=1)]
 Meters = float
 JsonScalar = str | int | float | bool | None
+
+CapturePhase = Literal[
+    "created",
+    "uploading",
+    "uploaded",
+    "queued_reconstruction",
+    "validating_images",
+    "sfm_solving",
+    "sfm_failed",
+    "reconstructing_splat",
+    "exporting_splat",
+    "extracting_mesh",
+    "postprocessing_mesh",
+    "ready_for_unreal_import",
+    "importing_unreal",
+    "imported_unreal",
+    "ready",
+    "failed",
+]
+
+ArtifactType = Literal[
+    "raw_metadata",
+    "raw_image",
+    "image_validation_log",
+    "sfm_report",
+    "colmap_sparse_model",
+    "splat_ply",
+    "splat_usdz",
+    "mesh_dlnr_ply",
+    "reconstruction_report",
+    "unreal_mesh_glb",
+    "unreal_mesh_decimated_glb",
+    "collision_proxy_obj",
+    "reconstruction_manifest",
+    "unreal_import_report",
+    "semantic_environment",
+    "import_log",
+    "unreal_level",
+    "asset_card",
+    "scenario_manifest",
+]
+
+
+def expected_capture_gcs_prefix(capture_id: str) -> str:
+    return f"gs://{GCS_BUCKET}/{GCS_CAPTURE_PREFIX}/captures/{capture_id}/"
 
 
 class ContractModel(BaseModel):
@@ -33,6 +84,368 @@ class BoundsM(ContractModel):
 class Transform(ContractModel):
     location_m: tuple[float, float, float]
     rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+class ScaleHint(ContractModel):
+    type: Literal["known_distance", "calibration_marker", "unknown"]
+    label: str | None = Field(default=None, max_length=96)
+    distance_m: float | None = Field(default=None, gt=0)
+    confidence: Literal["operator_provided", "estimated", "unknown"] = "unknown"
+
+    @model_validator(mode="after")
+    def validate_scale_fields(self) -> ScaleHint:
+        if self.type in {"known_distance", "calibration_marker"} and self.distance_m is None:
+            raise ValueError(f"{self.type} scale_hint requires distance_m")
+        if self.type == "unknown" and self.distance_m is not None:
+            raise ValueError("unknown scale_hint must not include distance_m")
+        return self
+
+
+class CaptureImage(ContractModel):
+    filename: str = Field(pattern=r"^[A-Za-z0-9_. -]{1,160}$")
+    content_type: Literal["image/jpeg", "image/png", "image/heic", "image/heif"]
+    size_bytes: int = Field(gt=0)
+    gcs_uri: GcsUri
+    width_px: int | None = Field(default=None, gt=0)
+    height_px: int | None = Field(default=None, gt=0)
+    sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+class CaptureMetadata(ContractModel):
+    contract_type: Literal["capture_metadata"] = "capture_metadata"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    display_name: str = Field(min_length=1, max_length=120)
+    operator_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    created_at: datetime
+    environment_type: Tag = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    expected_image_count: int = Field(ge=1, le=5000)
+    uploaded_image_count: int = Field(ge=0, le=5000)
+    scale_hint: ScaleHint
+    notes: str | None = Field(default=None, max_length=1000)
+    gcs_bucket: Literal["aiscanners-hackathon2025"] = GCS_BUCKET
+    gcs_capture_prefix: Literal["adaptsim-captures"] = GCS_CAPTURE_PREFIX
+    gcs_prefix: GcsUri
+    signing_service_account: Literal[
+        "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com"
+    ] = GCS_SIGNING_SERVICE_ACCOUNT
+    signing_region: Literal["us"] = GCS_SIGNING_REGION
+    images: list[CaptureImage] = Field(default_factory=list, max_length=5000)
+
+    @model_validator(mode="after")
+    def validate_capture_storage(self) -> CaptureMetadata:
+        expected_prefix = expected_capture_gcs_prefix(self.capture_id)
+        if self.gcs_prefix != expected_prefix:
+            raise ValueError(f"gcs_prefix must be {expected_prefix!r}")
+        if self.images and self.uploaded_image_count != len(self.images):
+            raise ValueError("uploaded_image_count must match images length when images are listed")
+        image_prefix = f"{expected_prefix}raw/images/"
+        filenames = [image.filename for image in self.images]
+        duplicates = {filename for filename in filenames if filenames.count(filename) > 1}
+        if duplicates:
+            raise ValueError(f"duplicate image filenames: {sorted(duplicates)}")
+        for image in self.images:
+            if not image.gcs_uri.startswith(image_prefix):
+                raise ValueError(f"image {image.filename!r} gcs_uri must start with {image_prefix!r}")
+        return self
+
+
+class CaptureProgress(ContractModel):
+    phase: CapturePhase
+    message: str = Field(min_length=1, max_length=300)
+    percent: int = Field(ge=0, le=100)
+
+
+class CaptureSfmStatus(ContractModel):
+    input_images: int = Field(ge=0)
+    registered_images: int | None = Field(default=None, ge=0)
+    sparse_points: int | None = Field(default=None, ge=0)
+    report_uri: GcsUri | None = None
+
+
+class CaptureArtifactLinks(ContractModel):
+    raw_metadata_uri: GcsUri | None = None
+    sfm_report_uri: GcsUri | None = None
+    splat_ply_uri: GcsUri | None = None
+    splat_usdz_url: HttpOrApiUrl | None = None
+    mesh_preview_url: HttpOrApiUrl | None = None
+    unreal_mesh_url: HttpOrApiUrl | None = None
+    reconstruction_manifest_uri: GcsUri | None = None
+    unreal_import_report_uri: GcsUri | None = None
+    semantic_environment_uri: GcsUri | None = None
+
+
+class CaptureUnrealStatus(ContractModel):
+    status: Literal["not_started", "queued", "importing", "imported", "ready", "failed"] = "not_started"
+    level_path: AssetPath | None = None
+    import_report_uri: GcsUri | None = None
+
+    @model_validator(mode="after")
+    def validate_level_requirement(self) -> CaptureUnrealStatus:
+        if self.status in {"imported", "ready"} and not self.level_path:
+            raise ValueError("imported or ready Unreal status requires level_path")
+        return self
+
+
+class CaptureError(ContractModel):
+    code: Tag = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    message: str = Field(min_length=1, max_length=500)
+    failed_phase: CapturePhase | None = None
+    retryable: bool = False
+
+
+class CaptureStatus(ContractModel):
+    contract_type: Literal["capture_status"] = "capture_status"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    display_name: str = Field(min_length=1, max_length=120)
+    status: CapturePhase
+    updated_at: datetime
+    gcs_prefix: GcsUri
+    progress: CaptureProgress
+    sfm: CaptureSfmStatus | None = None
+    artifacts: CaptureArtifactLinks = Field(default_factory=CaptureArtifactLinks)
+    unreal: CaptureUnrealStatus = Field(default_factory=CaptureUnrealStatus)
+    error: CaptureError | None = None
+
+    @model_validator(mode="after")
+    def validate_status_consistency(self) -> CaptureStatus:
+        expected_prefix = expected_capture_gcs_prefix(self.capture_id)
+        if self.gcs_prefix != expected_prefix:
+            raise ValueError(f"gcs_prefix must be {expected_prefix!r}")
+        if self.progress.phase != self.status:
+            raise ValueError("progress.phase must match status")
+        if self.status in {"sfm_failed", "failed"} and self.error is None:
+            raise ValueError("failed statuses require error")
+        if self.status == "ready":
+            if self.progress.percent != 100:
+                raise ValueError("ready status requires progress.percent=100")
+            if self.unreal.status != "ready":
+                raise ValueError("ready status requires unreal.status='ready'")
+        return self
+
+
+class WorkerInfo(ContractModel):
+    worker_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    vm_instance: str = Field(min_length=1, max_length=96)
+    zone: str = Field(min_length=1, max_length=64)
+    tool_versions: dict[str, str] = Field(default_factory=dict, max_length=32)
+
+
+class BoxBounds(ContractModel):
+    center_m: tuple[float, float, float]
+    size_m: BoundsM
+
+
+class ReconstructionArtifact(ContractModel):
+    artifact_type: ArtifactType
+    content_type: str = Field(min_length=1, max_length=120)
+    gcs_uri: GcsUri
+    size_bytes: int | None = Field(default=None, gt=0)
+    sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+class CoordinateFrame(ContractModel):
+    units: Literal["meters"] = "meters"
+    up_axis: Literal["z", "y"] = "z"
+    forward_axis: Literal["x", "y", "-x", "-y"] = "x"
+    handedness: Literal["right", "left"] = "right"
+    scale_to_meters: float = Field(gt=0)
+
+
+class UnrealTransformHint(ContractModel):
+    origin: Literal["capture_origin", "mesh_centroid", "operator_marker", "unknown"]
+    scale: float = Field(gt=0)
+    rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+class MeshStats(ContractModel):
+    vertices: int = Field(ge=0)
+    faces: int = Field(ge=0)
+    bounds_m: BoxBounds
+
+
+class ReconstructionManifest(ContractModel):
+    contract_type: Literal["reconstruction_manifest"] = "reconstruction_manifest"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_at: datetime
+    gcs_prefix: GcsUri
+    worker: WorkerInfo
+    raw_metadata_uri: GcsUri
+    image_count: int = Field(ge=1, le=5000)
+    registered_image_count: int = Field(ge=0, le=5000)
+    sparse_point_count: int | None = Field(default=None, ge=0)
+    reconstruction_method: Literal["fvdb_frgs_dlnr_mesh"] = "fvdb_frgs_dlnr_mesh"
+    dlnr_truncation_margin_m: float = Field(gt=0)
+    coordinate_frame: CoordinateFrame
+    transform_to_unreal: UnrealTransformHint
+    source_mesh: MeshStats
+    render_mesh: MeshStats
+    collision_proxy: MeshStats | None = None
+    artifacts: list[ReconstructionArtifact] = Field(min_length=1, max_length=32)
+    warnings: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> ReconstructionManifest:
+        expected_prefix = expected_capture_gcs_prefix(self.capture_id)
+        if self.gcs_prefix != expected_prefix:
+            raise ValueError(f"gcs_prefix must be {expected_prefix!r}")
+        if self.registered_image_count > self.image_count:
+            raise ValueError("registered_image_count cannot exceed image_count")
+        artifact_types = [artifact.artifact_type for artifact in self.artifacts]
+        duplicates = {artifact_type for artifact_type in artifact_types if artifact_types.count(artifact_type) > 1}
+        if duplicates:
+            raise ValueError(f"duplicate artifact_type values: {sorted(duplicates)}")
+        required = {"raw_metadata", "sfm_report", "mesh_dlnr_ply", "unreal_mesh_glb"}
+        missing = required - set(artifact_types)
+        if missing:
+            raise ValueError(f"reconstruction manifest missing required artifacts: {sorted(missing)}")
+        for artifact in self.artifacts:
+            if not artifact.gcs_uri.startswith(expected_prefix):
+                raise ValueError(f"{artifact.artifact_type} gcs_uri must start with {expected_prefix!r}")
+        return self
+
+
+class UnrealImportedAsset(ContractModel):
+    asset_type: Literal["level", "static_mesh", "material", "texture", "collision", "navmesh", "player_start"]
+    asset_path: AssetPath
+    source_artifact_type: ArtifactType | None = None
+
+
+class UnrealImportValidation(ContractModel):
+    level_exists: bool
+    static_mesh_count: int = Field(ge=0)
+    materials_assigned: bool
+    collision_configured: bool
+    nanite_enabled: bool
+    player_start_present: bool
+    navmesh_bounds_present: bool
+    semantic_placeholders_present: bool
+
+
+class UnrealImportReport(ContractModel):
+    contract_type: Literal["unreal_import_report"] = "unreal_import_report"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_at: datetime
+    status: Literal["imported_unreal", "ready", "failed"]
+    worker: WorkerInfo
+    reconstruction_manifest_uri: GcsUri
+    gcs_prefix: GcsUri
+    unreal_project_path: str = Field(min_length=1, max_length=260)
+    content_root_path: AssetPath
+    level_path: AssetPath | None = None
+    imported_assets: list[UnrealImportedAsset] = Field(default_factory=list, max_length=64)
+    validation: UnrealImportValidation
+    import_duration_s: float | None = Field(default=None, ge=0)
+    import_log_uri: GcsUri | None = None
+    semantic_environment_uri: GcsUri | None = None
+    warnings: list[str] = Field(default_factory=list, max_length=32)
+    errors: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_import_report(self) -> UnrealImportReport:
+        expected_prefix = expected_capture_gcs_prefix(self.capture_id)
+        if self.gcs_prefix != expected_prefix:
+            raise ValueError(f"gcs_prefix must be {expected_prefix!r}")
+        if not self.reconstruction_manifest_uri.startswith(expected_prefix):
+            raise ValueError("reconstruction_manifest_uri must be under capture gcs_prefix")
+        if self.import_log_uri and not self.import_log_uri.startswith(expected_prefix):
+            raise ValueError("import_log_uri must be under capture gcs_prefix")
+        if self.semantic_environment_uri and not self.semantic_environment_uri.startswith(expected_prefix):
+            raise ValueError("semantic_environment_uri must be under capture gcs_prefix")
+        if self.status in {"imported_unreal", "ready"}:
+            if not self.level_path:
+                raise ValueError("successful Unreal imports require level_path")
+            if not self.imported_assets:
+                raise ValueError("successful Unreal imports require imported_assets")
+            checks = self.validation
+            if not (
+                checks.level_exists
+                and checks.static_mesh_count > 0
+                and checks.materials_assigned
+                and checks.collision_configured
+                and checks.player_start_present
+                and checks.navmesh_bounds_present
+                and checks.semantic_placeholders_present
+            ):
+                raise ValueError("successful Unreal imports require core validation checks to pass")
+        if self.status == "failed" and not self.errors:
+            raise ValueError("failed Unreal imports require errors")
+        return self
+
+
+class AssetGenerationSource(ContractModel):
+    reconstruction_manifest_uri: GcsUri | None = None
+    unreal_import_report_uri: GcsUri | None = None
+    semantic_environment_uri: GcsUri | None = None
+
+
+class AssetGenerationRequest(ContractModel):
+    contract_type: Literal["asset_generation_request"] = "asset_generation_request"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    request_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    requested_at: datetime
+    requester_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    source: AssetGenerationSource
+    outputs_requested: list[Literal["semantic_environment", "asset_card", "scenario_manifest"]] = Field(
+        min_length=1,
+        max_length=8,
+    )
+    notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator("outputs_requested")
+    @classmethod
+    def validate_outputs_requested(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("outputs_requested must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_source_present(self) -> AssetGenerationRequest:
+        if not (
+            self.source.reconstruction_manifest_uri
+            or self.source.unreal_import_report_uri
+            or self.source.semantic_environment_uri
+        ):
+            raise ValueError("asset generation request requires at least one source URI")
+        return self
+
+
+class GeneratedAssetReference(ContractModel):
+    artifact_type: Literal["semantic_environment", "asset_card", "scenario_manifest", "unreal_level"]
+    artifact_id: Identifier | None = None
+    gcs_uri: GcsUri | None = None
+    unreal_asset_path: AssetPath | None = None
+
+    @model_validator(mode="after")
+    def validate_reference_target(self) -> GeneratedAssetReference:
+        if not self.gcs_uri and not self.unreal_asset_path:
+            raise ValueError("generated asset references require gcs_uri or unreal_asset_path")
+        return self
+
+
+class AssetGenerationResult(ContractModel):
+    contract_type: Literal["asset_generation_result"] = "asset_generation_result"
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    request_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    capture_id: Identifier = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    generated_at: datetime
+    status: Literal["queued", "running", "succeeded", "failed"]
+    generated_assets: list[GeneratedAssetReference] = Field(default_factory=list, max_length=32)
+    warnings: list[str] = Field(default_factory=list, max_length=32)
+    errors: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_result_status(self) -> AssetGenerationResult:
+        if self.status == "succeeded" and not self.generated_assets:
+            raise ValueError("succeeded asset generation results require generated_assets")
+        if self.status == "failed" and not self.errors:
+            raise ValueError("failed asset generation results require errors")
+        return self
 
 
 class AssetCard(ContractModel):
@@ -446,6 +859,12 @@ class AfterActionReviewInput(ContractModel):
 
 
 CONTRACT_MODELS = {
+    "capture_metadata": CaptureMetadata,
+    "capture_status": CaptureStatus,
+    "reconstruction_manifest": ReconstructionManifest,
+    "unreal_import_report": UnrealImportReport,
+    "asset_generation_request": AssetGenerationRequest,
+    "asset_generation_result": AssetGenerationResult,
     "asset_card": AssetCard,
     "behavior_profile": BehaviorProfile,
     "semantic_anchor": SemanticAnchor,

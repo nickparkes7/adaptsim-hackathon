@@ -1,0 +1,37 @@
+{
+  "contract_type": "capture_status",
+  "schema_version": "1.0",
+  "capture_id": "safety_park",
+  "display_name": "Safety Park Golden Capture",
+  "status": "queued_reconstruction",
+  "updated_at": "2026-05-03T04:20:00Z",
+  "gcs_prefix": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/",
+  "progress": {
+    "phase": "queued_reconstruction",
+    "message": "Capture upload is complete and waiting for the A100 reconstruction worker.",
+    "percent": 12
+  },
+  "sfm": {
+    "input_images": 6,
+    "registered_images": null,
+    "sparse_points": null,
+    "report_uri": null
+  },
+  "artifacts": {
+    "raw_metadata_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/metadata.json",
+    "sfm_report_uri": null,
+    "splat_ply_uri": null,
+    "splat_usdz_url": null,
+    "mesh_preview_url": null,
+    "unreal_mesh_url": null,
+    "reconstruction_manifest_uri": null,
+    "unreal_import_report_uri": null,
+    "semantic_environment_uri": null
+  },
+  "unreal": {
+    "status": "not_started",
+    "level_path": null,
+    "import_report_uri": null
+  },
+  "error": null
+}

@@ -1,0 +1,257 @@
+{
+  "$defs": {
+    "CaptureImage": {
+      "additionalProperties": false,
+      "properties": {
+        "content_type": {
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/heic",
+            "image/heif"
+          ],
+          "title": "Content Type",
+          "type": "string"
+        },
+        "filename": {
+          "pattern": "^[A-Za-z0-9_. -]{1,160}$",
+          "title": "Filename",
+          "type": "string"
+        },
+        "gcs_uri": {
+          "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+          "title": "Gcs Uri",
+          "type": "string"
+        },
+        "height_px": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height Px"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "width_px": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Px"
+        }
+      },
+      "required": [
+        "filename",
+        "content_type",
+        "size_bytes",
+        "gcs_uri"
+      ],
+      "title": "CaptureImage",
+      "type": "object"
+    },
+    "ScaleHint": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "default": "unknown",
+          "enum": [
+            "operator_provided",
+            "estimated",
+            "unknown"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "distance_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distance M"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 96,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "enum": [
+            "known_distance",
+            "calibration_marker",
+            "unknown"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ScaleHint",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/capture_metadata.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capture_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "contract_type": {
+      "const": "capture_metadata",
+      "default": "capture_metadata",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "environment_type": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "title": "Environment Type",
+      "type": "string"
+    },
+    "expected_image_count": {
+      "maximum": 5000,
+      "minimum": 1,
+      "title": "Expected Image Count",
+      "type": "integer"
+    },
+    "gcs_bucket": {
+      "const": "aiscanners-hackathon2025",
+      "default": "aiscanners-hackathon2025",
+      "title": "Gcs Bucket",
+      "type": "string"
+    },
+    "gcs_capture_prefix": {
+      "const": "adaptsim-captures",
+      "default": "adaptsim-captures",
+      "title": "Gcs Capture Prefix",
+      "type": "string"
+    },
+    "gcs_prefix": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Gcs Prefix",
+      "type": "string"
+    },
+    "images": {
+      "items": {
+        "$ref": "#/$defs/CaptureImage"
+      },
+      "maxItems": 5000,
+      "title": "Images",
+      "type": "array"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "operator_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Operator Id",
+      "type": "string"
+    },
+    "scale_hint": {
+      "$ref": "#/$defs/ScaleHint"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signing_region": {
+      "const": "us",
+      "default": "us",
+      "title": "Signing Region",
+      "type": "string"
+    },
+    "signing_service_account": {
+      "const": "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com",
+      "default": "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com",
+      "title": "Signing Service Account",
+      "type": "string"
+    },
+    "uploaded_image_count": {
+      "maximum": 5000,
+      "minimum": 0,
+      "title": "Uploaded Image Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "capture_id",
+    "display_name",
+    "operator_id",
+    "created_at",
+    "environment_type",
+    "expected_image_count",
+    "uploaded_image_count",
+    "scale_hint",
+    "gcs_prefix"
+  ],
+  "title": "CaptureMetadata",
+  "type": "object"
+}

@@ -1,0 +1,305 @@
+{
+  "$defs": {
+    "UnrealImportValidation": {
+      "additionalProperties": false,
+      "properties": {
+        "collision_configured": {
+          "title": "Collision Configured",
+          "type": "boolean"
+        },
+        "level_exists": {
+          "title": "Level Exists",
+          "type": "boolean"
+        },
+        "materials_assigned": {
+          "title": "Materials Assigned",
+          "type": "boolean"
+        },
+        "nanite_enabled": {
+          "title": "Nanite Enabled",
+          "type": "boolean"
+        },
+        "navmesh_bounds_present": {
+          "title": "Navmesh Bounds Present",
+          "type": "boolean"
+        },
+        "player_start_present": {
+          "title": "Player Start Present",
+          "type": "boolean"
+        },
+        "semantic_placeholders_present": {
+          "title": "Semantic Placeholders Present",
+          "type": "boolean"
+        },
+        "static_mesh_count": {
+          "minimum": 0,
+          "title": "Static Mesh Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "level_exists",
+        "static_mesh_count",
+        "materials_assigned",
+        "collision_configured",
+        "nanite_enabled",
+        "player_start_present",
+        "navmesh_bounds_present",
+        "semantic_placeholders_present"
+      ],
+      "title": "UnrealImportValidation",
+      "type": "object"
+    },
+    "UnrealImportedAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_path": {
+          "pattern": "^/Game/.+",
+          "title": "Asset Path",
+          "type": "string"
+        },
+        "asset_type": {
+          "enum": [
+            "level",
+            "static_mesh",
+            "material",
+            "texture",
+            "collision",
+            "navmesh",
+            "player_start"
+          ],
+          "title": "Asset Type",
+          "type": "string"
+        },
+        "source_artifact_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "raw_metadata",
+                "raw_image",
+                "image_validation_log",
+                "sfm_report",
+                "colmap_sparse_model",
+                "splat_ply",
+                "splat_usdz",
+                "mesh_dlnr_ply",
+                "reconstruction_report",
+                "unreal_mesh_glb",
+                "unreal_mesh_decimated_glb",
+                "collision_proxy_obj",
+                "reconstruction_manifest",
+                "unreal_import_report",
+                "semantic_environment",
+                "import_log",
+                "unreal_level",
+                "asset_card",
+                "scenario_manifest"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Artifact Type"
+        }
+      },
+      "required": [
+        "asset_type",
+        "asset_path"
+      ],
+      "title": "UnrealImportedAsset",
+      "type": "object"
+    },
+    "WorkerInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 32,
+          "title": "Tool Versions",
+          "type": "object"
+        },
+        "vm_instance": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Vm Instance",
+          "type": "string"
+        },
+        "worker_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Worker Id",
+          "type": "string"
+        },
+        "zone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Zone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker_id",
+        "vm_instance",
+        "zone"
+      ],
+      "title": "WorkerInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/unreal_import_report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capture_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "content_root_path": {
+      "pattern": "^/Game/.+",
+      "title": "Content Root Path",
+      "type": "string"
+    },
+    "contract_type": {
+      "const": "unreal_import_report",
+      "default": "unreal_import_report",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Errors",
+      "type": "array"
+    },
+    "gcs_prefix": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Gcs Prefix",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "import_duration_s": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Import Duration S"
+    },
+    "import_log_uri": {
+      "anyOf": [
+        {
+          "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Import Log Uri"
+    },
+    "imported_assets": {
+      "items": {
+        "$ref": "#/$defs/UnrealImportedAsset"
+      },
+      "maxItems": 64,
+      "title": "Imported Assets",
+      "type": "array"
+    },
+    "level_path": {
+      "anyOf": [
+        {
+          "pattern": "^/Game/.+",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Level Path"
+    },
+    "reconstruction_manifest_uri": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Reconstruction Manifest Uri",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "semantic_environment_uri": {
+      "anyOf": [
+        {
+          "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Semantic Environment Uri"
+    },
+    "status": {
+      "enum": [
+        "imported_unreal",
+        "ready",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "unreal_project_path": {
+      "maxLength": 260,
+      "minLength": 1,
+      "title": "Unreal Project Path",
+      "type": "string"
+    },
+    "validation": {
+      "$ref": "#/$defs/UnrealImportValidation"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Warnings",
+      "type": "array"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerInfo"
+    }
+  },
+  "required": [
+    "capture_id",
+    "generated_at",
+    "status",
+    "worker",
+    "reconstruction_manifest_uri",
+    "gcs_prefix",
+    "unreal_project_path",
+    "content_root_path",
+    "validation"
+  ],
+  "title": "UnrealImportReport",
+  "type": "object"
+}

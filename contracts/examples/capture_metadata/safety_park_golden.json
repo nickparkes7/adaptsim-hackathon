@@ -1,0 +1,79 @@
+{
+  "contract_type": "capture_metadata",
+  "schema_version": "1.0",
+  "capture_id": "safety_park",
+  "display_name": "Safety Park Golden Capture",
+  "operator_id": "hackathon_demo",
+  "created_at": "2026-05-03T04:12:00Z",
+  "environment_type": "outdoor_training_area",
+  "expected_image_count": 6,
+  "uploaded_image_count": 6,
+  "scale_hint": {
+    "type": "known_distance",
+    "label": "painted lane width",
+    "distance_m": 3.05,
+    "confidence": "operator_provided"
+  },
+  "notes": "Golden safety park capture used to verify the direct GCS upload, A100 reconstruction, and L4 Unreal import handoff.",
+  "gcs_bucket": "aiscanners-hackathon2025",
+  "gcs_capture_prefix": "adaptsim-captures",
+  "gcs_prefix": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/",
+  "signing_service_account": "photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com",
+  "signing_region": "us",
+  "images": [
+    {
+      "filename": "IMG_0001.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4210192,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0001.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "filename": "IMG_0002.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4384810,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0002.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "filename": "IMG_0003.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4162244,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0003.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "filename": "IMG_0004.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4479031,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0004.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    {
+      "filename": "IMG_0005.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4297740,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0005.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "filename": "IMG_0006.jpg",
+      "content_type": "image/jpeg",
+      "size_bytes": 4336412,
+      "gcs_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/images/IMG_0006.jpg",
+      "width_px": 4032,
+      "height_px": 3024,
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  ]
+}

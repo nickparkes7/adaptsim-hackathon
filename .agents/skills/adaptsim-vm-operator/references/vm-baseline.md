@@ -41,6 +41,38 @@ L4 linux-pixel-streaming:
   access check: gs://aiscanners-hackathon2025/adaptsim-captures/_access_checks/linux-pixel-streaming.txt
 ```
 
+## Control API Signed Upload URLs
+
+For MVP browser uploads, the control API should use local Application Default
+Credentials and impersonate the existing service account below. A dedicated
+`adaptsim-url-signer` service account could not be created with the current
+user's IAM permissions, so future agents should not assume it exists.
+
+```text
+GCS_BUCKET=aiscanners-hackathon2025
+GCS_CAPTURE_PREFIX=adaptsim-captures
+GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+GCS_SIGNING_REGION=us
+```
+
+Required local auth:
+
+```bash
+gcloud auth application-default login
+```
+
+The active local principal must be able to impersonate
+`photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com`. A signed URL PUT
+probe succeeded with that service account and `--region=us`. Use the explicit
+region when signing because auto-detection can fail under impersonation for the
+US multi-region bucket. Do not use
+`navsus-compute-service-account@gecko-dev-fde.iam.gserviceaccount.com` for
+local signed URL generation unless IAM changes; the local user could not
+impersonate it during setup.
+
+Browser upload CORS is checked in at `infra/gcp/gcs-cors.json` and was applied
+to `gs://aiscanners-hackathon2025` on 2026-05-03 UTC.
+
 ## L4 Unreal / Pixel Streaming SSH Command
 
 ```bash

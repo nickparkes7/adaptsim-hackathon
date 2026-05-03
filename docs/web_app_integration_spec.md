@@ -160,6 +160,21 @@ Response:
 Returns signed URLs for direct browser uploads to GCS. The browser should use
 these URLs directly; images should not be proxied through the A100.
 
+MVP signing configuration for the control API:
+
+```text
+GCS_BUCKET=aiscanners-hackathon2025
+GCS_CAPTURE_PREFIX=adaptsim-captures
+GCS_SIGNING_SERVICE_ACCOUNT=photogrammetry-test@gecko-dev-fde.iam.gserviceaccount.com
+GCS_SIGNING_REGION=us
+```
+
+Development should use local Application Default Credentials, for example
+`gcloud auth application-default login`, then impersonate the signing service
+account. Do not expect an `adaptsim-url-signer` service account; it could not be
+created with the current user's IAM permissions. Browser upload CORS is checked
+in at `infra/gcp/gcs-cors.json` and has already been applied to the bucket.
+
 Request:
 
 ```json

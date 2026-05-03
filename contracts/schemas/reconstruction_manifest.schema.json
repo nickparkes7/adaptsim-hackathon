@@ -1,0 +1,451 @@
+{
+  "$defs": {
+    "BoundsM": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "exclusiveMinimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "exclusiveMinimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "exclusiveMinimum": 0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "title": "BoundsM",
+      "type": "object"
+    },
+    "BoxBounds": {
+      "additionalProperties": false,
+      "properties": {
+        "center_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Center M",
+          "type": "array"
+        },
+        "size_m": {
+          "$ref": "#/$defs/BoundsM"
+        }
+      },
+      "required": [
+        "center_m",
+        "size_m"
+      ],
+      "title": "BoxBounds",
+      "type": "object"
+    },
+    "CoordinateFrame": {
+      "additionalProperties": false,
+      "properties": {
+        "forward_axis": {
+          "default": "x",
+          "enum": [
+            "x",
+            "y",
+            "-x",
+            "-y"
+          ],
+          "title": "Forward Axis",
+          "type": "string"
+        },
+        "handedness": {
+          "default": "right",
+          "enum": [
+            "right",
+            "left"
+          ],
+          "title": "Handedness",
+          "type": "string"
+        },
+        "scale_to_meters": {
+          "exclusiveMinimum": 0,
+          "title": "Scale To Meters",
+          "type": "number"
+        },
+        "units": {
+          "const": "meters",
+          "default": "meters",
+          "title": "Units",
+          "type": "string"
+        },
+        "up_axis": {
+          "default": "z",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "title": "Up Axis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scale_to_meters"
+      ],
+      "title": "CoordinateFrame",
+      "type": "object"
+    },
+    "MeshStats": {
+      "additionalProperties": false,
+      "properties": {
+        "bounds_m": {
+          "$ref": "#/$defs/BoxBounds"
+        },
+        "faces": {
+          "minimum": 0,
+          "title": "Faces",
+          "type": "integer"
+        },
+        "vertices": {
+          "minimum": 0,
+          "title": "Vertices",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "vertices",
+        "faces",
+        "bounds_m"
+      ],
+      "title": "MeshStats",
+      "type": "object"
+    },
+    "ReconstructionArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_type": {
+          "enum": [
+            "raw_metadata",
+            "raw_image",
+            "image_validation_log",
+            "sfm_report",
+            "colmap_sparse_model",
+            "splat_ply",
+            "splat_usdz",
+            "mesh_dlnr_ply",
+            "reconstruction_report",
+            "unreal_mesh_glb",
+            "unreal_mesh_decimated_glb",
+            "collision_proxy_obj",
+            "reconstruction_manifest",
+            "unreal_import_report",
+            "semantic_environment",
+            "import_log",
+            "unreal_level",
+            "asset_card",
+            "scenario_manifest"
+          ],
+          "title": "Artifact Type",
+          "type": "string"
+        },
+        "content_type": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Content Type",
+          "type": "string"
+        },
+        "gcs_uri": {
+          "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+          "title": "Gcs Uri",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "size_bytes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Bytes"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "content_type",
+        "gcs_uri"
+      ],
+      "title": "ReconstructionArtifact",
+      "type": "object"
+    },
+    "UnrealTransformHint": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "enum": [
+            "capture_origin",
+            "mesh_centroid",
+            "operator_marker",
+            "unknown"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "rotation_deg": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Deg",
+          "type": "array"
+        },
+        "scale": {
+          "exclusiveMinimum": 0,
+          "title": "Scale",
+          "type": "number"
+        },
+        "translation_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Translation M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "origin",
+        "scale"
+      ],
+      "title": "UnrealTransformHint",
+      "type": "object"
+    },
+    "WorkerInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 32,
+          "title": "Tool Versions",
+          "type": "object"
+        },
+        "vm_instance": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Vm Instance",
+          "type": "string"
+        },
+        "worker_id": {
+          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+          "title": "Worker Id",
+          "type": "string"
+        },
+        "zone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Zone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker_id",
+        "vm_instance",
+        "zone"
+      ],
+      "title": "WorkerInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://adaptsim.local/contracts/reconstruction_manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ReconstructionArtifact"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "capture_id": {
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "collision_proxy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MeshStats"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "contract_type": {
+      "const": "reconstruction_manifest",
+      "default": "reconstruction_manifest",
+      "title": "Contract Type",
+      "type": "string"
+    },
+    "coordinate_frame": {
+      "$ref": "#/$defs/CoordinateFrame"
+    },
+    "dlnr_truncation_margin_m": {
+      "exclusiveMinimum": 0,
+      "title": "Dlnr Truncation Margin M",
+      "type": "number"
+    },
+    "gcs_prefix": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Gcs Prefix",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "image_count": {
+      "maximum": 5000,
+      "minimum": 1,
+      "title": "Image Count",
+      "type": "integer"
+    },
+    "raw_metadata_uri": {
+      "pattern": "^gs://[A-Za-z0-9._-]+/.+",
+      "title": "Raw Metadata Uri",
+      "type": "string"
+    },
+    "reconstruction_method": {
+      "const": "fvdb_frgs_dlnr_mesh",
+      "default": "fvdb_frgs_dlnr_mesh",
+      "title": "Reconstruction Method",
+      "type": "string"
+    },
+    "registered_image_count": {
+      "maximum": 5000,
+      "minimum": 0,
+      "title": "Registered Image Count",
+      "type": "integer"
+    },
+    "render_mesh": {
+      "$ref": "#/$defs/MeshStats"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_mesh": {
+      "$ref": "#/$defs/MeshStats"
+    },
+    "sparse_point_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sparse Point Count"
+    },
+    "transform_to_unreal": {
+      "$ref": "#/$defs/UnrealTransformHint"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Warnings",
+      "type": "array"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerInfo"
+    }
+  },
+  "required": [
+    "capture_id",
+    "generated_at",
+    "gcs_prefix",
+    "worker",
+    "raw_metadata_uri",
+    "image_count",
+    "registered_image_count",
+    "dlnr_truncation_margin_m",
+    "coordinate_frame",
+    "transform_to_unreal",
+    "source_mesh",
+    "render_mesh",
+    "artifacts"
+  ],
+  "title": "ReconstructionManifest",
+  "type": "object"
+}

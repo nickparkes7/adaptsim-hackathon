@@ -1,0 +1,37 @@
+{
+  "contract_type": "capture_status",
+  "schema_version": "1.0",
+  "capture_id": "safety_park",
+  "display_name": "Safety Park Golden Capture",
+  "status": "ready",
+  "updated_at": "2026-05-03T05:08:00Z",
+  "gcs_prefix": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/",
+  "progress": {
+    "phase": "ready",
+    "message": "Reconstruction artifacts were imported into Unreal and the scene is ready for launch.",
+    "percent": 100
+  },
+  "sfm": {
+    "input_images": 6,
+    "registered_images": 6,
+    "sparse_points": 184522,
+    "report_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/sfm/colmap/report.json"
+  },
+  "artifacts": {
+    "raw_metadata_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/raw/metadata.json",
+    "sfm_report_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/sfm/colmap/report.json",
+    "splat_ply_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/reconstruction/splat.ply",
+    "splat_usdz_url": "/api/v1/captures/safety_park/artifacts/splat_usdz",
+    "mesh_preview_url": "/api/v1/captures/safety_park/artifacts/mesh_preview",
+    "unreal_mesh_url": "/api/v1/captures/safety_park/artifacts/unreal_mesh_glb",
+    "reconstruction_manifest_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal-import/reconstruction_manifest.json",
+    "unreal_import_report_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal/import_report.json",
+    "semantic_environment_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal/semantic_environment.json"
+  },
+  "unreal": {
+    "status": "ready",
+    "level_path": "/Game/AdaptSim/Maps/L_Reconstructed_safety_park",
+    "import_report_uri": "gs://aiscanners-hackathon2025/adaptsim-captures/captures/safety_park/unreal/import_report.json"
+  },
+  "error": null
+}

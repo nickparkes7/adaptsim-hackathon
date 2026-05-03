@@ -86,7 +86,17 @@
             "actor_state",
             "hit_event",
             "objective_update",
-            "run_ended"
+            "run_ended",
+            "adversary_spawned",
+            "behavior_binding",
+            "behavior_profile_started",
+            "phase_changed",
+            "perception_target_seen",
+            "contact_opened",
+            "withdraw_started",
+            "move_to_fallback_started",
+            "move_to_fallback_succeeded",
+            "move_to_fallback_failed"
           ],
           "title": "Event Type",
           "type": "string"

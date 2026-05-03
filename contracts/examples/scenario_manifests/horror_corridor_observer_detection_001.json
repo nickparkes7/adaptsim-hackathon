@@ -52,9 +52,7 @@
       "intent": "observe_and_withdraw",
       "required_tags": [
         "observation_point",
-        "line_of_sight",
-        "cover",
-        "fallback_route"
+        "line_of_sight"
       ],
       "avoid_tags": [
         "trainee_visible"
@@ -67,10 +65,11 @@
         "trigger_type": "trainee_enters_anchor",
         "anchor_id": "hallway_center"
       },
-      "rationale": "observation_point overlooks hallway_center and links through the corridor graph to exit, making it a compact observer detection check.",
+      "rationale": "observation_point is the deterministic line-of-sight placement hint; cover and exit are carried as separate runtime hints so ScenarioDirector does not fall back away from the named observer anchor.",
       "max_distance_to_trainee_m": 18.0,
       "parameters": {
         "anchor_hint": "observation_point",
+        "cover_anchor_hint": "cover",
         "withdraw_anchor_hint": "exit",
         "withdraw_when_detected": true
       }

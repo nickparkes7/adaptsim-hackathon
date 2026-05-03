@@ -1,0 +1,79 @@
+{
+  "contract_type": "scenario_manifest",
+  "schema_version": "1.0",
+  "scenario_id": "horror_corridor_imported_mvp_001",
+  "environment_id": "horror_corridor_imported",
+  "display_name": "Horror Corridor Imported MVP Deterministic",
+  "planner_id": "planner_mvp_deterministic",
+  "generated_at": "2026-05-03T00:00:00Z",
+  "training_objective": "Move through the imported scene, recognize a deterministic movement-shaping obstacle, detect adversary contact, and preserve a viable fallback or exit route.",
+  "assumptions": [
+    "The semantic environment export identifies reachable hallway, chokepoint or observation, cover/concealment, and fallback affordances.",
+    "ScenarioDirector will perform final NavMesh, collision, line-of-sight, and route-safety checks before runtime spawning.",
+    "Fallback assets are reviewed whitelisted ScenarioDirector assets: prop_light_barricade and adversary_rifleman_irregular.",
+    "Likelihood values are deterministic scenario sampling weights under these training assumptions, not calibrated intelligence truth."
+  ],
+  "likelihood_semantics": "scenario_likelihood_under_assumptions_not_calibrated_intelligence_truth",
+  "required_asset_ids": [
+    "prop_light_barricade",
+    "adversary_rifleman_irregular"
+  ],
+  "events": [
+    {
+      "event_id": "mvp_barricade_001",
+      "event_type": "static_prop_spawn",
+      "asset_id": "prop_light_barricade",
+      "count": 1,
+      "intent": "shape_movement",
+      "required_tags": [
+        "chokepoint",
+        "near_chokepoint"
+      ],
+      "avoid_tags": [],
+      "severity": 0.4,
+      "likelihood": 0.37,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "static_blocking_obstacle",
+      "trigger": {
+        "trigger_type": "on_scenario_start"
+      },
+      "rationale": "chokepoint provides a deterministic placement hint for a light barricade that shapes movement while ScenarioDirector keeps a traversable route open.",
+      "parameters": {
+        "anchor_hint": "chokepoint",
+        "leave_clear_width_m": 1.1,
+        "require_route_check": true
+      }
+    },
+    {
+      "event_id": "mvp_contact_001",
+      "event_type": "adversary_contact",
+      "asset_id": "adversary_rifleman_irregular",
+      "count": 2,
+      "intent": "delay_and_reposition",
+      "required_tags": [
+        "ambush_point",
+        "concealment"
+      ],
+      "avoid_tags": [
+        "trainee_visible"
+      ],
+      "severity": 0.74,
+      "likelihood": 0.32,
+      "likelihood_basis": "scenario_likelihood_under_assumptions",
+      "behavior_profile": "ambush_then_reposition",
+      "trigger": {
+        "trigger_type": "trainee_enters_anchor",
+        "anchor_id": "chokepoint"
+      },
+      "rationale": "ambush_point supplies the deterministic adversary placement hint, and exit supplies the fallback route for the training inject.",
+      "max_distance_to_trainee_m": 18.0,
+      "parameters": {
+        "anchor_hint": "ambush_point",
+        "fallback_anchor_hint": "exit",
+        "minimum_separation_m": 6.0,
+        "reposition_after_contact_s": 5.0,
+        "withdraw_when_detected": false
+      }
+    }
+  ]
+}
