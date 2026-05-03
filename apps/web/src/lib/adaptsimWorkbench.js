@@ -11,7 +11,6 @@ const mapTokenStorageKey = "adaptsim-map-tokens-v1";
 const legacyMapTokenStorageKey = "geo-snapshot-map-tokens-v1";
 const customMapProvidersStorageKey = "adaptsim-custom-map-providers-v1";
 const maxSnapshots = 100;
-const maxActionLogEntries = 12;
 const maxAnalystNoteLength = 1200;
 const arcGisGeocoderUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
 const countryBordersGeoJsonUrl = "https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json";
@@ -34,6 +33,7 @@ const publicSiteZoomBands = [
   { id: "theater", maxHeightMeters: 900000, radiusKm: 950, maxSites: 115, label: "theater" },
   { id: "country", maxHeightMeters: Number.POSITIVE_INFINITY, radiusKm: Number.POSITIVE_INFINITY, maxSites: publicSiteMarkerLimit, label: "country" }
 ];
+const stepOneLocationTaskIds = new Set(["intake", "metadata", "locate", "vision", "geoimage"]);
 const defaultSourceNote =
   "Static public, country-level baseline. No live unit disposition, vulnerabilities, targets, tactical routing, or readiness inference.";
 const allowedStatusClasses = new Set(["neutral", "ready", "caution", "restricted"]);
@@ -312,21 +312,22 @@ const state = {
   sourceNote: "",
   sourceFiles: [],
   sourceFileBlobs: new Map(),
+  generatedAssetSession: null,
+  generatedAssetPollTimer: 0,
   snapshots: [],
   selectedSnapshotId: "",
-  actionLog: [],
   searchIndex: [],
   locationResults: [],
   locationSearchTimer: null,
   locationSearchSerial: 0,
+  locationPreviewSerial: 0,
   coordinateAutoTimer: null,
   pendingCoordinateSnaps: new Set(),
   resetSerial: 0,
   workflow: {
     mapConfirmed: false,
     step3SnapshotGenerated: false,
-    step4Acknowledged: false,
-    step5Acknowledged: false
+    step4Acknowledged: false
   },
   intakeAgent: {
     status: "idle",
@@ -371,6 +372,12 @@ const selectors = {
   cancelCustomProvider: "#cancel-custom-provider",
   mapSourcePill: "#map-source-pill",
   mapSourceStatus: "#map-source-status",
+  mapReadinessStatus: "#map-readiness-status",
+  mapReadinessLabel: "#map-readiness-label",
+  mapReadinessPercent: "#map-readiness-percent",
+  mapReadinessProgress: "#map-readiness-progress",
+  mapReadinessBar: "#map-readiness-bar",
+  mapReadinessDetail: "#map-readiness-detail",
   confirmMapStep: "#confirm-map-step",
   centerSelected: "#center-selected",
   zoomInMap: "#zoom-in-map",
@@ -401,10 +408,7 @@ const selectors = {
   snapshotTable: "#snapshot-table",
   modelFields: "#model-fields",
   analystNote: "#analyst-note",
-  reasoningOutput: "#reasoning-output",
-  actionType: "#action-type",
-  actionObjective: "#action-objective",
-  actionLog: "#action-log"
+  reasoningOutput: "#reasoning-output"
 };
 
 function $(selector) {
@@ -422,6 +426,50 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function sanitizeUrl(value, {
+  allowedProtocols = new Set(["http:", "https:"]),
+  allowRelative = false,
+  fallback = ""
+} = {}) {
+  const raw = clampText(value, 2000, "").trim();
+  if (!raw) return fallback;
+
+  try {
+    const url = allowRelative ? new URL(raw, window.location.origin) : new URL(raw);
+    return allowedProtocols.has(url.protocol) ? url.href : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeExternalUrl(value, fallback = "") {
+  return sanitizeUrl(value, { fallback });
+}
+
+function safeHref(value, fallback = "#") {
+  return sanitizeUrl(value, {
+    allowedProtocols: new Set(["http:", "https:", "blob:"]),
+    allowRelative: true,
+    fallback
+  });
+}
+
+function safeImageSrc(value, fallback = "") {
+  const raw = clampText(value, 2000, "").trim();
+  if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(raw)) return raw;
+  return sanitizeUrl(raw, {
+    allowedProtocols: new Set(["http:", "https:", "blob:"]),
+    allowRelative: true,
+    fallback
+  });
+}
+
+function safeMapProviderUrl(value) {
+  const raw = clampText(value, 1000, "").trim();
+  if (!/^https?:\/\//i.test(raw) || /[\u0000-\u001f\u007f<>"'`\\]/.test(raw)) return "";
+  return raw;
 }
 
 function normalize(value) {
@@ -465,7 +513,7 @@ function normalizeSourceEntry(source) {
 
   return {
     title: clampText(source?.title, 140, "Open-source reference"),
-    url: clampText(source?.url, 360, ""),
+    url: safeExternalUrl(source?.url),
     summary: clampText(source?.summary, 360, ""),
     domainKey: clampText(source?.domainKey, 100, ""),
     domainLabel: clampText(source?.domainLabel, 140, ""),
@@ -1061,19 +1109,36 @@ function normalizeSnapshot(snapshot) {
   };
 }
 
-function normalizeActionEntry(entry) {
-  const timestamp = new Date(entry?.at);
+function normalizeGeneratedAssetSession(session) {
+  if (!session || typeof session !== "object") return null;
   return {
-    id: clampText(entry?.id, 120, `action-${Date.now()}`),
-    at: Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString(),
-    country: clampText(entry?.country, 90, "No selected country"),
-    location: clampText(entry?.location, 100, "No selected location"),
-    action: clampText(entry?.action, 90, "Action"),
-    status: clampText(entry?.status, 80, "Queued"),
-    statusClass: sanitizeStatusClass(entry?.statusClass, "neutral"),
-    objective: clampText(entry?.objective, 180, "No objective entered"),
-    summary: clampText(entry?.summary, 280, "Logged for scenario review."),
-    preconditions: toTextList(entry?.preconditions, ["Human review"]).slice(0, 8)
+    session_id: clampText(session.session_id, 120, ""),
+    status: clampText(session.status, 80, "queued"),
+    status_url: clampText(session.status_url, 220, ""),
+    storage_path: clampText(session.storage_path, 500, ""),
+    input_fingerprint: clampText(session.input_fingerprint, 100, ""),
+    generation: {
+      provider: clampText(session.generation?.provider, 80, "openai"),
+      model: clampText(session.generation?.model, 80, "gpt-5.5"),
+      status: clampText(session.generation?.status, 80, "queued"),
+      error: clampText(session.generation?.error, 320, "")
+    },
+    trellis: {
+      model: clampText(session.trellis?.model, 120, "microsoft/TRELLIS.2-4B"),
+      status: clampText(session.trellis?.status, 80, "not_started"),
+      endpoint_configured: Boolean(session.trellis?.endpoint_configured),
+      job_id: clampText(session.trellis?.job_id, 160, ""),
+      request_path: clampText(session.trellis?.request_path, 500, ""),
+      error: clampText(session.trellis?.error, 320, "")
+    },
+    asset_database: session.asset_database && typeof session.asset_database === "object"
+      ? {
+          session_summary: clampText(session.asset_database.session_summary, 600, ""),
+          asset_cards: Array.isArray(session.asset_database.asset_cards) ? session.asset_database.asset_cards.slice(0, 16) : [],
+          trellis_candidates: Array.isArray(session.asset_database.trellis_candidates) ? session.asset_database.trellis_candidates.slice(0, 12) : [],
+          cautions: toTextList(session.asset_database.cautions).slice(0, 8)
+        }
+      : null
   };
 }
 
@@ -1083,7 +1148,8 @@ function normalizePublicSite(site) {
   if (!isValidLatLon(lat, lon)) return null;
   const type = normalizePublicSiteType(site?.type);
   const pageTitle = clampText(site?.pageTitle, 180, site?.name || "Military site");
-  const url = clampText(site?.url, 600, wikipediaPageUrl(pageTitle));
+  const fallbackUrl = wikipediaPageUrl(pageTitle);
+  const url = safeExternalUrl(site?.url, fallbackUrl);
   const geoJsonIds = toTextList(site?.geoJsonIds)
     .map((id) => clampText(id, 20, "").toUpperCase())
     .filter(Boolean);
@@ -1100,7 +1166,7 @@ function normalizePublicSite(site) {
     pageTitle,
     url,
     summary: clampText(site?.summary, 360, ""),
-    thumbnail: clampText(site?.thumbnail, 600, ""),
+    thumbnail: safeImageSrc(site?.thumbnail),
     source: clampText(site?.source, 80, "Static public reference"),
     query: clampText(site?.query, 180, ""),
     geoJsonIds,
@@ -1252,6 +1318,7 @@ function classifySourceFile(file) {
   const name = normalize(file?.name);
   const type = normalize(file?.type);
   if (type.startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif)$/.test(name)) return "Photo";
+  if (type.startsWith("video/") || /\.(mp4|mov|m4v|webm|avi|mkv)$/.test(name)) return "Video";
   if (type.includes("pdf") || /\.pdf$/.test(name)) return "Report";
   if (/\.(docx?|txt|rtf|md)$/.test(name)) return "Document";
   if (/\.(csv|xlsx?|tsv|json)$/.test(name)) return "Data";
@@ -1307,7 +1374,7 @@ function normalizeVisionAnalysis(analysis) {
         confidence: clampText(location?.confidence, 30, "low"),
         reason: clampText(location?.reason, 300, ""),
         source: clampText(location?.source, 90, ""),
-        url: clampText(location?.url, 500, "")
+        url: safeExternalUrl(location?.url)
       }))
       .slice(0, 8),
     geoEvidence: geoEvidence
@@ -1315,8 +1382,8 @@ function normalizeVisionAnalysis(analysis) {
         source: clampText(item?.source, 90, ""),
         database: clampText(item?.database, 120, ""),
         title: clampText(item?.title, 160, ""),
-        url: clampText(item?.url, 500, ""),
-        thumbnailUrl: clampText(item?.thumbnailUrl, 500, ""),
+        url: safeExternalUrl(item?.url),
+        thumbnailUrl: safeImageSrc(item?.thumbnailUrl),
         lat: item?.lat == null ? null : toFiniteNumber(item.lat),
         lon: item?.lon == null ? null : toFiniteNumber(item.lon),
         confidence: clampText(item?.confidence, 30, "low"),
@@ -1355,19 +1422,17 @@ function sanitizeState() {
   if (!state.snapshots.some((snapshot) => snapshot.id === state.selectedSnapshotId)) {
     state.selectedSnapshotId = state.snapshots[0]?.id ?? "";
   }
-  state.actionLog = state.actionLog.map(normalizeActionEntry).slice(0, maxActionLogEntries);
   state.sourceFiles = state.sourceFiles.map(normalizeSourceFile).filter(Boolean).slice(0, 24);
+  state.generatedAssetSession = normalizeGeneratedAssetSession(state.generatedAssetSession);
   state.workflow = {
     mapConfirmed: Boolean(state.workflow?.mapConfirmed),
     step3SnapshotGenerated: Boolean(state.workflow?.step3SnapshotGenerated && state.snapshots.length),
-    step4Acknowledged: Boolean(state.workflow?.step4Acknowledged && state.snapshots.length),
-    step5Acknowledged: Boolean(state.workflow?.step5Acknowledged && state.snapshots.length)
+    step4Acknowledged: Boolean(state.workflow?.step4Acknowledged && state.snapshots.length)
   };
   if (!state.sourceFiles.length && !state.snapshots.length) {
     state.workflow.mapConfirmed = false;
     state.workflow.step3SnapshotGenerated = false;
     state.workflow.step4Acknowledged = false;
-    state.workflow.step5Acknowledged = false;
   }
 }
 
@@ -1378,8 +1443,8 @@ function saveState() {
     JSON.stringify({
       snapshots: state.snapshots,
       selectedSnapshotId: state.selectedSnapshotId,
-      actionLog: state.actionLog,
       sourceFiles: state.sourceFiles,
+      generatedAssetSession: state.generatedAssetSession,
       workflow: state.workflow
     })
   );
@@ -1391,21 +1456,20 @@ function loadState() {
     if (!saved) return;
     state.snapshots = Array.isArray(saved.snapshots) ? saved.snapshots : [];
     state.selectedSnapshotId = saved.selectedSnapshotId ?? "";
-    state.actionLog = Array.isArray(saved.actionLog) ? saved.actionLog : [];
     state.sourceFiles = Array.isArray(saved.sourceFiles) ? saved.sourceFiles : [];
+    state.generatedAssetSession = normalizeGeneratedAssetSession(saved.generatedAssetSession);
     state.workflow = {
       mapConfirmed: Boolean(saved.workflow?.mapConfirmed),
       step3SnapshotGenerated: Boolean(saved.workflow?.step3SnapshotGenerated),
-      step4Acknowledged: Boolean(saved.workflow?.step4Acknowledged),
-      step5Acknowledged: Boolean(saved.workflow?.step5Acknowledged)
+      step4Acknowledged: Boolean(saved.workflow?.step4Acknowledged)
     };
     sanitizeState();
   } catch {
     state.snapshots = [];
     state.selectedSnapshotId = "";
-    state.actionLog = [];
     state.sourceFiles = [];
-    state.workflow = { mapConfirmed: false, step3SnapshotGenerated: false, step4Acknowledged: false, step5Acknowledged: false };
+    state.generatedAssetSession = null;
+    state.workflow = { mapConfirmed: false, step3SnapshotGenerated: false, step4Acknowledged: false };
   }
 }
 
@@ -1505,7 +1569,7 @@ function getMapProvider(providerId = state.mapConfig.provider) {
 function normalizeCustomMapProvider(provider) {
   const name = clampText(provider?.label ?? provider?.name, 80, "");
   const kind = ["raster", "arcgis", "3dtiles"].includes(provider?.kind) ? provider.kind : "raster";
-  const url = clampText(provider?.url, 1000, "");
+  const url = safeMapProviderUrl(provider?.url);
   if (!name || !url) return null;
   return {
     id: clampText(provider?.id, 120, `custom-${Date.now()}`),
@@ -1690,6 +1754,7 @@ function renderSearchResults(query) {
   const target = $(selectors.searchResults);
   const normalizedQuery = normalize(query);
   window.clearTimeout(state.locationSearchTimer);
+  state.locationPreviewSerial += 1;
 
   if (normalizedQuery.length < 2) {
     clearLocationSearchState();
@@ -1752,12 +1817,28 @@ async function updateLocationSearchResults(query) {
 function clearLocationSearchState({ clearInput = false } = {}) {
   window.clearTimeout(state.locationSearchTimer);
   state.locationSearchSerial += 1;
+  state.locationPreviewSerial += 1;
   state.locationResults = [];
   $(selectors.searchResults).innerHTML = "";
   const input = $(selectors.locationSearch);
   if (clearInput) input.value = "";
   input.setAttribute("aria-expanded", "false");
   input.removeAttribute("aria-busy");
+}
+
+function setLocationSearchValue(value, { busy = false } = {}) {
+  const input = $(selectors.locationSearch);
+  const label = clampText(value, 140, "");
+  input.value = label;
+  state.locationResults = [];
+  $(selectors.searchResults).innerHTML = "";
+  input.setAttribute("aria-expanded", "false");
+  if (busy) {
+    input.setAttribute("aria-busy", "true");
+  } else {
+    input.removeAttribute("aria-busy");
+  }
+  return label;
 }
 
 function dedupeLocationResults(results) {
@@ -1813,9 +1894,35 @@ function formatResolvedLocationLabel(location, fallback = "") {
 function populateLocationSearchFromResolvedLocation(location, fallback = "") {
   const label = formatResolvedLocationLabel(location, fallback);
   if (!label) return "";
-  const input = $(selectors.locationSearch);
-  input.value = label;
-  input.setAttribute("aria-expanded", "false");
+  return setLocationSearchValue(label);
+}
+
+function beginCoordinateLocationPreview(gps, { label = "coordinates" } = {}) {
+  const normalizedGps = normalizeGps(gps);
+  if (!normalizedGps) return null;
+
+  const coordinateLabel = formatCoordinates(normalizedGps.lat, normalizedGps.lon);
+  const serial = (state.locationPreviewSerial += 1);
+  setLocationSearchValue(`Resolving ${coordinateLabel}...`, { busy: true });
+  if (label && label !== "coordinates") {
+    updateResolution(`Resolving ${label} to city, region, and country.`, "ready");
+  }
+  return { gps: normalizedGps, coordinateLabel, serial };
+}
+
+async function populateCoordinateLocationPreview(gps, options = {}) {
+  const preview = options.preview ?? beginCoordinateLocationPreview(gps, options);
+  if (!preview?.gps) return "";
+
+  const resolvedLocation = await reverseGeocodeLocation(preview.gps.lat, preview.gps.lon);
+  if (preview.serial !== state.locationPreviewSerial) return "";
+
+  const isResolvedPlace = resolvedLocation?.countryName && !normalize(resolvedLocation.countryName).includes("unresolved");
+  const label = isResolvedPlace
+    ? formatResolvedLocationLabel(resolvedLocation, preview.coordinateLabel)
+    : preview.coordinateLabel;
+  setLocationSearchValue(label);
+  syncControls(getSelectedSnapshot());
   return label;
 }
 
@@ -2262,8 +2369,8 @@ function createSnapshot(profile, location, resolution, options = {}) {
   state.selectedSnapshotId = snapshot.id;
   state.workflow.step3SnapshotGenerated = Boolean(options.markStep3Complete && state.workflow.mapConfirmed);
   state.workflow.step4Acknowledged = false;
-  state.workflow.step5Acknowledged = false;
   setCoordinateInputs(snapshot.lat, snapshot.lon);
+  setLocationSearchValue(snapshot.selectedLocation);
   saveState();
   setIntakeAgentTask("locate", "complete", `Step 02 centered on ${snapshot.selectedLocation}.`, "Location resolved; filling the model.");
   setIntakeAgentTask("snapshot", "complete", `${snapshot.country} snapshot generated from public baseline data.`);
@@ -2332,6 +2439,7 @@ async function createCoordinateSnapshot(lat, lon, source = "gps coordinates", ce
   }
 
   const resolution = resolveProfileByCoordinates(lat, normalizedLon);
+  setLocationSearchValue(coordinateLabel);
   return createSnapshot(resolution.profile, {
     label: coordinateLabel,
     lat,
@@ -2387,6 +2495,7 @@ function updateResolution(message, className = "neutral") {
 
 function buildIntakeAgentTasks(files) {
   const imageCount = files.filter((file) => file.kind === "Photo").length;
+  const videoCount = files.filter((file) => file.kind === "Video").length;
   const gpsCount = files.filter((file) => file.gps).length;
   return [
     {
@@ -2417,7 +2526,11 @@ function buildIntakeAgentTasks(files) {
       id: "vision",
       label: "Image forensics",
       status: imageCount ? "running" : "skipped",
-      detail: imageCount ? `Scanning ${imageCount} image${imageCount === 1 ? "" : "s"} for location cues.` : "No image source queued."
+      detail: imageCount
+        ? `Scanning ${imageCount} image${imageCount === 1 ? "" : "s"} for location cues.`
+        : videoCount
+          ? "Video metadata will be included in the asset session; frame extraction is a VM-side follow-up."
+          : "No image source queued."
     },
     {
       id: "geoimage",
@@ -2444,6 +2557,18 @@ function buildIntakeAgentTasks(files) {
       detail: gpsCount || imageCount
         ? "Wikipedia/Wikidata lookups start after a location snapshot exists."
         : "Waiting on a generated snapshot."
+    },
+    {
+      id: "asset-db",
+      label: "Generated asset DB",
+      status: "waiting",
+      detail: "Waiting for Step 04 final check before starting GPT-5.5 generation."
+    },
+    {
+      id: "trellis",
+      label: "Trellis relay",
+      status: "waiting",
+      detail: "Waiting for generated static-asset candidates."
     }
   ];
 }
@@ -2480,6 +2605,21 @@ function setIntakeAgentTask(taskId, status, detail = "", current = "") {
   }
 }
 
+function getIntakeAgentProgress() {
+  const tasks = state.intakeAgent?.tasks ?? [];
+  if (!tasks.length) return state.sourceFiles.length || state.snapshots.length ? 100 : 0;
+  const completeCount = tasks.filter((task) => ["complete", "skipped"].includes(task.status)).length;
+  return Math.round((completeCount / tasks.length) * 100);
+}
+
+function renderLoadingDots() {
+  return `
+    <span class="loading-dots" aria-hidden="true">
+      <span>.</span><span>.</span><span>.</span>
+    </span>
+  `;
+}
+
 function renderIntakeAgent() {
   const target = $(selectors.sourceAgentStatus);
   const agent = state.intakeAgent;
@@ -2489,19 +2629,39 @@ function renderIntakeAgent() {
     return;
   }
 
-  const completeCount = agent.tasks.filter((task) => ["complete", "skipped"].includes(task.status)).length;
-  const progress = Math.round((completeCount / agent.tasks.length) * 100);
+  const progress = getIntakeAgentProgress();
+  const isRunning = agent.status === "running";
+  const currentText = agent.current || "Working source intake.";
+  const currentDisplay = isRunning ? currentText.replace(/[.\u2026]+$/g, "") : currentText;
+  const generatedSession = state.generatedAssetSession;
+  const generatedSessionMarkup = generatedSession
+    ? `
+      <div class="generated-session-card">
+        <div>
+          <span>Session</span>
+          <strong>${escapeHtml(generatedSession.session_id || "queued")}</strong>
+          <small>${escapeHtml(generatedSession.asset_database?.session_summary || generatedSession.generation?.error || generatedSession.trellis?.error || generatedSession.status)}</small>
+        </div>
+        <div>
+          <span>Assets</span>
+          <strong>${escapeHtml(String(generatedSession.asset_database?.asset_cards?.length ?? 0))}</strong>
+          <small>${escapeHtml(generatedSession.trellis?.status || "trellis not started")}</small>
+        </div>
+      </div>
+    `
+    : "";
   target.hidden = false;
   target.dataset.agentStatus = agent.status;
   target.innerHTML = `
     <div class="agent-status-head">
       <div>
         <p class="eyebrow">Intake Agent</p>
-        <strong>${escapeHtml(agent.current || "Working source intake.")}</strong>
+        <strong>${escapeHtml(currentDisplay)}${isRunning ? renderLoadingDots() : ""}</strong>
       </div>
       <span>${escapeHtml(String(progress))}%</span>
     </div>
     <div class="agent-progress" aria-hidden="true"><span style="width: ${progress}%"></span></div>
+    ${generatedSessionMarkup}
     <div class="agent-task-list">
       ${agent.tasks.map((task) => `
         <article class="agent-task" data-agent-task-status="${escapeHtml(task.status)}">
@@ -2512,6 +2672,49 @@ function renderIntakeAgent() {
       `).join("")}
     </div>
   `;
+}
+
+function renderAssetGenerationLoading({ title = "Starting generated asset database", detail = "Preparing a traceable GPT-5.5 asset session from the confirmed inputs." } = {}) {
+  $(selectors.reasoningOutput).innerHTML = `
+    <div class="reason-card asset-generation-loading" role="status" aria-live="polite">
+      <strong>${escapeHtml(title)}${renderLoadingDots()}</strong>
+      <p>${escapeHtml(detail)}</p>
+      <div class="loading-bar" aria-hidden="true"><span></span></div>
+    </div>
+  `;
+}
+
+function renderAssetGenerationStatus(session) {
+  if (!session) return;
+  const generationStatus = normalize(session.generation?.status || session.status);
+  if (isGeneratedAssetSessionActive(session)) {
+    renderAssetGenerationLoading({
+      title: "Generating asset database",
+      detail: session.session_id
+        ? `GPT-5.5 session ${session.session_id} is building the local asset database.`
+        : "GPT-5.5 is building the local asset database."
+    });
+    return;
+  }
+  if (generationStatus === "complete" || normalize(session.status) === "asset_database_ready") {
+    const assetCount = session.asset_database?.asset_cards?.length ?? 0;
+    const candidateCount = session.asset_database?.trellis_candidates?.length ?? 0;
+    $(selectors.reasoningOutput).innerHTML = `
+      <div class="reason-card">
+        <strong>Generated asset database ready</strong>
+        <p>${escapeHtml(`${assetCount} asset card${assetCount === 1 ? "" : "s"} and ${candidateCount} Trellis candidate${candidateCount === 1 ? "" : "s"} stored locally.`)}</p>
+      </div>
+    `;
+    return;
+  }
+  if (generationStatus === "failed") {
+    $(selectors.reasoningOutput).innerHTML = `
+      <div class="reason-card">
+        <strong>Asset database generation needs review</strong>
+        <p>${escapeHtml(session.generation?.error || "The GPT-5.5 asset database session failed.")}</p>
+      </div>
+    `;
+  }
 }
 
 function gpsMatchesSnapshot(gps, snapshot) {
@@ -2539,6 +2742,117 @@ function findSnapshotAtCoordinates(lat, lon) {
 function setCoordinateInputs(lat, lon) {
   $(selectors.latInput).value = formatCoordinate(lat);
   $(selectors.lonInput).value = formatCoordinate(normalizeLongitude(lon));
+}
+
+function readCoordinateInputs() {
+  const latInput = document.querySelector(selectors.latInput);
+  const lonInput = document.querySelector(selectors.lonInput);
+  if (!latInput || !lonInput) return null;
+  const lat = toFiniteNumber(latInput.value);
+  const lon = toFiniteNumber(lonInput.value);
+  if (!isValidLatLon(lat, normalizeLongitude(lon))) return null;
+  return {
+    lat: normalizeCoordinate(lat),
+    lon: normalizeCoordinate(normalizeLongitude(lon))
+  };
+}
+
+function hasSourceGpsAtCoordinates(lat, lon) {
+  return state.sourceFiles.some((file) => {
+    const gps = normalizeGps(file.gps);
+    return gps && coordinateDistanceMeters(gps.lat, gps.lon, lat, lon) <= coordinatePinPrecisionMeters;
+  });
+}
+
+function hasSolidLocationAnchor(snapshot = getSelectedSnapshot()) {
+  if (snapshot) return true;
+  const coordinates = readCoordinateInputs();
+  if (!coordinates) return false;
+  return Boolean(state.globe?.pin) || hasSourceGpsAtCoordinates(coordinates.lat, coordinates.lon);
+}
+
+function isStepOneLocationLoading() {
+  const tasks = state.intakeAgent?.tasks ?? [];
+  return tasks.some((task) => stepOneLocationTaskIds.has(task.id) && task.status === "running");
+}
+
+function getMapConfirmReadiness(snapshot = getSelectedSnapshot()) {
+  if (!state.sourceFiles.length && !snapshot) {
+    return {
+      ready: false,
+      reason: "Attach a source file before confirming Step 02."
+    };
+  }
+  if (!state.globe?.viewer) {
+    return {
+      ready: false,
+      reason: "Step 02 map is still loading."
+    };
+  }
+  if (state.workflow.mapConfirmed) {
+    return {
+      ready: false,
+      reason: "Step 02 is already confirmed."
+    };
+  }
+  if (isStepOneLocationLoading() && !hasSolidLocationAnchor(snapshot)) {
+    return {
+      ready: false,
+      waitingForIntake: true,
+      reason: "Step 01 is still resolving location evidence. Confirm unlocks when intake finishes or a GPS/location fix is ready."
+    };
+  }
+  return {
+    ready: true,
+    reason: "Confirm Step 02 location view."
+  };
+}
+
+function getMapReadinessProgress(snapshot = getSelectedSnapshot()) {
+  const readiness = getMapConfirmReadiness(snapshot);
+  if (state.workflow.mapConfirmed || readiness.ready) return 100;
+  if (!state.sourceFiles.length && !snapshot) return 0;
+
+  const intakeProgress = getIntakeAgentProgress();
+  if (!state.globe?.viewer) return Math.max(8, Math.min(24, intakeProgress || 8));
+  if (readiness.waitingForIntake) return Math.max(12, Math.min(95, intakeProgress));
+  return Math.max(10, Math.min(95, intakeProgress));
+}
+
+function getMapReadinessDetail(snapshot = getSelectedSnapshot()) {
+  const readiness = getMapConfirmReadiness(snapshot);
+  if (state.workflow.mapConfirmed) return "Step 02 map confirmed.";
+  if (readiness.ready) return "Location fix ready. Next: Confirm Step 02.";
+  if (readiness.waitingForIntake) return "Waiting on Step 01 location evidence.";
+  return readiness.reason;
+}
+
+function shouldCueMapConfirm(snapshot = getSelectedSnapshot(), readiness = getMapConfirmReadiness(snapshot)) {
+  return Boolean(readiness.ready && !state.workflow.mapConfirmed && hasSolidLocationAnchor(snapshot));
+}
+
+function renderMapReadinessStatus(snapshot = getSelectedSnapshot()) {
+  const target = document.querySelector(selectors.mapReadinessStatus);
+  if (!target) return;
+
+  const readiness = getMapConfirmReadiness(snapshot);
+  const shouldCueConfirm = shouldCueMapConfirm(snapshot, readiness);
+  const progress = getMapReadinessProgress(snapshot);
+  const stateLabel = readiness.ready || state.workflow.mapConfirmed
+    ? "ready"
+    : readiness.waitingForIntake || isStepOneLocationLoading()
+      ? "running"
+      : "waiting";
+
+  target.dataset.mapReadinessState = stateLabel;
+  target.dataset.nextActionCue = shouldCueConfirm ? "confirm" : "";
+  $(selectors.mapReadinessLabel).textContent = shouldCueConfirm ? "Ready to confirm" : readiness.ready ? "Location fix ready" : "Location readiness";
+  $(selectors.mapReadinessPercent).textContent = `${progress}%`;
+  $(selectors.mapReadinessDetail).textContent = getMapReadinessDetail(snapshot);
+  const progressTrack = $(selectors.mapReadinessProgress);
+  progressTrack.setAttribute("aria-valuenow", String(progress));
+  progressTrack.setAttribute("aria-valuetext", `${progress}% ${getMapReadinessDetail(snapshot)}`);
+  $(selectors.mapReadinessBar).style.width = `${progress}%`;
 }
 
 function triggerMapSnapFeedback({ revealMap = true } = {}) {
@@ -2590,6 +2904,7 @@ async function activateCoordinates(gps, {
 
   setCoordinateInputs(normalizedGps.lat, normalizedGps.lon);
   clearLocationSearchState();
+  const locationPreview = beginCoordinateLocationPreview(normalizedGps, { label });
   updateResolution(`Snapping Step 2 map to ${label}.`, "ready");
   syncControls(getSelectedSnapshot());
 
@@ -2601,10 +2916,8 @@ async function activateCoordinates(gps, {
     if (markStep3Complete && state.workflow.mapConfirmed) {
       state.workflow.step3SnapshotGenerated = true;
       state.workflow.step4Acknowledged = Boolean(existingSnapshot.reasonedAdjustments?.length);
-      state.workflow.step5Acknowledged = false;
     }
-    $(selectors.locationSearch).value = existingSnapshot.selectedLocation;
-    $(selectors.locationSearch).setAttribute("aria-expanded", "false");
+    setLocationSearchValue(existingSnapshot.selectedLocation);
     setIntakeAgentTask("locate", "complete", `Step 02 centered on ${existingSnapshot.selectedLocation}.`, "Location resolved; lower panels are available.");
     setIntakeAgentTask("snapshot", "complete", `${existingSnapshot.country} snapshot opened from history.`);
     setIntakeAgentTask("sources", existingSnapshot.openSourceSources.length ? "complete" : "running", existingSnapshot.openSourceStatus || "Open-source enrichment queued.");
@@ -2624,6 +2937,7 @@ async function activateCoordinates(gps, {
       revealMap,
       markStep3Complete,
       resetSerial,
+      locationPreview,
       focusStepAfterRender,
       focusSelectorAfterRender
     });
@@ -2668,19 +2982,23 @@ function renderSourceFiles() {
         ? `
           <div class="source-file-evidence">
             <strong>Open location evidence</strong>
-            ${file.vision.geoEvidence.slice(0, 3).map((item) => `
-              <a class="${item.thumbnailUrl ? "" : "has-no-thumb"}" href="${escapeHtml(item.url || "#")}" target="_blank" rel="noreferrer">
-                ${item.thumbnailUrl ? `<img src="${escapeHtml(item.thumbnailUrl)}" alt="" loading="lazy" />` : ""}
-                <span>
-                  <b>${escapeHtml(item.title || item.database || "Known-location image")}</b>
-                  <small>${escapeHtml([
-                    item.confidence ? `${item.confidence} confidence` : "",
-                    isValidLatLon(item.lat, item.lon) ? formatCoordinates(item.lat, item.lon) : "",
-                    item.source || ""
-                  ].filter(Boolean).join(" | "))}</small>
-                </span>
-              </a>
-            `).join("")}
+            ${file.vision.geoEvidence.slice(0, 3).map((item) => {
+              const evidenceHref = safeHref(item.url);
+              const thumbnailUrl = safeImageSrc(item.thumbnailUrl);
+              return `
+                <a class="${thumbnailUrl ? "" : "has-no-thumb"}" href="${escapeHtml(evidenceHref)}" target="_blank" rel="noopener noreferrer">
+                  ${thumbnailUrl ? `<img src="${escapeHtml(thumbnailUrl)}" alt="" loading="lazy" />` : ""}
+                  <span>
+                    <b>${escapeHtml(item.title || item.database || "Known-location image")}</b>
+                    <small>${escapeHtml([
+                      item.confidence ? `${item.confidence} confidence` : "",
+                      isValidLatLon(item.lat, item.lon) ? formatCoordinates(item.lat, item.lon) : "",
+                      item.source || ""
+                    ].filter(Boolean).join(" | "))}</small>
+                  </span>
+                </a>
+              `;
+            }).join("")}
           </div>
         `
         : "";
@@ -2727,10 +3045,10 @@ function setSourceFileGps(file) {
 function stageSourceFileGps(file, { revealMap = true } = {}) {
   if (!file?.gps) return null;
   const gps = setSourceFileGps(file);
+  const locationPreview = beginCoordinateLocationPreview(gps, { label: `GPS from ${file.name}` });
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
   state.workflow.step4Acknowledged = false;
-  state.workflow.step5Acknowledged = false;
   clearSelectedOutlines();
   renderPublicSitesForSnapshot(null);
   placePin(gps.lat, gps.lon);
@@ -2740,6 +3058,7 @@ function stageSourceFileGps(file, { revealMap = true } = {}) {
       heightMeters: searchCameraHeightMeters
     });
   }
+  void populateCoordinateLocationPreview(gps, { preview: locationPreview });
   return gps;
 }
 
@@ -2799,7 +3118,6 @@ async function addSourceFiles(files) {
     state.workflow.mapConfirmed = false;
     state.workflow.step3SnapshotGenerated = false;
     state.workflow.step4Acknowledged = false;
-    state.workflow.step5Acknowledged = false;
     startIntakeAgent(added);
   }
   const firstGpsFile = added.find((file) => file.gps);
@@ -2872,6 +3190,199 @@ async function postVisionRequest(body) {
     response: { ok: false, status: lastStatus },
     payload: lastPayload
   };
+}
+
+function apiEndpointCandidates(pathname) {
+  const endpoints = [new URL(pathname, window.location.origin).href];
+  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+    const backendHost = window.location.hostname === "localhost" ? "localhost" : "127.0.0.1";
+    endpoints.push(`http://${backendHost}:8787${pathname}`);
+  }
+  return [...new Set(endpoints)];
+}
+
+async function postJsonToApi(pathname, body) {
+  let lastPayload = {};
+  let lastStatus = 0;
+  for (const endpoint of apiEndpointCandidates(pathname)) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json") ? await response.json().catch(() => ({})) : {};
+      lastPayload = payload;
+      lastStatus = response.status;
+      if (response.ok || response.status !== 404 && response.status !== 405 && response.status !== 501) {
+        return { response, payload };
+      }
+    } catch (error) {
+      lastPayload = { error: error.message };
+    }
+  }
+  return { response: { ok: false, status: lastStatus }, payload: lastPayload };
+}
+
+async function getJsonFromApi(pathname) {
+  let lastPayload = {};
+  let lastStatus = 0;
+  for (const endpoint of apiEndpointCandidates(pathname)) {
+    try {
+      const response = await fetch(endpoint);
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json") ? await response.json().catch(() => ({})) : {};
+      lastPayload = payload;
+      lastStatus = response.status;
+      if (response.ok || response.status !== 404 && response.status !== 405 && response.status !== 501) {
+        return { response, payload };
+      }
+    } catch (error) {
+      lastPayload = { error: error.message };
+    }
+  }
+  return { response: { ok: false, status: lastStatus }, payload: lastPayload };
+}
+
+async function buildGeneratedAssetSourcePayload(files) {
+  const imagePayloads = new Map();
+  const imageSources = files.filter((file) => isImageFileLike(file)).slice(0, 4);
+  await Promise.all(imageSources.map(async (source) => {
+    const blob = state.sourceFileBlobs.get(source.id);
+    if (!blob || blob.size > 5 * 1024 * 1024) return;
+    try {
+      const imageDataUrl = await fileToDataUrl(blob);
+      if (imageDataUrl.startsWith("data:image/")) {
+        imagePayloads.set(source.id, imageDataUrl);
+      }
+    } catch {}
+  }));
+
+  return files.map((file) => ({
+    id: file.id,
+    name: file.name,
+    type: file.type,
+    kind: file.kind,
+    size: file.size,
+    lastModified: file.lastModified,
+    addedAt: file.addedAt,
+    gps: file.gps,
+    vision: file.vision,
+    imageDataUrl: imagePayloads.get(file.id) || ""
+  }));
+}
+
+function updateGeneratedSessionTasks(session) {
+  if (!session) return;
+  const generationStatus = normalize(session.generation?.status || session.status);
+  const trellisStatus = normalize(session.trellis?.status || "");
+  const assetCount = session.asset_database?.asset_cards?.length ?? 0;
+  const trellisCount = session.asset_database?.trellis_candidates?.length ?? 0;
+
+  if (generationStatus === "complete" || normalize(session.status) === "asset_database_ready") {
+    setIntakeAgentTask("asset-db", "complete", `${assetCount} generated asset card${assetCount === 1 ? "" : "s"} stored locally.`, "Generated asset database is ready.");
+  } else if (generationStatus === "failed") {
+    setIntakeAgentTask("asset-db", "blocked", session.generation?.error || "Asset database generation failed.", "Generated asset database needs API review.");
+  } else {
+    setIntakeAgentTask("asset-db", "running", `GPT-5.5 session ${session.session_id || "is running"}.`, "Generating the asset database.");
+  }
+
+  if (trellisStatus === "submitted" || trellisStatus === "queued") {
+    setIntakeAgentTask("trellis", "running", `${trellisCount} Trellis candidate${trellisCount === 1 ? "" : "s"} prepared for VM generation.`);
+  } else if (trellisStatus === "awaiting_vm_endpoint") {
+    setIntakeAgentTask("trellis", "waiting", "Trellis request stored locally; configure TRELLIS_VM_ENDPOINT to relay to the VM.");
+  } else if (trellisStatus === "skipped") {
+    setIntakeAgentTask("trellis", "skipped", "No Trellis-suitable static assets were generated.");
+  } else if (trellisStatus === "failed") {
+    setIntakeAgentTask("trellis", "blocked", session.trellis?.error || "Trellis relay failed.");
+  }
+}
+
+function isGeneratedAssetSessionActive(session = state.generatedAssetSession) {
+  const sessionStatus = normalize(session?.status);
+  const generationStatus = normalize(session?.generation?.status);
+  const trellisStatus = normalize(session?.trellis?.status);
+  return (
+    ["generating_asset_database"].includes(sessionStatus)
+    || ["queued", "running"].includes(generationStatus)
+    || ["queued", "running", "relaying"].includes(trellisStatus)
+  );
+}
+
+function hasGeneratedAssetSessionStarted(session = state.generatedAssetSession) {
+  return Boolean(session?.session_id || isGeneratedAssetSessionActive(session));
+}
+
+function scheduleGeneratedAssetSessionPoll(sessionId) {
+  window.clearTimeout(state.generatedAssetPollTimer);
+  if (!sessionId) return;
+  state.generatedAssetPollTimer = window.setTimeout(() => {
+    void pollGeneratedAssetSession(sessionId);
+  }, 1400);
+}
+
+async function pollGeneratedAssetSession(sessionId) {
+  const { response, payload } = await getJsonFromApi(`/api/generative-assets/sessions/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) {
+    setIntakeAgentTask("asset-db", "blocked", payload.error || "Could not read generated asset session.");
+    renderApp();
+    return;
+  }
+  const session = normalizeGeneratedAssetSession(payload);
+  state.generatedAssetSession = session;
+  updateGeneratedSessionTasks(session);
+  saveState();
+  renderApp();
+  renderAssetGenerationStatus(session);
+
+  const activeStatuses = new Set(["generating_asset_database", "asset_database_ready"]);
+  const generationRunning = ["queued", "running"].includes(normalize(session?.generation?.status));
+  const trellisRunning = ["queued", "running", "relaying"].includes(normalize(session?.trellis?.status));
+  if (activeStatuses.has(normalize(session?.status)) || generationRunning || trellisRunning) {
+    scheduleGeneratedAssetSessionPoll(sessionId);
+  }
+}
+
+async function startGenerativeAssetSession(files) {
+  const sourcePayload = await buildGeneratedAssetSourcePayload(files?.length ? files : state.sourceFiles);
+  if (!sourcePayload.length) return;
+  setIntakeAgentTask("asset-db", "running", "Creating local input fingerprint and GPT-5.5 asset session.", "Generating the asset database.");
+  renderApp();
+  renderAssetGenerationLoading();
+
+  const selectedSnapshot = getSelectedSnapshot();
+  const { response, payload } = await postJsonToApi("/api/generative-assets/sessions", {
+    displayName: sourcePayload[0]?.name ? `AdaptSim ${sourcePayload[0].name}` : "AdaptSim source intake",
+    sourceFiles: sourcePayload,
+    context: {
+      location: selectedSnapshot
+        ? {
+            label: selectedSnapshot.selectedLocation,
+            country: selectedSnapshot.country,
+            lat: selectedSnapshot.lat,
+            lon: selectedSnapshot.lon
+          }
+        : null,
+      analystNotes: selectedSnapshot?.humanInputs?.slice(0, 5) || [],
+      reasonedAdjustments: selectedSnapshot?.reasonedAdjustments?.slice(0, 8) || []
+    }
+  });
+
+  if (!response.ok) {
+    setIntakeAgentTask("asset-db", "blocked", payload.error || "Could not start generated asset database session.");
+    saveState();
+    renderApp();
+    return;
+  }
+
+  const session = normalizeGeneratedAssetSession(payload);
+  state.generatedAssetSession = session;
+  updateGeneratedSessionTasks(session);
+  saveState();
+  renderApp();
+  renderAssetGenerationStatus(session);
+  scheduleGeneratedAssetSessionPoll(session.session_id);
 }
 
 function extractPrintableStringsFromBuffer(buffer, minLength = 5, maxStrings = 160) {
@@ -3254,27 +3765,41 @@ function renderWorkflowProgress(snapshot) {
   const hasMapConfirmed = Boolean(state.workflow.mapConfirmed);
   const hasStep3Generated = Boolean(hasSnapshot && state.workflow.step3SnapshotGenerated);
   const hasReasonedInput = Boolean(snapshot?.reasonedAdjustments?.length);
-  const hasStep4Acknowledged = Boolean(hasReasonedInput || state.workflow.step4Acknowledged);
-  const hasActionInput = state.actionLog.length > 0;
-  const hasStep5Acknowledged = Boolean(hasActionInput || state.workflow.step5Acknowledged);
+  const assetSessionStarted = hasGeneratedAssetSessionStarted();
+  const assetSessionRunning = isGeneratedAssetSessionActive();
+  const assetSessionReady = normalize(state.generatedAssetSession?.status) === "asset_database_ready"
+    || normalize(state.generatedAssetSession?.generation?.status) === "complete";
+  const hasStep4Acknowledged = Boolean(hasReasonedInput || state.workflow.step4Acknowledged || assetSessionStarted);
   const canLocate = hasWorkflowStart && hasMapReady && hasMapConfirmed;
   const canReason = hasStep3Generated && hasMapSource;
-  const canInject = hasStep4Acknowledged;
+  const mapConfirmReadiness = getMapConfirmReadiness(snapshot);
   const steps = {
     "01": hasWorkflowStart
-      ? { state: "complete", label: "Complete" }
+      ? {
+          state: isStepOneLocationLoading() ? "active" : "complete",
+          label: isStepOneLocationLoading() ? "Loading" : "Complete"
+        }
       : { state: "active", label: "Start" },
     "02": hasWorkflowStart
-      ? { state: hasMapConfirmed ? "complete" : "active", label: hasMapConfirmed ? "Complete" : hasMapReady ? "Confirm" : "Loading" }
+      ? {
+          state: hasMapConfirmed ? "complete" : "active",
+          label: hasMapConfirmed
+            ? "Complete"
+            : !hasMapReady
+              ? "Loading"
+              : mapConfirmReadiness.waitingForIntake
+                ? "Waiting"
+                : "Confirm"
+        }
       : { state: "locked", label: "Locked" },
     "03": canLocate
       ? { state: hasStep3Generated ? "complete" : "active", label: hasStep3Generated ? "Complete" : "Next" }
       : { state: "locked", label: "Locked" },
     "04": canReason
-      ? { state: hasStep4Acknowledged ? "complete" : "active", label: hasStep4Acknowledged ? "Complete" : "Next" }
-      : { state: "locked", label: "Locked" },
-    "05": canInject
-      ? { state: hasStep5Acknowledged ? "complete" : "active", label: hasStep5Acknowledged ? "Complete" : "Next" }
+      ? {
+          state: hasStep4Acknowledged ? "complete" : "active",
+          label: assetSessionReady ? "Complete" : assetSessionRunning ? "Running" : hasStep4Acknowledged ? "Queued" : "Launch"
+        }
       : { state: "locked", label: "Locked" }
   };
 
@@ -3320,9 +3845,9 @@ function renderApp() {
   renderSnapshotDetail(snapshot);
   renderSnapshotTable();
   renderModelFields(snapshot);
-  renderActionLog();
   renderMapControls();
   renderWorkflowProgress(snapshot);
+  renderMapReadinessStatus(snapshot);
   syncControls(snapshot);
 }
 
@@ -3335,13 +3860,18 @@ function renderMapControls() {
     return accumulator;
   }, {});
 
-  providerSelect.innerHTML = Object.entries(groups)
-    .map(([group, groupProviders]) => `
-      <optgroup label="${escapeHtml(group)}">
-        ${groupProviders.map((provider) => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}</option>`).join("")}
-      </optgroup>
-    `)
-    .join("");
+  providerSelect.replaceChildren();
+  Object.entries(groups).forEach(([group, groupProviders]) => {
+    const optionGroup = document.createElement("optgroup");
+    optionGroup.label = group;
+    groupProviders.forEach((provider) => {
+      const option = document.createElement("option");
+      option.value = provider.id;
+      option.textContent = provider.label;
+      optionGroup.appendChild(option);
+    });
+    providerSelect.appendChild(optionGroup);
+  });
 
   if (!providers.some((provider) => provider.id === state.mapConfig.provider)) {
     state.mapConfig.provider = defaultMapProvider;
@@ -3398,12 +3928,22 @@ function syncControls(snapshot) {
       || state.globe?.pin
   );
   $("#clear-snapshots").disabled = !hasSnapshots && !hasLocationPanelValues;
-  $("#reason-note").disabled = !snapshot;
+  $("#reason-note").disabled = !snapshot || !state.sourceFiles.length || isGeneratedAssetSessionActive();
   const confirmMap = $(selectors.confirmMapStep);
   if (confirmMap) {
     const mapStageLocked = document.querySelector(".map-stage-shell")?.dataset.workflowState === "locked";
-    confirmMap.disabled = mapStageLocked || !state.globe?.viewer || state.workflow.mapConfirmed;
+    const readiness = getMapConfirmReadiness(snapshot);
+    const shouldCueConfirm = !mapStageLocked && shouldCueMapConfirm(snapshot, readiness);
+    confirmMap.disabled = mapStageLocked || !readiness.ready;
+    confirmMap.dataset.nextActionCue = shouldCueConfirm && !confirmMap.disabled ? "true" : "false";
+    confirmMap.setAttribute("aria-describedby", "map-readiness-detail");
+    confirmMap.title = mapStageLocked
+      ? "Attach a source file before confirming Step 02."
+      : shouldCueConfirm
+        ? "Next action: Confirm this GPS location."
+        : readiness.reason;
   }
+  renderMapReadinessStatus(snapshot);
 }
 
 function focusWorkflowStep(stepNumber, { focusSelector = "" } = {}) {
@@ -3429,8 +3969,9 @@ function focusWorkflowStep(stepNumber, { focusSelector = "" } = {}) {
 }
 
 function confirmMapStep() {
-  if (!state.globe?.viewer) {
-    updateResolution("Step 02 map is still loading.", "neutral");
+  const readiness = getMapConfirmReadiness(getSelectedSnapshot());
+  if (!readiness.ready) {
+    updateResolution(readiness.reason, readiness.waitingForIntake ? "caution" : "neutral");
     return;
   }
 
@@ -3492,9 +4033,9 @@ function renderSourceList(sources) {
       ${safeSources
         .map((source) => {
           const title = escapeHtml(source.title);
-          const url = escapeHtml(source.url);
+          const url = safeExternalUrl(source.url);
           const summary = source.summary ? `<small>${escapeHtml(source.summary)}</small>` : "";
-          const label = url ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>` : `<span>${title}</span>`;
+          const label = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${title}</a>` : `<span>${title}</span>`;
           return `<li>${label}${summary}</li>`;
         })
         .join("")}
@@ -4193,27 +4734,23 @@ function renderModelSectionDetail(snapshot, domain) {
   `;
 }
 
-function reasonFromAnalystNote() {
+async function reasonFromAnalystNote() {
   const snapshot = getSelectedSnapshot();
   const rawNote = $(selectors.analystNote).value.trim();
   const note = clampText(rawNote, maxAnalystNoteLength);
 
   if (!snapshot) {
-    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Select a location before adding reasoning inputs.</div>';
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Select a location before starting asset generation.</div>';
     return;
   }
 
-  if (!note) {
-    state.workflow.step4Acknowledged = true;
-    saveState();
-    $(selectors.reasoningOutput).innerHTML = `
-      <div class="reason-card">
-        <strong>No analyst note added</strong>
-        <p>Continuing with the generated snapshot baseline.</p>
-      </div>
-    `;
-    renderApp();
-    focusWorkflowStep("05", { focusSelector: selectors.actionType });
+  if (!state.sourceFiles.length) {
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">Attach at least one source file in Step 01 before starting asset generation.</div>';
+    return;
+  }
+
+  if (isGeneratedAssetSessionActive()) {
+    $(selectors.reasoningOutput).innerHTML = '<div class="reason-card">The generated asset database is already running.</div>';
     return;
   }
 
@@ -4227,213 +4764,52 @@ function reasonFromAnalystNote() {
     ["intelligence", ["intel", "isr", "deception", "fog", "signals", "ew", "spoof"], "Intelligence and deception factor detected; introduce noisy or delayed observations."]
   ];
 
-  const lower = note.toLowerCase();
-  const matches = rules.filter(([, terms]) => terms.some((term) => lower.includes(term)));
-  const tags = matches.map(([tag]) => tag);
-  const adjustments = matches.map(([, , adjustment]) => adjustment);
-  const fallback = "No strong taxonomy hit; retained as human context for manual review.";
+  let reasonTitle = "Snapshot baseline";
+  let reasonDetail = "No analyst note added; continuing with the generated snapshot baseline.";
+  if (note) {
+    const lower = note.toLowerCase();
+    const matches = rules.filter(([, terms]) => terms.some((term) => lower.includes(term)));
+    const tags = matches.map(([tag]) => tag);
+    const adjustments = matches.map(([, , adjustment]) => adjustment);
+    const fallback = "No strong taxonomy hit; retained as human context for manual review.";
 
-  const record = {
-    at: new Date().toISOString(),
-    note,
-    tags,
-    adjustments: adjustments.length ? adjustments : [fallback]
-  };
+    const record = {
+      at: new Date().toISOString(),
+      note,
+      tags,
+      adjustments: adjustments.length ? adjustments : [fallback]
+    };
 
-  snapshot.humanInputs = [note, ...(snapshot.humanInputs ?? [])].slice(0, 10);
-  snapshot.reasonedAdjustments = [...record.adjustments, ...(snapshot.reasonedAdjustments ?? [])].slice(0, 10);
+    snapshot.humanInputs = [note, ...(snapshot.humanInputs ?? [])].slice(0, 10);
+    snapshot.reasonedAdjustments = [...record.adjustments, ...(snapshot.reasonedAdjustments ?? [])].slice(0, 10);
+    reasonTitle = tags.length ? `Detected: ${tags.join(", ")}` : "Manual review";
+    reasonDetail = record.adjustments.join(" ");
+  }
+
   state.selectedSnapshotId = snapshot.id;
   state.workflow.step4Acknowledged = true;
   saveState();
+  renderApp();
 
   $(selectors.reasoningOutput).innerHTML = `
     <div class="reason-card">
-      <strong>${escapeHtml(tags.length ? `Detected: ${tags.join(", ")}` : "Manual review")}</strong>
-      <p>${escapeHtml(record.adjustments.join(" "))}</p>
+      <strong>${escapeHtml(reasonTitle)}</strong>
+      <p>${escapeHtml(reasonDetail)}</p>
+      <p>Starting traceable generated asset database production from Step 04.</p>
     </div>
   `;
   $(selectors.analystNote).value = "";
-  renderApp();
-  focusWorkflowStep("05", { focusSelector: selectors.actionType });
-}
-
-function formatDispositionPrecondition(value) {
-  return titleCase(String(value ?? "").replace(/[_-]+/g, " "));
-}
-
-function flattenDispositionPreconditions(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.flatMap(flattenDispositionPreconditions);
-  if (typeof value === "object") {
-    return Object.entries(value).flatMap(([key, entry]) => {
-      if (entry === true) return [formatDispositionPrecondition(key)];
-      if (entry === false || entry == null) return [];
-      if (Array.isArray(entry)) return entry.map(formatDispositionPrecondition);
-      if (typeof entry === "object") return flattenDispositionPreconditions(entry);
-      return [`${formatDispositionPrecondition(key)}: ${formatDispositionPrecondition(entry)}`];
-    });
-  }
-  return [formatDispositionPrecondition(value)];
-}
-
-function getDispositionActionTemplate(actionText) {
-  const normalizedAction = normalize(actionText);
-  const action = state.dispositionIndex.actionTypes.find((entry) => normalize(entry.name) === normalizedAction);
-  if (!action) return null;
-  const guarded = /\b(attack|sortie|defense|combat|strike|fire)\b/.test(normalizedAction);
-  const preconditions = flattenDispositionPreconditions(action.preconditions).slice(0, 8);
-  return {
-    label: action.name,
-    status: guarded ? "Guarded abstraction" : "Disposition DB template",
-    statusClass: guarded ? "caution" : "ready",
-    summary: clampText(`${action.description} ${action.safety_boundary || ""}`, 280, "Logged from disposition database action template."),
-    preconditions: preconditions.length ? preconditions : ["Human review", "Legal or policy check", "Model preconditions"]
-  };
-}
-
-function getActionTemplate(type) {
-  const actionText = clampText(type, 120, "Custom scenario action");
-  const normalizedAction = normalize(actionText);
-  const dispositionTemplate = getDispositionActionTemplate(actionText);
-  if (dispositionTemplate) return dispositionTemplate;
-  const templates = {
-    "deploy-peacekeepers": {
-      label: "Deploy peacekeepers",
-      status: "Queued",
-      statusClass: "ready",
-      summary: "Adds stabilization pressure, mandate dependency, logistics demand, and civilian protection metrics.",
-      preconditions: ["Legal mandate", "Host-nation or coalition access", "Sustainment path", "Rules of engagement"]
-    },
-    resupply: {
-      label: "Resupply or repair",
-      status: "Queued",
-      statusClass: "ready",
-      summary: "Raises sustainment, readiness recovery, and transport-load variables without combat effects.",
-      preconditions: ["Route availability", "Fuel and transport capacity", "Maintenance teams", "Medical support"]
-    },
-    mobilize: {
-      label: "Mobilize reserves",
-      status: "Queued",
-      statusClass: "caution",
-      summary: "Adds personnel capacity over time while increasing training, equipment, and political cost variables.",
-      preconditions: ["Legal authority", "Recall system", "Training pipeline", "Equipment availability"]
-    },
-    ceasefire: {
-      label: "Propose cease-fire",
-      status: "Queued",
-      statusClass: "ready",
-      summary: "Adds de-escalation, monitoring, verification, and compliance variables.",
-      preconditions: ["Negotiation channel", "Monitoring mechanism", "Compliance incentives", "Public messaging"]
-    },
-    blockade: {
-      label: "Impose blockade",
-      status: "Guarded abstraction",
-      statusClass: "caution",
-      summary: "Logged as strategic maritime pressure only; the app does not generate routes, targets, timing, or interdiction plans.",
-      preconditions: ["Legal review", "Humanitarian exemptions", "Alliance consultation", "Escalation assessment"]
-    },
-    strike: {
-      label: "Launch strike",
-      status: "Restricted abstraction",
-      statusClass: "restricted",
-      summary: "Logged as escalation pressure only; no targets, weapons pairing, routing, timing, or damage estimates are generated.",
-      preconditions: ["Civilian authority", "LOAC review", "Escalation review", "Human approval"]
-    }
-  };
-
-  const directMatch = Object.entries(templates).find(([key, template]) => {
-    return normalizedAction === normalize(key) || normalizedAction === normalize(template.label);
+  renderAssetGenerationLoading({
+    title: "Starting asset database",
+    detail: `${reasonTitle}: ${reasonDetail}`
   });
-  if (directMatch) return directMatch[1];
-
-  if (/\b(strike|attack|bomb|target|fire|assault)\b/.test(normalizedAction)) {
-    return {
-      label: actionText,
-      status: "Restricted abstraction",
-      statusClass: "restricted",
-      summary: "Logged as escalation pressure only; no targets, weapons pairing, routing, timing, or damage estimates are generated.",
-      preconditions: ["Civilian authority", "LOAC review", "Escalation review", "Human approval"]
-    };
-  }
-
-  if (/\b(blockade|interdict|quarantine)\b/.test(normalizedAction)) {
-    return {
-      label: actionText,
-      status: "Guarded abstraction",
-      statusClass: "caution",
-      summary: "Logged as strategic pressure only; operational routes, timing, and interdiction details are not generated.",
-      preconditions: ["Legal review", "Humanitarian exemptions", "Alliance consultation", "Escalation assessment"]
-    };
-  }
-
-  return {
-    label: actionText,
-    status: "Custom scenario action",
-    statusClass: "ready",
-    summary: "Adds a custom starting point to the scenario log for human review and model calibration.",
-    preconditions: ["Human review", "Legal or policy check", "Logistics feasibility", "Command approval"]
-  };
-}
-
-function injectAction() {
-  const snapshot = getSelectedSnapshot();
-  const actionInput = clampText($(selectors.actionType).value, 120, "");
-  const objectiveInput = clampText($(selectors.actionObjective).value, 180, "");
-
-  if (!actionInput && !objectiveInput) {
-    state.workflow.step5Acknowledged = true;
+  try {
+    await startGenerativeAssetSession(state.sourceFiles);
+  } catch (error) {
+    setIntakeAgentTask("asset-db", "blocked", error.message || "Generated asset session could not start.");
     saveState();
     renderApp();
-    return;
   }
-
-  const action = actionInput || "Custom scenario action";
-  const objective = objectiveInput || "No objective entered";
-  const template = getActionTemplate(action);
-  const entry = {
-    id: `action-${Date.now()}`,
-    at: new Date().toISOString(),
-    country: snapshot?.country ?? "No selected country",
-    location: snapshot?.selectedLocation ?? "No selected location",
-    action,
-    status: template.status,
-    statusClass: template.statusClass,
-    objective,
-    summary: template.summary,
-    preconditions: template.preconditions
-  };
-
-  state.actionLog = [normalizeActionEntry(entry), ...state.actionLog].slice(0, maxActionLogEntries);
-  state.workflow.step5Acknowledged = true;
-  $(selectors.actionType).value = "";
-  $(selectors.actionObjective).value = "";
-  saveState();
-  renderApp();
-}
-
-function renderActionLog() {
-  if (!state.actionLog.length) {
-    $(selectors.actionLog).innerHTML = state.workflow.step5Acknowledged
-      ? '<p class="empty-state compact">No action narrowing added. The simulation can consider the full potential action field.</p>'
-      : '<p class="empty-state compact">No scenario actions logged yet.</p>';
-    return;
-  }
-
-  $(selectors.actionLog).innerHTML = state.actionLog
-    .map(
-      (entry) => `
-        <article class="action-card">
-          <span class="status-pill ${sanitizeStatusClass(entry.statusClass)}">${escapeHtml(entry.status)}</span>
-          <h3>${escapeHtml(entry.action)}</h3>
-          <p>${escapeHtml(entry.country)} / ${escapeHtml(entry.objective)}</p>
-          <p>${escapeHtml(entry.summary)}</p>
-          <div class="chip-row">
-            ${entry.preconditions.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}
-          </div>
-        </article>
-      `
-    )
-    .join("");
 }
 
 function resetIntakeAgentState() {
@@ -4453,8 +4829,6 @@ function clearWorkflowInputFields() {
     selectors.latInput,
     selectors.lonInput,
     selectors.analystNote,
-    selectors.actionType,
-    selectors.actionObjective,
     selectors.customProviderName,
     selectors.customProviderUrl
   ].forEach((selector) => {
@@ -4477,15 +4851,15 @@ function resetAppToStartingPoint({ statusMessage = "Workflow reset to starting p
   clearWorkflowInputFields();
   state.sourceFiles = [];
   state.sourceFileBlobs.clear();
+  state.generatedAssetSession = null;
+  window.clearTimeout(state.generatedAssetPollTimer);
   state.snapshots = [];
   state.selectedSnapshotId = "";
-  state.actionLog = [];
   state.locationResults = [];
   state.selectedModelParameterGroups = {};
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
   state.workflow.step4Acknowledged = false;
-  state.workflow.step5Acknowledged = false;
   resetIntakeAgentState();
   saveState();
   removePin();
@@ -4505,10 +4879,11 @@ function clearSnapshots() {
   $(selectors.lonInput).value = "";
   state.snapshots = [];
   state.selectedSnapshotId = "";
+  state.generatedAssetSession = null;
+  window.clearTimeout(state.generatedAssetPollTimer);
   state.workflow.mapConfirmed = false;
   state.workflow.step3SnapshotGenerated = false;
   state.workflow.step4Acknowledged = false;
-  state.workflow.step5Acknowledged = false;
   state.intakeAgent = {
     status: "idle",
     current: "Waiting for source input.",
@@ -4931,7 +5306,8 @@ function renderPublicSiteHover(site, metadata = null) {
   const style = siteTypeStyle(site.type);
   const summary = metadata?.summary || site.summary || "Public Wikipedia reference for this known location.";
   const linkLabel = publicSiteReferenceLabel(site);
-  const thumbnail = metadata?.thumbnail || site.thumbnail;
+  const thumbnail = safeImageSrc(metadata?.thumbnail || site.thumbnail);
+  const siteUrl = safeExternalUrl(metadata?.url || site.url);
   const coordinateText = formatCoordinates(site.lat, site.lon);
   const image = thumbnail
     ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy" />`
@@ -4945,7 +5321,7 @@ function renderPublicSiteHover(site, metadata = null) {
       <strong>${escapeHtml(site.name)}</strong>
       <small>${escapeHtml(coordinateText)} | Source precision varies</small>
       <p>${escapeHtml(clampText(summary, 180))}</p>
-      <a href="${escapeHtml(site.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkLabel)}</a>
+      ${siteUrl ? `<a href="${escapeHtml(siteUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkLabel)}</a>` : ""}
     </div>
   `;
 }
@@ -4960,8 +5336,8 @@ async function fetchPublicSiteMetadata(site) {
     const payload = await response.json();
     const metadata = {
       summary: clampText(payload.extract, 260, ""),
-      thumbnail: clampText(payload.thumbnail?.source, 600, ""),
-      url: clampText(payload.content_urls?.desktop?.page, 600, site.url)
+      thumbnail: safeImageSrc(payload.thumbnail?.source),
+      url: safeExternalUrl(payload.content_urls?.desktop?.page, site.url)
     };
     state.publicSiteMetadataCache.set(site.id, metadata);
     site.summary = metadata.summary;
@@ -6480,14 +6856,16 @@ function attachEvents() {
   });
   [selectors.latInput, selectors.lonInput].forEach((selector) => {
     $(selector).addEventListener("input", () => {
+      state.locationPreviewSerial += 1;
       syncControls(getSelectedSnapshot());
     });
   });
   $("#use-coordinates").addEventListener("click", resolveCoordinatesFromInputs);
   $(selectors.clearWorkflow).addEventListener("click", () => resetAppToStartingPoint());
   $("#clear-snapshots").addEventListener("click", clearSnapshots);
-  $("#reason-note").addEventListener("click", reasonFromAnalystNote);
-  $("#inject-action").addEventListener("click", injectAction);
+  $("#reason-note").addEventListener("click", () => {
+    void reasonFromAnalystNote();
+  });
   $(selectors.publicSiteHover).addEventListener("click", (event) => {
     if (!event.target.closest("[data-site-hover-close]")) return;
     event.preventDefault();

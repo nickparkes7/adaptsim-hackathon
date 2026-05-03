@@ -15,10 +15,10 @@ export function ControlRail() {
             <h2>Generate Snapshot</h2>
           </div>
           <div className="step-heading-actions">
-            <button id="use-coordinates" className="primary-button confirm-button" type="button">
+            <button id="use-coordinates" className="primary-button confirm-button" type="button" aria-label="Confirm selected location">
               Confirm
             </button>
-            <button id="clear-snapshots" className="quiet-button" type="button" disabled>
+            <button id="clear-snapshots" className="quiet-button" type="button" aria-label="Clear snapshots and location inputs" disabled>
               Clear
             </button>
           </div>
@@ -32,7 +32,7 @@ export function ControlRail() {
             type="search"
             autoComplete="off"
             role="combobox"
-            placeholder="Search Tokyo, Norfolk, or Kenya"
+            placeholder="Search Tokyo, Norfolk, or Kenya…"
             aria-controls="search-results"
             aria-expanded="false"
             aria-autocomplete="list"
@@ -72,83 +72,28 @@ export function ControlRail() {
         </div>
       </section>
 
-      <section className="panel workflow-panel" data-step="04">
+      <section className="panel workflow-panel final-check-panel" data-step="04">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Human + LLM Input</p>
-            <h2>Analyst Note</h2>
+            <p className="eyebrow">Final Check</p>
+            <h2>Asset Database Launch</h2>
           </div>
         </div>
         <label className="field">
-          <span>Input text</span>
+          <span>Analyst note</span>
           <textarea
             id="analyst-note"
             name="analyst-note"
             rows="6"
             maxLength="1200"
             autoComplete="off"
-            placeholder="Add relevant and important information you want prioritized in simulation environment"
+            placeholder="Add simulation-priority context…"
           ></textarea>
         </label>
         <button id="reason-note" className="primary-button full-width" type="button" disabled>
-          Incorporate Into Simulation
+          Start Asset Database
         </button>
         <div id="reasoning-output" className="reasoning-output" aria-live="polite"></div>
-      </section>
-
-      <section className="panel workflow-panel" data-step="05">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Simulation Injection</p>
-            <h2>Action Sandbox</h2>
-          </div>
-        </div>
-        <label className="field">
-          <span>Action</span>
-          <input
-            id="action-type"
-            name="action-type"
-            type="search"
-            list="action-options"
-            autoComplete="off"
-            maxLength="120"
-            placeholder="Start typing an action"
-          />
-          <datalist id="action-options">
-            <option value="Deploy peacekeepers" />
-            <option value="Resupply or repair" />
-            <option value="Mobilize reserves" />
-            <option value="Propose cease-fire" />
-            <option value="Impose blockade" />
-            <option value="Launch strike" />
-            <option value="Humanitarian evacuation" />
-            <option value="Open negotiation channel" />
-          </datalist>
-        </label>
-        <label className="field">
-          <span>Objective</span>
-          <input
-            id="action-objective"
-            name="action-objective"
-            type="search"
-            list="objective-options"
-            autoComplete="off"
-            maxLength="180"
-            placeholder="Type a custom objective"
-          />
-          <datalist id="objective-options">
-            <option value="Stabilize border zone" />
-            <option value="Protect civilians" />
-            <option value="Restore logistics access" />
-            <option value="Monitor cease-fire compliance" />
-            <option value="Support disaster response" />
-            <option value="Reduce escalation risk" />
-          </datalist>
-        </label>
-        <button id="inject-action" className="primary-button full-width" type="button">
-          Inject Action
-        </button>
-        <div id="action-log" className="action-log" aria-live="polite"></div>
       </section>
     </aside>
   );

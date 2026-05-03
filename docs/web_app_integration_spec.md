@@ -5,6 +5,9 @@ This is the minimal web integration contract for the hackathon demo where a web 
 For the persistent photo reconstruction plan and VM handoff details, see
 `docs/photo_reconstruction_pipeline.md`.
 
+For the input-bound generated asset database and Trellis relay path, see
+`docs/generative_asset_pipeline.md`.
+
 ## Frontend Repo Search
 
 No dedicated AdaptSim frontend was found locally.
@@ -75,6 +78,17 @@ Photo reconstruction flow:
 7. A100 worker produces splat and mesh artifacts under GCS.
 8. L4 Unreal worker imports `unreal-import/scene_mesh.glb`.
 9. Frontend switches to scene playback once status is `ready`.
+
+Generative asset flow:
+
+1. User finishes dropping photos, videos, or source data.
+2. Frontend immediately calls `POST /api/generative-assets/sessions`.
+3. Backend stores a unique local session under `.adaptsim/generated-sessions/`.
+4. Backend calls OpenAI GPT-5.5 through the Responses API to produce a structured
+   generated asset database.
+5. Backend writes `asset_database.json`.
+6. Backend writes `trellis_request.json` and relays it to the Trellis VM only if
+   `TRELLIS_VM_ENDPOINT` is configured.
 
 ## Minimal API Contract
 

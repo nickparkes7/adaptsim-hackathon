@@ -10,7 +10,7 @@ export function SourceIntake() {
           <span id="source-file-count" className="count-pill">
             0 attached
           </span>
-          <button id="clear-workflow" className="quiet-button source-clear-button" type="button">
+          <button id="clear-workflow" className="quiet-button source-clear-button" type="button" aria-label="Clear source intake and workflow">
             Clear
           </button>
         </div>
@@ -22,14 +22,14 @@ export function SourceIntake() {
           name="source-files"
           type="file"
           multiple
-          accept="image/*,.pdf,.txt,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+          accept="image/*,video/*,.pdf,.txt,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
         />
         <span className="dropzone-mark" aria-hidden="true">
           +
         </span>
         <span className="dropzone-copy">
           <strong>Drop photos, reports, maps, or spreadsheets</strong>
-          <small>Files stay local; resolved coordinates may query map and public-source services.</small>
+          <small>Files are processed locally until asset generation; map and public-source services may be queried.</small>
         </span>
       </label>
       <div id="source-agent-status" className="source-agent-status" aria-live="polite"></div>

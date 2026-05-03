@@ -5,6 +5,7 @@ military_disposition_db/exports/
 ngc-cli/
 .env
 .env.*
+.adaptsim/
 __pycache__/
 *.traineddata
 *.traineddata.gz
